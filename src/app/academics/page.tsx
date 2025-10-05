@@ -1,22 +1,318 @@
 "use client"
 
-import { useState } from "react"
+import { ChangeEvent, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { 
-  BookOpen, 
-  Plus, 
-  Calendar, 
-  Clock, 
+import {
+  BookOpen,
+  Plus,
+  Calendar,
   FileText,
   GraduationCap,
   AlertCircle,
   CheckCircle
 } from "lucide-react"
+
+type ManualItemType = "assignment" | "exam" | "reading" | "essay"
+type AcademicItemType = ManualItemType | "calendar"
+
+type AcademicItem = {
+  id: number
+  courseId?: number
+  course: string
+  type: AcademicItemType
+  title: string
+  dueAt: string
+  notes?: string
+  completed: boolean
+  source: "manual" | "ics"
+  externalId?: string
+}
+
+type CalendarSchedule = {
+  id: string
+  course: string
+  title: string
+  location?: string
+  meetingDays: string[]
+  startTime: string
+  endTime?: string
+  nextOccurrence: string | null
+  source: "ics"
+}
+
+type NewItem = {
+  courseId: string
+  type: ManualItemType
+  title: string
+  dueAt: string
+  notes: string
+}
+
+type RawIcsEvent = Record<string, string>
+
+const decodeIcsText = (value: string) =>
+  value
+    .replace(/\\n/g, "\n")
+    .replace(/\\,/g, ",")
+    .replace(/\\;/g, ";")
+
+const parseIcsDate = (value: string) => {
+  const raw = value.trim()
+
+  if (/^\d{8}T\d{6}Z$/.test(raw)) {
+    return new Date(raw)
+  }
+
+  if (/^\d{8}T\d{6}$/.test(raw)) {
+    const year = Number(raw.slice(0, 4))
+    const month = Number(raw.slice(4, 6)) - 1
+    const day = Number(raw.slice(6, 8))
+    const hours = Number(raw.slice(9, 11))
+    const minutes = Number(raw.slice(11, 13))
+    const seconds = Number(raw.slice(13, 15))
+    return new Date(year, month, day, hours, minutes, seconds)
+  }
+
+  if (/^\d{8}$/.test(raw)) {
+    const year = Number(raw.slice(0, 4))
+    const month = Number(raw.slice(4, 6)) - 1
+    const day = Number(raw.slice(6, 8))
+    return new Date(year, month, day)
+  }
+
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+const parseIcsContent = (content: string): RawIcsEvent[] => {
+  const unfolded = content.replace(/\r?\n[ \t]/g, "")
+  const lines = unfolded.split(/\r?\n/)
+  const events: RawIcsEvent[] = []
+  let current: RawIcsEvent | null = null
+
+  for (const line of lines) {
+    if (!line) continue
+    if (line.startsWith("BEGIN:VEVENT")) {
+      current = {}
+      continue
+    }
+
+    if (line.startsWith("END:VEVENT")) {
+      if (current) {
+        events.push(current)
+      }
+      current = null
+      continue
+    }
+
+    if (current && line.includes(":")) {
+      const [key, ...rest] = line.split(":")
+      const value = rest.join(":")
+      if (!value) continue
+      const keyName = key.split(";")[0]
+      current[keyName] = value
+    }
+  }
+
+  return events
+}
+
+const extractCourseFromSummary = (summary: string) => {
+  const courseMatch = summary.match(/([A-Z]{2,4}\s?\d{3}[A-Z]?)/)
+  if (courseMatch?.[1]) {
+    return courseMatch[1].replace(/\s+/, " ")
+  }
+  return summary || "Calendar"
+}
+
+const parseRrule = (rrule: string) => {
+  return rrule.split(";").reduce<Record<string, string>>((acc, part) => {
+    const [key, value] = part.split("=")
+    if (key && value) {
+      acc[key.toUpperCase()] = value
+    }
+    return acc
+  }, {})
+}
+
+const WEEKDAY_CODES: Record<number, string> = {
+  0: "SU",
+  1: "MO",
+  2: "TU",
+  3: "WE",
+  4: "TH",
+  5: "FR",
+  6: "SA"
+}
+
+const WEEKDAY_LABELS: Record<string, string> = {
+  SU: "Sun",
+  MO: "Mon",
+  TU: "Tue",
+  WE: "Wed",
+  TH: "Thu",
+  FR: "Fri",
+  SA: "Sat"
+}
+
+const calculateNextOccurrence = (start: Date, meetingDays: string[]) => {
+  if (!meetingDays.length) {
+    return start.getTime() >= Date.now() ? start.toISOString() : null
+  }
+
+  const now = new Date()
+  const eventHours = start.getHours()
+  const eventMinutes = start.getMinutes()
+  const eventSeconds = start.getSeconds()
+  const allowedDays = new Set(meetingDays)
+
+  for (let offset = 0; offset < 14; offset++) {
+    const candidate = new Date(now)
+    candidate.setDate(now.getDate() + offset)
+    const dayCode = WEEKDAY_CODES[candidate.getDay()]
+    if (!allowedDays.has(dayCode)) continue
+
+    candidate.setHours(eventHours, eventMinutes, eventSeconds, 0)
+    if (candidate.getTime() >= now.getTime()) {
+      return candidate.toISOString()
+    }
+  }
+
+  return null
+}
+
+const formatMeetingDays = (meetingDays: string[]) => {
+  if (!meetingDays.length) return "One-time"
+  return meetingDays.map(day => WEEKDAY_LABELS[day] ?? day).join(", ")
+}
+
+const formatTimeRange = (startTime: string, endTime?: string) => {
+  const startDate = new Date(startTime)
+  const startLabel = startDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+  if (!endTime) return startLabel
+  const endDate = new Date(endTime)
+  const endLabel = endDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+  return `${startLabel} – ${endLabel}`
+}
+
+const formatNextOccurrence = (isoString: string | null) => {
+  if (!isoString) return "No upcoming session"
+  const date = new Date(isoString)
+  return date.toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  })
+}
+
+const mergeIcsEvents = (rawEvents: RawIcsEvent[], existingItems: AcademicItem[]) => {
+  const existingExternalIds = new Set(
+    existingItems
+      .map(item => item.externalId)
+      .filter((id): id is string => Boolean(id))
+  )
+
+  let nextId = existingItems.reduce((max, item) => Math.max(max, item.id), 0) + 1
+  const newItems: AcademicItem[] = []
+
+  for (const rawEvent of rawEvents) {
+    if (rawEvent["RRULE"]) {
+      continue
+    }
+
+    const dtStart = rawEvent["DTSTART"]
+    const summaryRaw = rawEvent["SUMMARY"]
+    if (!dtStart || !summaryRaw) continue
+
+    const startDate = parseIcsDate(dtStart)
+    if (!startDate) continue
+
+    const summary = decodeIcsText(summaryRaw).trim()
+    const course = extractCourseFromSummary(summary)
+    const description = rawEvent["DESCRIPTION"]
+      ? decodeIcsText(rawEvent["DESCRIPTION"]).replace(/\n+/g, " ").trim()
+      : ""
+
+    const externalId = rawEvent["UID"]?.trim()
+    const identifier = externalId || `${summary}-${startDate.toISOString()}`
+
+    if (existingExternalIds.has(identifier)) {
+      continue
+    }
+
+    existingExternalIds.add(identifier)
+
+    newItems.push({
+      id: nextId++,
+      course,
+      type: "calendar",
+      title: summary,
+      dueAt: startDate.toISOString(),
+      notes: description,
+      completed: false,
+      source: "ics",
+      externalId: identifier
+    })
+  }
+
+  return { items: [...existingItems, ...newItems], added: newItems.length }
+}
+
+const mergeRecurringMeetings = (
+  rawEvents: RawIcsEvent[],
+  existingSchedule: CalendarSchedule[]
+) => {
+  const scheduleMap = new Map(existingSchedule.map(item => [item.id, item]))
+  let added = 0
+
+  for (const rawEvent of rawEvents) {
+    if (!rawEvent["RRULE"]) continue
+
+    const dtStartRaw = rawEvent["DTSTART"]
+    if (!dtStartRaw) continue
+    const startDate = parseIcsDate(dtStartRaw)
+    if (!startDate) continue
+
+    const dtEndRaw = rawEvent["DTEND"]
+    const endDate = dtEndRaw ? parseIcsDate(dtEndRaw) : null
+
+    const summary = rawEvent["SUMMARY"] ? decodeIcsText(rawEvent["SUMMARY"]).trim() : "Course"
+    const course = extractCourseFromSummary(summary)
+    const location = rawEvent["LOCATION"] ? decodeIcsText(rawEvent["LOCATION"]).trim() : undefined
+    const externalId = rawEvent["UID"]?.trim() || `${summary}-${startDate.toISOString()}`
+    const rule = parseRrule(rawEvent["RRULE"])
+    const meetingDays = rule["BYDAY"] ? rule["BYDAY"].split(",").map(day => day.trim()) : []
+
+    const nextOccurrence = calculateNextOccurrence(startDate, meetingDays)
+
+    const scheduleItem: CalendarSchedule = {
+      id: externalId,
+      course,
+      title: summary,
+      location,
+      meetingDays,
+      startTime: startDate.toISOString(),
+      endTime: endDate ? endDate.toISOString() : undefined,
+      nextOccurrence,
+      source: "ics"
+    }
+
+    if (!scheduleMap.has(externalId)) {
+      added += 1
+    }
+
+    scheduleMap.set(externalId, scheduleItem)
+  }
+
+  return { schedule: Array.from(scheduleMap.values()), added }
+}
 
 // Mock data
 const mockCourses = [
@@ -26,46 +322,50 @@ const mockCourses = [
   { id: 4, name: "Sports Psychology", code: "PSYC 250", professor: "Dr. Brown" }
 ]
 
-const mockAcademicItems = [
-  { 
-    id: 1, 
-    courseId: 1, 
-    course: "MATH 201", 
-    type: "exam", 
-    title: "Midterm Exam", 
-    dueAt: "2024-01-15T14:00:00Z", 
+const mockAcademicItems: AcademicItem[] = [
+  {
+    id: 1,
+    courseId: 1,
+    course: "MATH 201",
+    type: "exam",
+    title: "Midterm Exam",
+    dueAt: "2024-01-15T14:00:00Z",
     notes: "Chapters 1-5, bring calculator",
-    completed: false
+    completed: false,
+    source: "manual"
   },
-  { 
-    id: 2, 
-    courseId: 2, 
-    course: "PHYS 101", 
-    type: "assignment", 
-    title: "Lab Report #3", 
-    dueAt: "2024-01-16T23:59:00Z", 
+  {
+    id: 2,
+    courseId: 2,
+    course: "PHYS 101",
+    type: "assignment",
+    title: "Lab Report #3",
+    dueAt: "2024-01-16T23:59:00Z",
     notes: "Kinematics experiment",
-    completed: false
+    completed: false,
+    source: "manual"
   },
-  { 
-    id: 3, 
-    courseId: 3, 
-    course: "KIN 301", 
-    type: "reading", 
-    title: "Chapter 5: Biomechanics", 
-    dueAt: "2024-01-19T09:00:00Z", 
+  {
+    id: 3,
+    courseId: 3,
+    course: "KIN 301",
+    type: "reading",
+    title: "Chapter 5: Biomechanics",
+    dueAt: "2024-01-19T09:00:00Z",
     notes: "Focus on joint mechanics",
-    completed: true
+    completed: true,
+    source: "manual"
   },
-  { 
-    id: 4, 
-    courseId: 4, 
-    course: "PSYC 250", 
-    type: "essay", 
-    title: "Motivation in Sports", 
-    dueAt: "2024-01-22T23:59:00Z", 
+  {
+    id: 4,
+    courseId: 4,
+    course: "PSYC 250",
+    type: "essay",
+    title: "Motivation in Sports",
+    dueAt: "2024-01-22T23:59:00Z",
     notes: "1500 words, APA format",
-    completed: false
+    completed: false,
+    source: "manual"
   }
 ]
 
@@ -75,6 +375,7 @@ const getTypeIcon = (type: string) => {
     case "assignment": return <BookOpen className="h-4 w-4" />
     case "reading": return <BookOpen className="h-4 w-4" />
     case "essay": return <FileText className="h-4 w-4" />
+    case "calendar": return <Calendar className="h-4 w-4" />
     default: return <BookOpen className="h-4 w-4" />
   }
 }
@@ -85,6 +386,7 @@ const getTypeColor = (type: string) => {
     case "assignment": return "bg-blue-100 text-blue-800 border-blue-200"
     case "reading": return "bg-green-100 text-green-800 border-green-200"
     case "essay": return "bg-purple-100 text-purple-800 border-purple-200"
+    case "calendar": return "bg-amber-100 text-amber-800 border-amber-200"
     default: return "bg-gray-100 text-gray-800 border-gray-200"
   }
 }
@@ -103,9 +405,12 @@ const formatDate = (dateString: string) => {
 
 export default function Academics() {
   const [courses] = useState(mockCourses)
-  const [academicItems, setAcademicItems] = useState(mockAcademicItems)
+  const [academicItems, setAcademicItems] = useState<AcademicItem[]>(mockAcademicItems)
+  const [calendarSchedule, setCalendarSchedule] = useState<CalendarSchedule[]>([])
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [newItem, setNewItem] = useState({
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [importStatus, setImportStatus] = useState<string | null>(null)
+  const [newItem, setNewItem] = useState<NewItem>({
     courseId: "",
     type: "assignment",
     title: "",
@@ -115,26 +420,80 @@ export default function Academics() {
 
   const handleAddItem = () => {
     if (newItem.courseId && newItem.title && newItem.dueAt) {
-      const course = courses.find(c => c.id === parseInt(newItem.courseId))
-      const item = {
-        id: academicItems.length + 1,
-        courseId: parseInt(newItem.courseId),
-        course: course?.code || "",
-        type: newItem.type as any,
-        title: newItem.title,
-        dueAt: newItem.dueAt,
-        notes: newItem.notes,
-        completed: false
-      }
-      setAcademicItems(prev => [...prev, item])
+      setAcademicItems(prev => {
+        const course = courses.find(c => c.id === parseInt(newItem.courseId))
+        const nextId = prev.reduce((max, item) => Math.max(max, item.id), 0) + 1
+        const item: AcademicItem = {
+          id: nextId,
+          courseId: parseInt(newItem.courseId),
+          course: course?.code ?? "General",
+          type: newItem.type,
+          title: newItem.title,
+          dueAt: newItem.dueAt,
+          notes: newItem.notes,
+          completed: false,
+          source: "manual"
+        }
+        return [...prev, item]
+      })
       setNewItem({ courseId: "", type: "assignment", title: "", dueAt: "", notes: "" })
       setIsAddDialogOpen(false)
     }
   }
 
+  const handleIcsUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      try {
+        const text = typeof reader.result === "string" ? reader.result : ""
+        const rawEvents = parseIcsContent(text)
+        let addedCount = 0
+        let scheduleCount = 0
+
+        setAcademicItems(prev => {
+          const { items, added } = mergeIcsEvents(rawEvents, prev)
+          addedCount = added
+          return items
+        })
+
+        setCalendarSchedule(prev => {
+          const { schedule, added } = mergeRecurringMeetings(rawEvents, prev)
+          scheduleCount = added
+          return schedule
+        })
+
+        if (addedCount > 0 || scheduleCount > 0) {
+          const parts = []
+          if (scheduleCount > 0) {
+            parts.push(`${scheduleCount} recurring class${scheduleCount > 1 ? "es" : ""}`)
+          }
+          if (addedCount > 0) {
+            parts.push(`${addedCount} one-off event${addedCount > 1 ? "s" : ""}`)
+          }
+          setImportStatus(`Imported ${parts.join(" and ")}.`)
+        } else {
+          setImportStatus("No new events or classes found in the uploaded calendar.")
+        }
+      } catch (_error) {
+        setImportStatus("We couldn't process that calendar file. Please try again.")
+      }
+    }
+
+    reader.onerror = () => {
+      setImportStatus("We couldn't read that file. Please try again.")
+    }
+
+    reader.readAsText(file)
+    event.target.value = ""
+  }
+
   const toggleComplete = (id: number) => {
-    setAcademicItems(prev => 
-      prev.map(item => 
+    setAcademicItems(prev =>
+      prev.map(item =>
         item.id === id ? { ...item, completed: !item.completed } : item
       )
     )
@@ -144,9 +503,17 @@ export default function Academics() {
     .filter(item => !item.completed)
     .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
 
-  const overdueItems = academicItems.filter(item => 
+  const overdueItems = academicItems.filter(item =>
     !item.completed && new Date(item.dueAt) < new Date()
   )
+
+  const upcomingClasses = calendarSchedule
+    .filter(item => item.nextOccurrence)
+    .sort((a, b) => {
+      const aTime = a.nextOccurrence ? new Date(a.nextOccurrence).getTime() : Number.MAX_SAFE_INTEGER
+      const bTime = b.nextOccurrence ? new Date(b.nextOccurrence).getTime() : Number.MAX_SAFE_INTEGER
+      return aTime - bTime
+    })
 
   return (
     <div className="space-y-6">
@@ -156,76 +523,112 @@ export default function Academics() {
           <h1 className="text-3xl font-bold text-foreground">Academics</h1>
           <p className="text-muted-foreground">Track your courses, assignments, and exams</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Item
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Academic Item</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">Course</label>
-                <select 
-                  className="w-full p-2 border rounded-md"
-                  value={newItem.courseId}
-                  onChange={(e) => setNewItem(prev => ({ ...prev, courseId: e.target.value }))}
-                >
-                  <option value="">Select a course</option>
-                  {courses.map(course => (
-                    <option key={course.id} value={course.id}>
-                      {course.code} - {course.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Type</label>
-                <select 
-                  className="w-full p-2 border rounded-md"
-                  value={newItem.type}
-                  onChange={(e) => setNewItem(prev => ({ ...prev, type: e.target.value }))}
-                >
-                  <option value="assignment">Assignment</option>
-                  <option value="exam">Exam</option>
-                  <option value="reading">Reading</option>
-                  <option value="essay">Essay</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Title</label>
-                <Input 
-                  value={newItem.title}
-                  onChange={(e) => setNewItem(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="Enter title"
+        <div className="flex items-center gap-2">
+          <Dialog
+            open={isImportDialogOpen}
+            onOpenChange={(open) => {
+              setIsImportDialogOpen(open)
+              if (open) {
+                setImportStatus(null)
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Calendar className="h-4 w-4 mr-2" />
+                Import .ics
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Import Calendar (.ics)</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Upload an iCalendar (.ics) file to automatically add events to your upcoming schedule.
+                </p>
+                <Input
+                  type="file"
+                  accept=".ics,text/calendar"
+                  onChange={handleIcsUpload}
                 />
+                {importStatus && (
+                  <p className="text-sm text-muted-foreground">{importStatus}</p>
+                )}
               </div>
-              <div>
-                <label className="text-sm font-medium">Due Date</label>
-                <Input 
-                  type="datetime-local"
-                  value={newItem.dueAt}
-                  onChange={(e) => setNewItem(prev => ({ ...prev, dueAt: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Notes (optional)</label>
-                <Input 
-                  value={newItem.notes}
-                  onChange={(e) => setNewItem(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Additional notes"
-                />
-              </div>
-              <Button onClick={handleAddItem} className="w-full">
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
                 Add Item
               </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Academic Item</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Course</label>
+                  <select
+                    className="w-full p-2 border rounded-md"
+                    value={newItem.courseId}
+                    onChange={(e) => setNewItem(prev => ({ ...prev, courseId: e.target.value }))}
+                  >
+                    <option value="">Select a course</option>
+                    {courses.map(course => (
+                      <option key={course.id} value={course.id}>
+                        {course.code} - {course.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Type</label>
+                  <select
+                    className="w-full p-2 border rounded-md"
+                    value={newItem.type}
+                    onChange={(e) => setNewItem(prev => ({ ...prev, type: e.target.value as ManualItemType }))}
+                  >
+                    <option value="assignment">Assignment</option>
+                    <option value="exam">Exam</option>
+                    <option value="reading">Reading</option>
+                    <option value="essay">Essay</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Title</label>
+                  <Input
+                    value={newItem.title}
+                    onChange={(e) => setNewItem(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="Enter title"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Due Date</label>
+                  <Input
+                    type="datetime-local"
+                    value={newItem.dueAt}
+                    onChange={(e) => setNewItem(prev => ({ ...prev, dueAt: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Notes (optional)</label>
+                  <Input
+                    value={newItem.notes}
+                    onChange={(e) => setNewItem(prev => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Additional notes"
+                  />
+                </div>
+                <Button onClick={handleAddItem} className="w-full">
+                  Add Item
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -300,6 +703,51 @@ export default function Academics() {
           ))}
         </div>
       </div>
+
+      {/* Upcoming Classes */}
+      {upcomingClasses.length > 0 && (
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Upcoming Classes</h2>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Course</TableHead>
+                    <TableHead>When</TableHead>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Location</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {upcomingClasses.map(meeting => (
+                    <TableRow key={meeting.id}>
+                      <TableCell className="font-medium">{meeting.course}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span>{meeting.title}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatMeetingDays(meeting.meetingDays)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span>{formatTimeRange(meeting.startTime, meeting.endTime)}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatNextOccurrence(meeting.nextOccurrence)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{meeting.location ?? ""}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Upcoming Items */}
       <div>
