@@ -33,18 +33,6 @@ type AcademicItem = {
   externalId?: string
 }
 
-type CalendarSchedule = {
-  id: string
-  course: string
-  title: string
-  location?: string
-  meetingDays: string[]
-  startTime: string
-  endTime?: string
-  nextOccurrence: string | null
-  source: "ics"
-}
-
 type NewItem = {
   courseId: string
   type: ManualItemType
@@ -130,88 +118,6 @@ const extractCourseFromSummary = (summary: string) => {
   return summary || "Calendar"
 }
 
-const parseRrule = (rrule: string) => {
-  return rrule.split(";").reduce<Record<string, string>>((acc, part) => {
-    const [key, value] = part.split("=")
-    if (key && value) {
-      acc[key.toUpperCase()] = value
-    }
-    return acc
-  }, {})
-}
-
-const WEEKDAY_CODES: Record<number, string> = {
-  0: "SU",
-  1: "MO",
-  2: "TU",
-  3: "WE",
-  4: "TH",
-  5: "FR",
-  6: "SA"
-}
-
-const WEEKDAY_LABELS: Record<string, string> = {
-  SU: "Sun",
-  MO: "Mon",
-  TU: "Tue",
-  WE: "Wed",
-  TH: "Thu",
-  FR: "Fri",
-  SA: "Sat"
-}
-
-const calculateNextOccurrence = (start: Date, meetingDays: string[]) => {
-  if (!meetingDays.length) {
-    return start.getTime() >= Date.now() ? start.toISOString() : null
-  }
-
-  const now = new Date()
-  const eventHours = start.getHours()
-  const eventMinutes = start.getMinutes()
-  const eventSeconds = start.getSeconds()
-  const allowedDays = new Set(meetingDays)
-
-  for (let offset = 0; offset < 14; offset++) {
-    const candidate = new Date(now)
-    candidate.setDate(now.getDate() + offset)
-    const dayCode = WEEKDAY_CODES[candidate.getDay()]
-    if (!allowedDays.has(dayCode)) continue
-
-    candidate.setHours(eventHours, eventMinutes, eventSeconds, 0)
-    if (candidate.getTime() >= now.getTime()) {
-      return candidate.toISOString()
-    }
-  }
-
-  return null
-}
-
-const formatMeetingDays = (meetingDays: string[]) => {
-  if (!meetingDays.length) return "One-time"
-  return meetingDays.map(day => WEEKDAY_LABELS[day] ?? day).join(", ")
-}
-
-const formatTimeRange = (startTime: string, endTime?: string) => {
-  const startDate = new Date(startTime)
-  const startLabel = startDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-  if (!endTime) return startLabel
-  const endDate = new Date(endTime)
-  const endLabel = endDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-  return `${startLabel} – ${endLabel}`
-}
-
-const formatNextOccurrence = (isoString: string | null) => {
-  if (!isoString) return "No upcoming session"
-  const date = new Date(isoString)
-  return date.toLocaleString([], {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  })
-}
-
 const mergeIcsEvents = (rawEvents: RawIcsEvent[], existingItems: AcademicItem[]) => {
   const existingExternalIds = new Set(
     existingItems
@@ -223,10 +129,6 @@ const mergeIcsEvents = (rawEvents: RawIcsEvent[], existingItems: AcademicItem[])
   const newItems: AcademicItem[] = []
 
   for (const rawEvent of rawEvents) {
-    if (rawEvent["RRULE"]) {
-      continue
-    }
-
     const dtStart = rawEvent["DTSTART"]
     const summaryRaw = rawEvent["SUMMARY"]
     if (!dtStart || !summaryRaw) continue
@@ -263,55 +165,6 @@ const mergeIcsEvents = (rawEvents: RawIcsEvent[], existingItems: AcademicItem[])
   }
 
   return { items: [...existingItems, ...newItems], added: newItems.length }
-}
-
-const mergeRecurringMeetings = (
-  rawEvents: RawIcsEvent[],
-  existingSchedule: CalendarSchedule[]
-) => {
-  const scheduleMap = new Map(existingSchedule.map(item => [item.id, item]))
-  let added = 0
-
-  for (const rawEvent of rawEvents) {
-    if (!rawEvent["RRULE"]) continue
-
-    const dtStartRaw = rawEvent["DTSTART"]
-    if (!dtStartRaw) continue
-    const startDate = parseIcsDate(dtStartRaw)
-    if (!startDate) continue
-
-    const dtEndRaw = rawEvent["DTEND"]
-    const endDate = dtEndRaw ? parseIcsDate(dtEndRaw) : null
-
-    const summary = rawEvent["SUMMARY"] ? decodeIcsText(rawEvent["SUMMARY"]).trim() : "Course"
-    const course = extractCourseFromSummary(summary)
-    const location = rawEvent["LOCATION"] ? decodeIcsText(rawEvent["LOCATION"]).trim() : undefined
-    const externalId = rawEvent["UID"]?.trim() || `${summary}-${startDate.toISOString()}`
-    const rule = parseRrule(rawEvent["RRULE"])
-    const meetingDays = rule["BYDAY"] ? rule["BYDAY"].split(",").map(day => day.trim()) : []
-
-    const nextOccurrence = calculateNextOccurrence(startDate, meetingDays)
-
-    const scheduleItem: CalendarSchedule = {
-      id: externalId,
-      course,
-      title: summary,
-      location,
-      meetingDays,
-      startTime: startDate.toISOString(),
-      endTime: endDate ? endDate.toISOString() : undefined,
-      nextOccurrence,
-      source: "ics"
-    }
-
-    if (!scheduleMap.has(externalId)) {
-      added += 1
-    }
-
-    scheduleMap.set(externalId, scheduleItem)
-  }
-
-  return { schedule: Array.from(scheduleMap.values()), added }
 }
 
 // Mock data
@@ -406,7 +259,6 @@ const formatDate = (dateString: string) => {
 export default function Academics() {
   const [courses] = useState(mockCourses)
   const [academicItems, setAcademicItems] = useState<AcademicItem[]>(mockAcademicItems)
-  const [calendarSchedule, setCalendarSchedule] = useState<CalendarSchedule[]>([])
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -452,7 +304,6 @@ export default function Academics() {
         const text = typeof reader.result === "string" ? reader.result : ""
         const rawEvents = parseIcsContent(text)
         let addedCount = 0
-        let scheduleCount = 0
 
         setAcademicItems(prev => {
           const { items, added } = mergeIcsEvents(rawEvents, prev)
@@ -460,23 +311,10 @@ export default function Academics() {
           return items
         })
 
-        setCalendarSchedule(prev => {
-          const { schedule, added } = mergeRecurringMeetings(rawEvents, prev)
-          scheduleCount = added
-          return schedule
-        })
-
-        if (addedCount > 0 || scheduleCount > 0) {
-          const parts = []
-          if (scheduleCount > 0) {
-            parts.push(`${scheduleCount} recurring class${scheduleCount > 1 ? "es" : ""}`)
-          }
-          if (addedCount > 0) {
-            parts.push(`${addedCount} one-off event${addedCount > 1 ? "s" : ""}`)
-          }
-          setImportStatus(`Imported ${parts.join(" and ")}.`)
+        if (addedCount > 0) {
+          setImportStatus(`Imported ${addedCount} new event${addedCount > 1 ? "s" : ""}.`)
         } else {
-          setImportStatus("No new events or classes found in the uploaded calendar.")
+          setImportStatus("No new events found in the uploaded calendar.")
         }
       } catch (_error) {
         setImportStatus("We couldn't process that calendar file. Please try again.")
