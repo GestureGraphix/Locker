@@ -118,6 +118,25 @@ const extractCourseFromSummary = (summary: string) => {
   return summary || "Calendar"
 }
 
+type ScheduleMeeting = {
+  id: number
+  course: string
+  meetingDays: string[]
+  startTime: string
+  endTime: string
+  nextOccurrence?: string | null
+}
+
+const calendarSchedule: ScheduleMeeting[] = []
+
+const formatMeetingDays = (meetingDays: string[]) =>
+  meetingDays.length ? meetingDays.join(", ") : "TBD"
+
+const formatTimeRange = (startTime: string, endTime: string) => `${startTime} - ${endTime}`
+
+const formatNextOccurrence = (nextOccurrence?: string | null) =>
+  nextOccurrence ? new Date(nextOccurrence).toLocaleString() : "No upcoming session"
+
 const mergeIcsEvents = (rawEvents: RawIcsEvent[], existingItems: AcademicItem[]) => {
   const existingExternalIds = new Set(
     existingItems
