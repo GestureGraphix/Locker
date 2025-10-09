@@ -25,7 +25,6 @@ import {
 type MenuItem = {
   name: string
   description?: string
-  calories?: number | null
 }
 
 type MenuMeal = {
@@ -145,7 +144,7 @@ export default function Fuel() {
   const [menuData, setMenuData] = useState<MenuLocation[]>([])
   const [menuLoading, setMenuLoading] = useState(false)
   const [menuError, setMenuError] = useState<string | null>(null)
-  const [menuSource, setMenuSource] = useState<"json" | "html" | "fallback" | null>(null)
+  const [menuSource, setMenuSource] = useState<"live" | "fallback" | null>(null)
 
   const menuDateStrings = useMemo(() => {
     const baseDate = menuDate ? new Date(`${menuDate}T00:00:00`) : new Date()
@@ -188,15 +187,11 @@ export default function Fuel() {
     (mealTypeLabel: string, item: MenuItem, location: string) => {
       const normalizedType = normalizeMealType(mealTypeLabel)
       const scheduledDate = new Date(`${menuDate}T12:00:00`)
-      const proteinMatch = item.description?.match(/protein\s+(\d{1,3})g/i)
-      const inferredProtein = proteinMatch ? String(Number.parseInt(proteinMatch[1], 10)) : ""
-      const locationSuffix = location ? ` (${location})` : ""
-      const descriptionPart = item.description ? ` — ${item.description}` : ""
       setNewMeal({
         mealType: normalizedType,
-        calories: item.calories != null ? String(item.calories) : "",
-        proteinG: inferredProtein,
-        notes: `${item.name}${descriptionPart}${locationSuffix}`,
+        calories: "",
+        proteinG: "",
+        notes: `${item.name}${item.description ? ` — ${item.description}` : ""} (${location})`,
         dateTime: scheduledDate.toISOString()
       })
       setIsAddMealOpen(true)
@@ -239,9 +234,8 @@ export default function Fuel() {
 
       const locationPattern = /(college|hall|dining|commons|grill|kitchen|buttery|library)/i
       const mealPattern = /(breakfast|brunch|lunch|dinner|supper|snack|grab|late night|special)/i
-      const skipWordPattern = /^(?:calories?|kcals?|nutrition(?:al)? facts?|allergens?)$/i
 
-      const locationMap = new Map<string, Map<string, Map<string, MenuItem>>>()
+      const locationMap = new Map<string, Map<string, Set<string>>>()
 
       const ensureBucket = (location: string, meal: string) => {
         const normalizedLocation = location || "General"
@@ -251,198 +245,9 @@ export default function Fuel() {
         }
         const mealMap = locationMap.get(normalizedLocation)!
         if (!mealMap.has(normalizedMeal)) {
-          mealMap.set(normalizedMeal, new Map())
+          mealMap.set(normalizedMeal, new Set())
         }
         return mealMap.get(normalizedMeal)!
-      }
-
-      const parseCaloriesValue = (value?: string | null) => {
-        if (!value) return undefined
-        const match = value.match(/(\d{2,4})/)
-        if (!match) return undefined
-        const numeric = Number.parseInt(match[1], 10)
-        return Number.isNaN(numeric) ? undefined : numeric
-      }
-
-      const labelForMacro = (raw: string) => {
-        const normalized = raw.toLowerCase()
-        if (normalized.startsWith("prot") || normalized === "p") return "Protein"
-        if (normalized.startsWith("carb") || normalized === "c") return "Carbs"
-        if (normalized.startsWith("fat") || normalized === "f") return "Fat"
-        if (normalized.startsWith("fiber") || normalized === "fib") return "Fiber"
-        if (normalized.startsWith("sug")) return "Sugar"
-        return raw
-      }
-
-      const normalizeDescription = (value: string) => value.replace(/\s+/g, " ").trim()
-
-      const parseMenuItemDetails = (
-        raw: string,
-        context?: { explicitCalories?: string | null; inlineDetails?: string[] }
-      ): MenuItem | null => {
-        const trimmed = raw.replace(/\s+/g, " ").trim()
-        if (!trimmed) return null
-
-        let working = trimmed
-        const descriptionParts: string[] = []
-        let calories: number | undefined
-
-        if (context?.explicitCalories) {
-          const parsed = parseCaloriesValue(context.explicitCalories)
-          if (typeof parsed === "number") {
-            calories = parsed
-          }
-        }
-
-        if (context?.inlineDetails?.length) {
-          context.inlineDetails
-            .map((detail) => normalizeDescription(detail))
-            .filter(Boolean)
-            .forEach((detail) => descriptionParts.push(detail))
-        }
-
-        const macroMatches = Array.from(
-          working.matchAll(/(\d{1,3})\s*g\s*(protein|prot|p|carbs?|carb|c|fat|f|fiber|fib|sugar|sug)/gi)
-        )
-        if (macroMatches.length > 0) {
-          const macroSummary = macroMatches
-            .map((match) => {
-              const amount = match[1]
-              const label = labelForMacro(match[2])
-              return `${label} ${amount}g`
-            })
-            .filter(Boolean)
-            .join(" / ")
-          if (macroSummary) {
-            descriptionParts.push(macroSummary)
-          }
-          working = working
-            .replace(/(\d{1,3})\s*g\s*(protein|prot|p|carbs?|carb|c|fat|f|fiber|fib|sugar|sug)/gi, "")
-            .replace(/\s{2,}/g, " ")
-            .trim()
-        }
-
-        if (calories == null) {
-          const caloriePatterns = [
-            /(\d{2,4})\s*(?:k?cal(?:ories)?|cal|cals)\b/i,
-            /\b(?:k?cal(?:ories)?|cal|cals)\s*[:=]?\s*(\d{2,4})\b/i
-          ]
-          for (const pattern of caloriePatterns) {
-            const match = pattern.exec(working)
-            if (match) {
-              const numeric = Number.parseInt(match[1], 10)
-              if (!Number.isNaN(numeric)) {
-                calories = numeric
-              }
-              const before = working.slice(0, match.index).trim()
-              const after = working.slice(match.index + match[0].length).trim()
-              if (after) {
-                descriptionParts.push(normalizeDescription(after.replace(/^[,;:/\\-]+/, "")))
-              }
-              working = before || working
-              break
-            }
-          }
-        } else {
-          working = working
-            .replace(/(\d{2,4})\s*(?:k?cal(?:ories)?|cal|cals)\b/gi, "")
-            .replace(/\b(?:k?cal(?:ories)?|cal|cals)\s*[:=]?\s*(\d{2,4})\b/gi, "")
-            .trim()
-        }
-
-        const trailingParenthetical = working.match(/\(([^)]+)\)\s*$/)
-        if (trailingParenthetical) {
-          if (trailingParenthetical[1]) {
-            descriptionParts.push(normalizeDescription(trailingParenthetical[1]))
-          }
-          working = working.slice(0, trailingParenthetical.index).trim()
-        }
-
-        const dashMatch = working.match(/(.+?)\s[–—-]\s(.+)/)
-        if (dashMatch) {
-          working = dashMatch[1].trim()
-          descriptionParts.push(normalizeDescription(dashMatch[2]))
-        }
-
-        const colonMatch = working.match(/(.+?):\s*(.+)/)
-        if (colonMatch) {
-          working = colonMatch[1].trim()
-          descriptionParts.push(normalizeDescription(colonMatch[2]))
-        }
-
-        working = working.replace(/\s*[-–—:,;]+\s*$/, "").replace(/\s{2,}/g, " ").trim()
-
-        if (!working) return null
-        const normalizedName = working
-        const normalizedLower = normalizedName.toLowerCase()
-
-        if (skipWordPattern.test(normalizedLower)) return null
-        if (normalizedLower.startsWith("contains ")) {
-          descriptionParts.push(normalizeDescription(normalizedName))
-          return null
-        }
-        if (normalizedLower.includes("allergen")) {
-          descriptionParts.push(normalizeDescription(normalizedName))
-          return null
-        }
-        if (locationPattern.test(normalizedLower) && normalizedName.split(" ").length <= 3) return null
-        if (mealPattern.test(normalizedLower)) return null
-
-        const uniqueDescriptions = Array.from(
-          new Set(descriptionParts.map((part) => normalizeDescription(part)).filter(Boolean))
-        )
-
-        return {
-          name: normalizedName,
-          description: uniqueDescriptions.length > 0 ? uniqueDescriptions.join(" • ") : undefined,
-          calories: typeof calories === "number" ? calories : null
-        }
-      }
-
-      const upsertMenuItem = (bucket: Map<string, MenuItem>, item: MenuItem) => {
-        const key = item.name.toLowerCase()
-        if (!bucket.has(key)) {
-          bucket.set(key, item)
-          return
-        }
-
-        const existing = bucket.get(key)!
-        if (item.description) {
-          if (!existing.description) {
-            existing.description = item.description
-          } else if (!existing.description.includes(item.description)) {
-            existing.description = `${existing.description} • ${item.description}`
-          }
-        }
-
-        if ((existing.calories == null || Number.isNaN(existing.calories)) && item.calories != null) {
-          existing.calories = item.calories
-        }
-      }
-
-      const addItemsFromText = (
-        raw: string,
-        context?: { explicitCalories?: string | null; inlineDetails?: string[] }
-      ) => {
-        const segments = raw
-          .split(/\n+/)
-          .flatMap((segment) =>
-            segment
-              .split(/[•·;|]/)
-              .map((piece) => piece.replace(/^\s*[-–—]\s*/, "").trim())
-              .filter(Boolean)
-          )
-
-        if (segments.length === 0) return
-
-        const bucket = ensureBucket(currentLocation, currentMeal)
-        const sharedContext = segments.length === 1 ? context : undefined
-
-        segments.forEach((segment) => {
-          const parsed = parseMenuItemDetails(segment, sharedContext)
-          if (!parsed) return
-          upsertMenuItem(bucket, parsed)
-        })
       }
 
       let currentLocation = "General"
@@ -450,8 +255,7 @@ export default function Fuel() {
 
       for (const node of nodes) {
         const tag = node.tagName.toLowerCase()
-        const rawText = node.textContent ?? ""
-        const text = rawText.replace(/\s+/g, " ").trim()
+        const text = node.textContent?.replace(/\s+/g, " ").trim() ?? ""
         if (!text) continue
 
         const lowerText = text.toLowerCase()
@@ -472,58 +276,28 @@ export default function Fuel() {
           continue
         }
 
-        if (tag === "li") {
-          let explicitCalories: string | null | undefined
-          let inlineDetails: string[] = []
-
-          if (node instanceof HTMLElement) {
-            explicitCalories =
-              node.dataset.calories ??
-              node.dataset.cal ??
-              node.dataset.kcal ??
-              node.getAttribute("data-calories") ??
-              node.getAttribute("data-cal") ??
-              node.getAttribute("data-kcal") ??
-              node.getAttribute("data-energy") ??
-              undefined;
-
-            const calorieElement = node.querySelector(
-              "[data-calories],[data-cal],[data-kcal],[data-energy],[class*='calorie'],[class*='kcal']"
-            )
-            if (!explicitCalories && calorieElement) {
-              if (calorieElement instanceof HTMLElement) {
-                explicitCalories =
-                  calorieElement.dataset?.calories ??
-                  calorieElement.dataset?.cal ??
-                  calorieElement.dataset?.kcal ??
-                  calorieElement.textContent ??
-                  undefined;
-              } else {
-                explicitCalories = calorieElement.textContent ?? undefined;
-              }
+        const addItemsFromText = (raw: string) => {
+          const cleaned = raw
+            .split(/[•\-*]+/)
+            .map((segment) => segment.trim())
+            .filter(Boolean)
+          if (cleaned.length === 0) return
+          const bucket = ensureBucket(currentLocation, currentMeal)
+          cleaned.forEach((item) => {
+            const normalizedItem = item.replace(/\s+/g, " ")
+            if (normalizedItem.length > 0) {
+              bucket.add(normalizedItem)
             }
+          })
+        }
 
-            inlineDetails = Array.from(
-              node.querySelectorAll(
-                "small,em,span.meta,span.details,span.nutrition,span.nutrients,div.meta,div.details,div.nutrition,div.nutrients"
-              )
-            )
-              .map((detail) => detail.textContent ?? "")
-              .map((detail) => detail.replace(/\s+/g, " ").trim())
-              .filter(Boolean)
-          }
-
-          const context =
-            explicitCalories || inlineDetails.length > 0
-              ? { explicitCalories, inlineDetails }
-              : undefined
-
-          addItemsFromText(rawText, context)
+        if (tag === "li") {
+          addItemsFromText(text.replace(/^[-•\s]+/, ""))
           continue
         }
 
         if (tag === "p" && /•|-/.test(text)) {
-          addItemsFromText(rawText)
+          addItemsFromText(text)
           continue
         }
       }
@@ -536,7 +310,7 @@ export default function Fuel() {
           if (items.size === 0) return
           mealList.push({
             mealType,
-            items: Array.from(items.values())
+            items: Array.from(items).map((item) => ({ name: item }))
           })
         })
 
@@ -561,55 +335,25 @@ export default function Fuel() {
       }
       const payload = await response.json()
 
-      if (payload.source === "live") {
-        if (Array.isArray(payload.menu) && payload.format === "json") {
-          setMenuData(payload.menu)
-          setMenuSource("json")
-          setMenuError(null)
-          return
+      if (payload.source === "live" && payload.html) {
+        const parsedMenu = parseMenuHtml(payload.html)
+        if (parsedMenu.length > 0) {
+          setMenuData(parsedMenu)
+          setMenuSource("live")
+        } else if (Array.isArray(payload.fallbackMenu)) {
+          setMenuData(payload.fallbackMenu)
+          setMenuSource("fallback")
+          setMenuError("We could not interpret the live menu. Showing a sample menu instead.")
+        } else {
+          setMenuData([])
+          setMenuError("We could not find menu items for the selected date.")
+          setMenuSource(null)
         }
-
-        if (payload.html) {
-          const parsedMenu = parseMenuHtml(payload.html)
-          if (parsedMenu.length > 0) {
-            setMenuData(parsedMenu)
-            setMenuSource("html")
-            if (Array.isArray(payload.jsonErrors) && payload.jsonErrors.length > 0) {
-              setMenuError(
-                `Structured menu feed unavailable. Parsed Yale Hospitality HTML instead (${payload.jsonErrors[0]}).`
-              )
-            } else {
-              setMenuError(null)
-            }
-          } else if (Array.isArray(payload.fallbackMenu)) {
-            setMenuData(payload.fallbackMenu)
-            setMenuSource("fallback")
-            setMenuError("We could not interpret the live menu. Showing a sample menu instead.")
-          } else {
-            setMenuData([])
-            setMenuError("We could not find menu items for the selected date.")
-            setMenuSource(null)
-          }
-          return
-        }
-
-        if (Array.isArray(payload.menu)) {
-          setMenuData(payload.menu)
-          setMenuSource("json")
-          setMenuError(null)
-          return
-        }
-
-        setMenuData([])
-        setMenuError("Unexpected live response while loading menu data.")
-        setMenuSource(null)
       } else if (payload.source === "fallback" && Array.isArray(payload.menu)) {
         setMenuData(payload.menu)
         setMenuSource("fallback")
         if (payload.error) {
           setMenuError(`Live data unavailable: ${payload.error}`)
-        } else {
-          setMenuError("Live data unavailable. Showing a sample menu.")
         }
       } else {
         setMenuData([])
@@ -1133,11 +877,9 @@ export default function Fuel() {
 
               {menuSource && (
                 <div className="rounded-md border border-muted p-3 text-xs text-muted-foreground">
-                  {menuSource === "json"
-                    ? `Menu loaded from Yale Hospitality's nutrition feed for ${menuDateStrings.long}.`
-                    : menuSource === "html"
-                      ? `Menu parsed from the Yale Hospitality website for ${menuDateStrings.long}.`
-                      : `Showing fallback example menu for ${menuDateStrings.long}.`}
+                  {menuSource === "live"
+                    ? `Menu parsed from Yale Hospitality for ${menuDateStrings.long}.`
+                    : `Showing fallback example menu for ${menuDateStrings.long}.`}
                 </div>
               )}
 
@@ -1176,26 +918,10 @@ export default function Fuel() {
                                   key={`${location.location}-${meal.mealType}-${item.name}`}
                                   className="flex items-start justify-between gap-3 rounded-md border border-border/40 p-3"
                                 >
-                                  <div className="flex flex-1 flex-col gap-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <p className="text-sm font-medium text-foreground">{item.name}</p>
-                                      {typeof item.calories === "number" && (
-                                        <Badge
-                                          variant="outline"
-                                          className="rounded-full border-primary/30 bg-primary/5 px-2 py-0.5 text-[0.625rem] font-semibold text-primary"
-                                        >
-                                          {item.calories} cal
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    {item.description ? (
+                                  <div>
+                                    <p className="text-sm font-medium text-foreground">{item.name}</p>
+                                    {item.description && (
                                       <p className="text-xs text-muted-foreground">{item.description}</p>
-                                    ) : (
-                                      <p className="text-xs text-muted-foreground opacity-80">
-                                        {typeof item.calories === "number"
-                                          ? "No additional nutrition details provided"
-                                          : "Calorie information unavailable"}
-                                      </p>
                                     )}
                                   </div>
                                   <Button
