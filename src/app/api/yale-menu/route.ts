@@ -7,7 +7,6 @@ const USER_AGENT =
 type MenuItem = {
   name: string
   description?: string
-  calories?: number | null
 }
 
 type MenuMeal = {
@@ -27,17 +26,17 @@ const FALLBACK_MENU_ITEMS: MenuLocation[] = [
       {
         mealType: "Breakfast",
         items: [
-          { name: "Steel-cut oatmeal", description: "With dried fruit and brown sugar", calories: 210 },
-          { name: "Cage-free scrambled eggs", calories: 160 },
-          { name: "Greek yogurt parfait", description: "Granola, berries, local honey", calories: 280 }
+          { name: "Steel-cut oatmeal", description: "With dried fruit and brown sugar" },
+          { name: "Cage-free scrambled eggs" },
+          { name: "Greek yogurt parfait" }
         ]
       },
       {
         mealType: "Lunch",
         items: [
-          { name: "Lemon herb roasted chicken", calories: 320 },
-          { name: "Quinoa & vegetable pilaf", calories: 260 },
-          { name: "Roasted broccoli", calories: 80 }
+          { name: "Lemon herb roasted chicken" },
+          { name: "Quinoa & vegetable pilaf" },
+          { name: "Roasted broccoli" }
         ]
       }
     ]
@@ -48,16 +47,16 @@ const FALLBACK_MENU_ITEMS: MenuLocation[] = [
       {
         mealType: "Dinner",
         items: [
-          { name: "Maple glazed salmon", calories: 410 },
-          { name: "Garlic mashed potatoes", calories: 230 },
-          { name: "Seasonal greens", description: "Lemon vinaigrette", calories: 90 }
+          { name: "Maple glazed salmon" },
+          { name: "Garlic mashed potatoes" },
+          { name: "Seasonal greens" }
         ]
       },
       {
         mealType: "Late Night",
         items: [
-          { name: "Grilled vegetable panini", calories: 360 },
-          { name: "Fresh fruit cups", calories: 120 }
+          { name: "Grilled vegetable panini" },
+          { name: "Fresh fruit cups" }
         ]
       }
     ]
