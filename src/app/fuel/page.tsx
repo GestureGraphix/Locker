@@ -233,6 +233,80 @@ export default function Fuel() {
       const section = container instanceof Document ? container.body : container
       const nodes = Array.from(section.querySelectorAll("h1,h2,h3,h4,h5,h6,strong,b,li,p"))
 
+      const normalizeLocationName = (value: string) =>
+        value
+          .toLowerCase()
+          .replace(/[^a-z\s]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+
+      const locationAliases: Array<[string, string]> = [
+        ["Benjamin Franklin College", "Benjamin Franklin"],
+        ["Benjamin Franklin", "Benjamin Franklin"],
+        ["Berkeley College", "Berkeley"],
+        ["Berkeley", "Berkeley"],
+        ["Branford College", "Branford"],
+        ["Branford", "Branford"],
+        ["Davenport College", "Davenport"],
+        ["Davenport", "Davenport"],
+        ["Ezra Stiles College", "Ezra Stiles"],
+        ["Ezra Stiles", "Ezra Stiles"],
+        ["Grace Hopper College", "Grace Hopper"],
+        ["Grace Hopper", "Grace Hopper"],
+        ["Jonathan Edwards College", "Jonathan Edwards"],
+        ["Jonathan Edwards", "Jonathan Edwards"],
+        ["Morse College", "Morse"],
+        ["Morse", "Morse"],
+        ["Pauli Murray College", "Pauli Murray"],
+        ["Pauli Murray", "Pauli Murray"],
+        ["Pierson College", "Pierson"],
+        ["Pierson", "Pierson"],
+        ["Saybrook College", "Saybrook"],
+        ["Saybrook", "Saybrook"],
+        ["Silliman College", "Silliman"],
+        ["Silliman", "Silliman"],
+        ["Timothy Dwight College", "Timothy Dwight"],
+        ["Timothy Dwight", "Timothy Dwight"],
+        ["Trumbull College", "Trumbull"],
+        ["Trumbull", "Trumbull"],
+        ["Commons", "Commons"],
+        ["Old Campus", "Old Campus"],
+        ["Old Campus Dining", "Old Campus"],
+        ["West Campus", "West Campus"],
+        ["Science Hill", "Science Hill"],
+        ["Steep Cafe", "Steep Cafe"],
+        ["Elm", "Elm"],
+        ["Elm City", "Elm"],
+        ["Elm City Cafe", "Elm"],
+        ["Elm Dining", "Elm"],
+        ["Elm Kitchen", "Elm"],
+        ["Schwarzman", "Schwarzman"],
+        ["Schwarzman Center", "Schwarzman"],
+        ["Commons Dining", "Commons"],
+        ["Davenport Dining", "Davenport"],
+        ["Pierson Dining", "Pierson"],
+        ["Silliman Dining", "Silliman"],
+        ["Saybrook Dining", "Saybrook"],
+        ["Branford Dining", "Branford"],
+        ["Berkeley Dining", "Berkeley"],
+        ["Trumbull Dining", "Trumbull"],
+        ["Timothy Dwight Dining", "Timothy Dwight"],
+        ["Grace Hopper Dining", "Grace Hopper"],
+        ["Ezra Stiles Dining", "Ezra Stiles"],
+        ["Morse Dining", "Morse"],
+        ["Jonathan Edwards Dining", "Jonathan Edwards"],
+        ["Benjamin Franklin Dining", "Benjamin Franklin"],
+        ["Pauli Murray Dining", "Pauli Murray"]
+      ]
+
+      const knownLocationMap = new Map(
+        locationAliases.map(([alias, canonical]) => [normalizeLocationName(alias), canonical])
+      )
+
+      const preferredLocationKeys = new Set(
+        ["Jonathan Edwards", "Jonathan Edwards College"].map((name) => normalizeLocationName(name))
+      )
+
       const locationPattern = /(college|hall|dining|commons|grill|kitchen|buttery|library)/i
       const mealPattern = /(breakfast|brunch|lunch|dinner|supper|snack|grab|late night|special)/i
 
@@ -260,6 +334,16 @@ export default function Fuel() {
         if (!text) continue
 
         const lowerText = text.toLowerCase()
+        const normalizedLocationText = normalizeLocationName(text)
+        const canonicalLocation = normalizedLocationText
+          ? knownLocationMap.get(normalizedLocationText)
+          : undefined
+
+        if (canonicalLocation) {
+          currentLocation = canonicalLocation
+          ensureBucket(currentLocation, currentMeal)
+          continue
+        }
 
         if (tag !== "li" && locationPattern.test(lowerText)) {
           currentLocation = text
@@ -375,7 +459,22 @@ export default function Fuel() {
         }
       })
 
-      return menuLocations.sort((a, b) => a.location.localeCompare(b.location))
+      const filteredLocations = menuLocations
+        .map((location) => {
+          const normalized = normalizeLocationName(location.location)
+          const canonical = normalized ? knownLocationMap.get(normalized) : undefined
+          if (canonical && canonical !== location.location) {
+            return { ...location, location: canonical }
+          }
+          return location
+        })
+        .filter((location) => {
+          if (preferredLocationKeys.size === 0) return true
+          const normalized = normalizeLocationName(location.location)
+          return normalized ? preferredLocationKeys.has(normalized) : false
+        })
+
+      return filteredLocations.sort((a, b) => a.location.localeCompare(b.location))
     },
     [menuDateStrings]
   )
