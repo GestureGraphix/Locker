@@ -47,6 +47,17 @@ type MenuLocation = {
   meals: MenuMeal[]
 }
 
+type MealLog = {
+  id: number
+  dateTime: string
+  mealType: string
+  calories: number
+  proteinG: number
+  notes: string
+  completed: boolean
+  nutritionFacts: NutritionFact[]
+}
+
 // Mock data
 const mockHydrationLogs = [
   { id: 1, date: "2024-01-15", ounces: 8, source: "cup", time: "08:00" },
@@ -56,7 +67,7 @@ const mockHydrationLogs = [
   { id: 5, date: "2024-01-15", ounces: 8, source: "cup", time: "16:30" }
 ]
 
-const mockMealLogs = [
+const mockMealLogs: MealLog[] = [
   {
     id: 1,
     dateTime: "2024-01-15T08:00:00Z",
@@ -178,25 +189,20 @@ const getSourceIcon = (source: string) => {
 
 const formatTime = (dateString: string) => {
   const date = new Date(dateString)
-  return date.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
     minute: '2-digit',
-    hour12: true 
+    hour12: true
   })
+}
+
+const getNextMealId = (meals: MealLog[]): number => {
+  return meals.reduce((maxId, meal) => (meal.id > maxId ? meal.id : maxId), 0) + 1
 }
 
 export default function Fuel() {
   const [hydrationLogs, setHydrationLogs] = useState(mockHydrationLogs)
-  const [mealLogs, setMealLogs] = useState<{ 
-    id: number; 
-    dateTime: string; 
-    mealType: string; 
-    calories: number; 
-    proteinG: number; 
-    notes: string; 
-    completed: boolean; 
-    nutritionFacts: NutritionFact[]; 
-  }[]>(mockMealLogs)
+  const [mealLogs, setMealLogs] = useState<MealLog[]>(mockMealLogs)
   const [activeTab, setActiveTab] = useState("meals")
   const [isAddHydrationOpen, setIsAddHydrationOpen] = useState(false)
   const [isAddMealOpen, setIsAddMealOpen] = useState(false)
@@ -268,21 +274,37 @@ export default function Fuel() {
     (mealTypeLabel: string, item: MenuItem, location: string) => {
       const normalizedType = normalizeMealType(mealTypeLabel)
       const scheduledDate = new Date(`${menuDate}T12:00:00`)
+      const dateTime = Number.isNaN(scheduledDate.getTime()) ? new Date() : scheduledDate
       const calories = getCaloriesFromMenuItem(item)
       const protein = getProteinFromMenuItem(item)
-      setNewMeal({
-        mealType: normalizedType,
-        calories: calories != null ? calories.toString() : "",
-        proteinG: protein != null ? protein.toString() : "",
-        notes: `${item.name}${item.description ? ` — ${item.description}` : ""} (${location})`,
-        dateTime: scheduledDate.toISOString(),
-        nutritionFacts: item.nutritionFacts ?? [],
-        portion: "1",
-        baseCalories: calories ?? undefined,
-        baseProteinG: protein ?? undefined,
-        isFromMenu: calories != null || protein != null
+      const clonedFacts = (Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []).map(fact => ({
+        ...fact
+      }))
+      const description = item.description ? ` — ${item.description}` : ""
+      const notes = `${item.name}${description} (${location})`
+
+      setMealLogs(prev => {
+        const nextId = getNextMealId(prev)
+        const proteinValue =
+          protein != null && Number.isFinite(protein) ? Number(protein.toFixed(1)) : 0
+        const calorieValue = calories != null && Number.isFinite(calories) ? Math.round(calories) : 0
+
+        return [
+          ...prev,
+          {
+            id: nextId,
+            mealType: normalizedType,
+            calories: calorieValue,
+            proteinG: proteinValue,
+            notes,
+            dateTime: dateTime.toISOString(),
+            nutritionFacts: clonedFacts,
+            completed: true
+          }
+        ]
       })
-      setIsAddMealOpen(true)
+
+      setActiveTab("meals")
     },
     [menuDate, normalizeMealType]
   )
@@ -391,18 +413,24 @@ export default function Fuel() {
     const totalCalories = Math.round(baseCalories * portionMultiplier)
     const totalProtein = Number((baseProtein * portionMultiplier).toFixed(1))
 
-    const log = {
-      id: mealLogs.length + 1,
-      mealType: newMeal.mealType,
-      calories: totalCalories,
-      proteinG: Number.isNaN(totalProtein) ? 0 : totalProtein,
-      notes: newMeal.notes,
-      dateTime: newMeal.dateTime,
-      nutritionFacts: newMeal.nutritionFacts ?? [],
-      completed: true
-    }
+    const proteinValue = Number.isNaN(totalProtein) ? 0 : totalProtein
 
-    setMealLogs(prev => [...prev, log])
+    setMealLogs(prev => {
+      const nextId = getNextMealId(prev)
+      return [
+        ...prev,
+        {
+          id: nextId,
+          mealType: newMeal.mealType,
+          calories: totalCalories,
+          proteinG: proteinValue,
+          notes: newMeal.notes,
+          dateTime: newMeal.dateTime,
+          nutritionFacts: (newMeal.nutritionFacts ?? []).map(fact => ({ ...fact })),
+          completed: true
+        }
+      ]
+    })
     setNewMeal({
       mealType: "breakfast",
       calories: "",
@@ -1031,7 +1059,7 @@ export default function Fuel() {
                                         variant="outline"
                                         onClick={() => handleAddFromMenu(meal.mealType, item, location.location)}
                                       >
-                                        Add
+                                        Add Meal
                                       </Button>
                                     </div>
                                   </div>
