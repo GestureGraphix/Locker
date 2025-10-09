@@ -1,8 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { signIn } from "next-auth/react"
-import { format, formatDistanceToNow } from "date-fns"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -53,23 +51,6 @@ const mockStats = {
   mobilityMinutesThisWeek: 120
 }
 
-type HydratedEvent = {
-  id: string
-  title: string
-  description?: string | null
-  location?: string | null
-  start: string
-  end: string
-  source: "GOOGLE" | "ICAL" | "MANUAL"
-  lastUpdated: string
-}
-
-const sourceLabels: Record<HydratedEvent["source"], string> = {
-  GOOGLE: "Google",
-  ICAL: "iCal",
-  MANUAL: "Locker",
-}
-
 const mockHistory = {
   weeklyCheckIns: [
     { week: "Week 1", mental: 4.2, physical: 3.8 },
@@ -87,13 +68,6 @@ export default function Account() {
   const [isEditing, setIsEditing] = useState(false)
   const [profile, setProfile] = useState(mockProfile)
   const [editedProfile, setEditedProfile] = useState(mockProfile)
-  const [isSyncing, setIsSyncing] = useState(false)
-  const [events, setEvents] = useState<HydratedEvent[]>([])
-  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null)
-  const [icalUrl, setIcalUrl] = useState("")
-  const [isImporting, setIsImporting] = useState(false)
-  const [importSummary, setImportSummary] = useState<{ added: number; updated: number; errors: string[] } | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const handleSave = () => {
     setProfile(editedProfile)
@@ -115,61 +89,6 @@ export default function Account() {
     const lbs = Math.round(kg * 2.205)
     return `${lbs} lbs`
   }
-
-  const refreshEvents = async () => {
-    setIsSyncing(true)
-    setError(null)
-    try {
-      const response = await fetch("/api/calendar/list")
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error ?? "Failed to load calendar")
-      }
-
-      setEvents((data.events ?? []) as HydratedEvent[])
-      setLastSyncedAt(data.lastSyncedAt ? new Date(data.lastSyncedAt) : null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to sync calendar")
-    } finally {
-      setIsSyncing(false)
-    }
-  }
-
-  useEffect(() => {
-    void refreshEvents()
-  }, [])
-
-  const handleIcalImport = async () => {
-    if (!icalUrl) return
-    setIsImporting(true)
-    setError(null)
-    try {
-      const response = await fetch("/api/ical/fetch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: icalUrl }),
-      })
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error ?? "Failed to import calendar")
-      }
-
-      setImportSummary(data as { added: number; updated: number; errors: string[] })
-      setIcalUrl("")
-      await refreshEvents()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to import iCal feed")
-    } finally {
-      setIsImporting(false)
-    }
-  }
-
-  const googleConnected = Boolean(lastSyncedAt)
-  const syncLabel = lastSyncedAt
-    ? `Last synced ${formatDistanceToNow(lastSyncedAt, { addSuffix: true })}`
-    : "Not yet synced"
 
   return (
     <div className="space-y-6">
@@ -245,7 +164,6 @@ export default function Account() {
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="stats">Statistics</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
-          <TabsTrigger value="calendars">Calendars</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
@@ -397,106 +315,6 @@ export default function Account() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
-        <TabsContent value="calendars" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Google Calendar Sync</CardTitle>
-              <p className="text-sm text-muted-foreground">{syncLabel}</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={() => signIn("google", { callbackUrl: "/account" })}
-                  variant={googleConnected ? "outline" : "default"}
-                >
-                  <Calendar className="mr-2 h-4 w-4" />
-                  {googleConnected ? "Reconnect Google Calendar" : "Connect Google Calendar"}
-                </Button>
-                <Button onClick={() => void refreshEvents()} variant="outline" disabled={isSyncing}>
-                  {isSyncing ? "Syncing..." : "Re-sync now"}
-                </Button>
-              </div>
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
-              <div className="rounded-xl border border-border/50 bg-background/60 p-4 shadow-sm backdrop-blur">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-semibold">Upcoming events</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {events.length ? `${events.length} synced events` : "No events synced yet"}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-3 max-h-72 overflow-y-auto pr-2">
-                  {events.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Connect your calendar to start syncing.</p>
-                  ) : (
-                    events.slice(0, 10).map(event => {
-                      const start = new Date(event.start)
-                      const end = new Date(event.end)
-                      return (
-                        <div key={event.id} className="rounded-lg border border-border/40 bg-background/70 p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <h5 className="font-medium">{event.title}</h5>
-                              <p className="text-xs text-muted-foreground">
-                                {format(start, "MMM d • h:mm a")} - {format(end, "h:mm a")}
-                              </p>
-                            </div>
-                            <Badge variant="outline">{sourceLabels[event.source]}</Badge>
-                          </div>
-                          {event.location ? (
-                            <p className="mt-1 text-xs text-muted-foreground">{event.location}</p>
-                          ) : null}
-                          {event.description ? (
-                            <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{event.description}</p>
-                          ) : null}
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Import external calendars</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Paste any public .ics URL (Canvas, Apple Calendar, etc.) and Locker will keep it in sync.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  placeholder="https://example.com/calendar.ics"
-                  value={icalUrl}
-                  onChange={(event) => setIcalUrl(event.target.value)}
-                  className="flex-1"
-                />
-                <Button onClick={() => void handleIcalImport()} disabled={isImporting || !icalUrl}>
-                  {isImporting ? "Importing..." : "Import"}
-                </Button>
-              </div>
-              {importSummary ? (
-                <div className="rounded-lg border border-border/40 bg-background/60 p-4 text-sm">
-                  <p className="font-medium">Import summary</p>
-                  <p className="text-muted-foreground">
-                    {importSummary.added} events added, {importSummary.updated} updated, {importSummary.errors.length} errors
-                  </p>
-                  {importSummary.errors.length ? (
-                    <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
-                      {importSummary.errors.map((item, index) => (
-                        <li key={`${item}-${index}`}>{item}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="stats" className="space-y-4">

@@ -118,25 +118,6 @@ const extractCourseFromSummary = (summary: string) => {
   return summary || "Calendar"
 }
 
-type ScheduleMeeting = {
-  id: number
-  course: string
-  meetingDays: string[]
-  startTime: string
-  endTime: string
-  nextOccurrence?: string | null
-}
-
-const calendarSchedule: ScheduleMeeting[] = []
-
-const formatMeetingDays = (meetingDays: string[]) =>
-  meetingDays.length ? meetingDays.join(", ") : "TBD"
-
-const formatTimeRange = (startTime: string, endTime: string) => `${startTime} - ${endTime}`
-
-const formatNextOccurrence = (nextOccurrence?: string | null) =>
-  nextOccurrence ? new Date(nextOccurrence).toLocaleString() : "No upcoming session"
-
 const mergeIcsEvents = (rawEvents: RawIcsEvent[], existingItems: AcademicItem[]) => {
   const existingExternalIds = new Set(
     existingItems
@@ -360,17 +341,9 @@ export default function Academics() {
     .filter(item => !item.completed)
     .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
 
-  const overdueItems = academicItems.filter(item =>
+  const overdueItems = academicItems.filter(item => 
     !item.completed && new Date(item.dueAt) < new Date()
   )
-
-  const upcomingClasses = calendarSchedule
-    .filter(item => item.nextOccurrence)
-    .sort((a, b) => {
-      const aTime = a.nextOccurrence ? new Date(a.nextOccurrence).getTime() : Number.MAX_SAFE_INTEGER
-      const bTime = b.nextOccurrence ? new Date(b.nextOccurrence).getTime() : Number.MAX_SAFE_INTEGER
-      return aTime - bTime
-    })
 
   return (
     <div className="space-y-6">
@@ -560,51 +533,6 @@ export default function Academics() {
           ))}
         </div>
       </div>
-
-      {/* Upcoming Classes */}
-      {upcomingClasses.length > 0 && (
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Upcoming Classes</h2>
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Course</TableHead>
-                    <TableHead>When</TableHead>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Location</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {upcomingClasses.map(meeting => (
-                    <TableRow key={meeting.id}>
-                      <TableCell className="font-medium">{meeting.course}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span>{meeting.title}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatMeetingDays(meeting.meetingDays)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span>{formatTimeRange(meeting.startTime, meeting.endTime)}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {formatNextOccurrence(meeting.nextOccurrence)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{meeting.location ?? ""}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {/* Upcoming Items */}
       <div>
