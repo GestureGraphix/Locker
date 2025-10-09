@@ -16,7 +16,11 @@ import {
   Dumbbell,
   LineChart,
   ListChecks,
+  Mail,
   Plus,
+  Share2,
+  Tag,
+  UserPlus,
   Target,
   Users,
 } from "lucide-react"
@@ -44,6 +48,33 @@ const initialForm: AssignExerciseForm = {
   endTime: "",
   intensity: "medium",
   notes: "",
+}
+
+type AddAthleteFormState = {
+  name: string
+  email: string
+  sport: string
+  level: string
+  team: string
+  tags: string
+}
+
+const initialAthleteForm: AddAthleteFormState = {
+  name: "",
+  email: "",
+  sport: "",
+  level: "",
+  team: "",
+  tags: "",
+}
+
+type BulkAssignFormState = AssignExerciseForm & {
+  tag: string
+}
+
+const initialBulkForm: BulkAssignFormState = {
+  ...initialForm,
+  tag: "",
 }
 
 const formatDate = (value: string) => {
@@ -88,18 +119,22 @@ const typeBadge = (type: string) => {
 function CoachAthleteCard({
   athleteId,
   name,
+  email,
   sport,
   level,
   team,
+  tags,
   sessions,
   calendar,
   workouts,
 }: {
   athleteId: number
   name: string
+  email: string
   sport: string
   level: string
   team: string
+  tags: string[]
   sessions: ReturnType<typeof useRole>["athletes"][number]["sessions"]
   calendar: ReturnType<typeof useRole>["athletes"][number]["calendar"]
   workouts: ReturnType<typeof useRole>["athletes"][number]["workouts"]
@@ -154,6 +189,10 @@ function CoachAthleteCard({
         <div>
           <CardTitle className="text-xl text-gray-900">{name}</CardTitle>
           <p className="text-sm text-gray-500 font-medium">{sport} • {team}</p>
+          <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+            <Mail className="h-3 w-3" />
+            <span className="font-medium text-gray-600">{email}</span>
+          </div>
         </div>
         <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] text-white border-0">{level}</Badge>
       </CardHeader>
@@ -177,6 +216,23 @@ function CoachAthleteCard({
             </div>
           </div>
         </div>
+
+        {tags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <Tag className="h-3 w-3 text-[#0f4d92]" />
+            {tags.map((tagValue) => {
+              const label = tagValue.charAt(0).toUpperCase() + tagValue.slice(1)
+              return (
+              <Badge
+                key={tagValue}
+                className="bg-[#edf2fa] text-[#123a70] border-[#c7d7ee] capitalize"
+              >
+                {label}
+              </Badge>
+              )
+            })}
+          </div>
+        )}
 
         <div>
           <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -340,7 +396,13 @@ function CoachAthleteCard({
 }
 
 export function CoachDashboard() {
-  const { athletes } = useRole()
+  const { athletes, addAthlete, assignSessionToTag } = useRole()
+  const [isAddAthleteOpen, setIsAddAthleteOpen] = useState(false)
+  const [addAthleteForm, setAddAthleteForm] = useState(initialAthleteForm)
+  const [addAthleteError, setAddAthleteError] = useState<string | null>(null)
+  const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false)
+  const [bulkAssignForm, setBulkAssignForm] = useState(initialBulkForm)
+  const [bulkAssignError, setBulkAssignError] = useState<string | null>(null)
 
   const allSessions = useMemo(() => athletes.flatMap((athlete) => athlete.sessions), [athletes])
   const totalSessions = allSessions.length
@@ -372,6 +434,79 @@ export function CoachDashboard() {
     [allSessions]
   )
 
+  const matchingAthleteCount = useMemo(() => {
+    const normalizedTag = bulkAssignForm.tag.trim().toLowerCase()
+    if (!normalizedTag) return 0
+    return athletes.filter((athlete) => athlete.tags.includes(normalizedTag)).length
+  }, [athletes, bulkAssignForm.tag])
+
+  const handleAddAthlete = () => {
+    if (!addAthleteForm.email.trim()) {
+      setAddAthleteError("Email is required to add an athlete.")
+      return
+    }
+
+    const tagValues = addAthleteForm.tags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0)
+
+    addAthlete({
+      name: addAthleteForm.name,
+      email: addAthleteForm.email,
+      sport: addAthleteForm.sport || undefined,
+      level: addAthleteForm.level || undefined,
+      team: addAthleteForm.team || undefined,
+      tags: tagValues.length ? tagValues : undefined,
+    })
+
+    setAddAthleteForm(initialAthleteForm)
+    setAddAthleteError(null)
+    setIsAddAthleteOpen(false)
+  }
+
+  const handleBulkAssign = () => {
+    if (!bulkAssignForm.tag.trim()) {
+      setBulkAssignError("Add a tag to target the correct athletes.")
+      return
+    }
+
+    if (!bulkAssignForm.title || !bulkAssignForm.date || !bulkAssignForm.startTime || !bulkAssignForm.endTime) {
+      setBulkAssignError("Title, date, start time, and end time are required.")
+      return
+    }
+
+    const normalizedTag = bulkAssignForm.tag.trim().toLowerCase()
+    const targetedAthletes = athletes.filter((athlete) => athlete.tags.includes(normalizedTag))
+    if (targetedAthletes.length === 0) {
+      setBulkAssignError("No athletes currently match that tag.")
+      return
+    }
+
+    const startAt = `${bulkAssignForm.date}T${bulkAssignForm.startTime}`
+    const endAt = `${bulkAssignForm.date}T${bulkAssignForm.endTime}`
+
+    assignSessionToTag(
+      bulkAssignForm.tag,
+      {
+        title: bulkAssignForm.title,
+        type: bulkAssignForm.type,
+        startAt,
+        endAt,
+        intensity: bulkAssignForm.intensity,
+        notes: bulkAssignForm.notes,
+      },
+      {
+        focus: bulkAssignForm.focus || bulkAssignForm.title,
+        assignedBy: coachName,
+      }
+    )
+
+    setBulkAssignForm(initialBulkForm)
+    setBulkAssignError(null)
+    setIsBulkAssignOpen(false)
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -384,6 +519,220 @@ export function CoachDashboard() {
         <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] text-white border-0">
           <Users className="h-4 w-4 mr-2" /> {athletes.length} Athletes
         </Badge>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Dialog open={isAddAthleteOpen} onOpenChange={setIsAddAthleteOpen}>
+          <DialogTrigger asChild>
+            <Button className="gradient-primary text-white shadow-glow">
+              <UserPlus className="h-4 w-4 mr-2" /> Add Athlete
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Add Athlete by Email</DialogTitle>
+              <DialogDescription>Invite a new student-athlete to your roster using their email address.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Email Address *</label>
+                  <Input
+                    type="email"
+                    value={addAthleteForm.email}
+                    onChange={(event) => setAddAthleteForm((prev) => ({ ...prev, email: event.target.value }))}
+                    placeholder="athlete@locker.app"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Full Name</label>
+                  <Input
+                    value={addAthleteForm.name}
+                    onChange={(event) => setAddAthleteForm((prev) => ({ ...prev, name: event.target.value }))}
+                    placeholder="Jamie Thompson"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Sport</label>
+                  <Input
+                    value={addAthleteForm.sport}
+                    onChange={(event) => setAddAthleteForm((prev) => ({ ...prev, sport: event.target.value }))}
+                    placeholder="Track & Field"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Team / Group</label>
+                  <Input
+                    value={addAthleteForm.team}
+                    onChange={(event) => setAddAthleteForm((prev) => ({ ...prev, team: event.target.value }))}
+                    placeholder="Sprints"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Competitive Level</label>
+                  <Input
+                    value={addAthleteForm.level}
+                    onChange={(event) => setAddAthleteForm((prev) => ({ ...prev, level: event.target.value }))}
+                    placeholder="Elite"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Tags</label>
+                  <Input
+                    value={addAthleteForm.tags}
+                    onChange={(event) => setAddAthleteForm((prev) => ({ ...prev, tags: event.target.value }))}
+                    placeholder="track, sprinter"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Use tags to group athletes (e.g. track, distance, rehab).</p>
+                </div>
+              </div>
+              {addAthleteError && <p className="text-sm font-medium text-red-600">{addAthleteError}</p>}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAddAthleteOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddAthlete} className="gradient-primary text-white">
+                Save Athlete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isBulkAssignOpen} onOpenChange={setIsBulkAssignOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="shadow-sm">
+              <Share2 className="h-4 w-4 mr-2" /> Assign by Tag
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Assign Exercise to Tagged Athletes</DialogTitle>
+              <DialogDescription>
+                Select a tag (for example, <span className="font-semibold text-[#0f4d92]">track</span>) to instantly add a session to
+                every athlete in that group.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Target Tag *</label>
+                  <Input
+                    value={bulkAssignForm.tag}
+                    onChange={(event) =>
+                      setBulkAssignForm((prev) => ({ ...prev, tag: event.target.value }))
+                    }
+                    placeholder="track"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    {matchingAthleteCount > 0
+                      ? `${matchingAthleteCount} athlete${matchingAthleteCount === 1 ? " matches" : "s match"} this tag`
+                      : "No athletes currently match this tag"}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Title *</label>
+                  <Input
+                    value={bulkAssignForm.title}
+                    onChange={(event) =>
+                      setBulkAssignForm((prev) => ({ ...prev, title: event.target.value }))
+                    }
+                    placeholder="Track Speed Session"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Session Type</label>
+                  <select
+                    className="w-full rounded-md border border-gray-200 p-2 text-sm"
+                    value={bulkAssignForm.type}
+                    onChange={(event) =>
+                      setBulkAssignForm((prev) => ({ ...prev, type: event.target.value }))
+                    }
+                  >
+                    <option value="practice">Practice</option>
+                    <option value="lift">Strength</option>
+                    <option value="rehab">Recovery</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Focus</label>
+                  <Input
+                    value={bulkAssignForm.focus}
+                    onChange={(event) =>
+                      setBulkAssignForm((prev) => ({ ...prev, focus: event.target.value }))
+                    }
+                    placeholder="Block starts and acceleration"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Date *</label>
+                  <Input
+                    type="date"
+                    value={bulkAssignForm.date}
+                    onChange={(event) =>
+                      setBulkAssignForm((prev) => ({ ...prev, date: event.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Intensity</label>
+                  <select
+                    className="w-full rounded-md border border-gray-200 p-2 text-sm"
+                    value={bulkAssignForm.intensity}
+                    onChange={(event) =>
+                      setBulkAssignForm((prev) => ({ ...prev, intensity: event.target.value }))
+                    }
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Start Time *</label>
+                  <Input
+                    type="time"
+                    value={bulkAssignForm.startTime}
+                    onChange={(event) =>
+                      setBulkAssignForm((prev) => ({ ...prev, startTime: event.target.value }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">End Time *</label>
+                  <Input
+                    type="time"
+                    value={bulkAssignForm.endTime}
+                    onChange={(event) =>
+                      setBulkAssignForm((prev) => ({ ...prev, endTime: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Coaching Notes</label>
+                  <textarea
+                    value={bulkAssignForm.notes}
+                    onChange={(event) =>
+                      setBulkAssignForm((prev) => ({ ...prev, notes: event.target.value }))
+                    }
+                    placeholder="Shared context, goals, or equipment needs."
+                    rows={3}
+                    className="w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c7dbf3]"
+                  />
+                </div>
+              </div>
+              {bulkAssignError && <p className="text-sm font-medium text-red-600">{bulkAssignError}</p>}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsBulkAssignOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleBulkAssign} className="gradient-secondary text-white">
+                Assign to Group
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -503,9 +852,11 @@ export function CoachDashboard() {
               key={athlete.id}
               athleteId={athlete.id}
               name={athlete.name}
+              email={athlete.email}
               sport={athlete.sport}
               level={athlete.level}
               team={athlete.team}
+              tags={athlete.tags}
               sessions={athlete.sessions}
               calendar={athlete.calendar}
               workouts={athlete.workouts}
