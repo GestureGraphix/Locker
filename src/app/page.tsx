@@ -154,11 +154,23 @@ export default function DashboardPage() {
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case "high":
-        return <Badge className="bg-gradient-to-r from-red-500 to-pink-500 text-white border-0 px-3 py-1">High</Badge>
+        return (
+          <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white border-0 px-3 py-1">
+            High
+          </Badge>
+        )
       case "medium":
-        return <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0 px-3 py-1">Medium</Badge>
+        return (
+          <Badge className="bg-gradient-to-r from-[#1c6dd0] to-[#2f7bdc] text-white border-0 px-3 py-1">
+            Medium
+          </Badge>
+        )
       case "low":
-        return <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white border-0 px-3 py-1">Low</Badge>
+        return (
+          <Badge className="bg-gradient-to-r from-[#87a8d0] to-[#c7dbf3] text-[#0f2f5b] border-0 px-3 py-1">
+            Low
+          </Badge>
+        )
       default:
         return <Badge variant="secondary">{priority}</Badge>
     }
@@ -167,11 +179,23 @@ export default function DashboardPage() {
   const getSessionIntensityBadge = (intensity: string) => {
     switch (intensity) {
       case "high":
-        return <Badge className="bg-gradient-to-r from-red-500 to-pink-500 text-white border-0 px-3 py-1">High</Badge>
+        return (
+          <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white border-0 px-3 py-1">
+            High
+          </Badge>
+        )
       case "medium":
-        return <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0 px-3 py-1">Medium</Badge>
+        return (
+          <Badge className="bg-gradient-to-r from-[#1c6dd0] to-[#2f7bdc] text-white border-0 px-3 py-1">
+            Medium
+          </Badge>
+        )
       case "low":
-        return <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white border-0 px-3 py-1">Low</Badge>
+        return (
+          <Badge className="bg-gradient-to-r from-[#87a8d0] to-[#c7dbf3] text-[#0f2f5b] border-0 px-3 py-1">
+            Low
+          </Badge>
+        )
       default:
         return <Badge variant="secondary">{intensity}</Badge>
     }
@@ -185,21 +209,21 @@ export default function DashboardPage() {
         {/* Hero Section */}
         <div className="mb-12">
           <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 via-purple-600/20 to-pink-600/20 rounded-3xl blur-3xl"></div>
+            <div className="absolute inset-0 bg-gradient-to-r from-[#0f4d92]/25 via-[#1c6dd0]/20 to-[#acc4e6]/25 rounded-3xl blur-3xl"></div>
             <div className="relative glass-card rounded-3xl p-8">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900 bg-clip-text text-transparent mb-2">
+                  <h1 className="text-4xl font-bold bg-gradient-to-r from-[#0f172a] via-[#0f4d92] to-[#12284b] bg-clip-text text-transparent mb-2">
                     Good morning, Alex! 👋
                   </h1>
                   <p className="text-xl text-gray-600 font-medium">Ready to tackle another day?</p>
                   <div className="flex items-center mt-4 space-x-6">
                     <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                      <div className="w-3 h-3 bg-[#0f4d92] rounded-full animate-pulse"></div>
                       <span className="text-sm text-gray-600 font-medium">All systems optimal</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Battery className="h-4 w-4 text-green-500" />
+                      <Battery className="h-4 w-4 text-[#1c6dd0]" />
                       <span className="text-sm text-gray-600 font-medium">87% energy</span>
                     </div>
                   </div>
@@ -223,7 +247,7 @@ export default function DashboardPage() {
               </div>
               Daily Check-in
               {checkInCompleted && (
-                <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white border-0 px-4 py-2">
+                <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white border-0 px-4 py-2">
                   <CheckCircle2 className="h-4 w-4 mr-2" />
                   Completed
                 </Badge>
@@ -283,7 +307,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-semibold text-gray-600 mb-2">Strength</p>
                 <p className="text-3xl font-bold text-gray-900 mb-2">{mockData.performanceMetrics.strength}%</p>
                 <Progress value={mockData.performanceMetrics.strength} className="h-2" />
-                <p className="text-xs text-green-600 font-semibold mt-2">+5% this week</p>
+                <p className="text-xs text-[#1c6dd0] font-semibold mt-2">+5% this week</p>
               </CardContent>
             </Card>
             <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
@@ -294,7 +318,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-semibold text-gray-600 mb-2">Endurance</p>
                 <p className="text-3xl font-bold text-gray-900 mb-2">{mockData.performanceMetrics.endurance}%</p>
                 <Progress value={mockData.performanceMetrics.endurance} className="h-2" />
-                <p className="text-xs text-green-600 font-semibold mt-2">+3% this week</p>
+                <p className="text-xs text-[#1c6dd0] font-semibold mt-2">+3% this week</p>
               </CardContent>
             </Card>
             <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
@@ -305,7 +329,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-semibold text-gray-600 mb-2">Flexibility</p>
                 <p className="text-3xl font-bold text-gray-900 mb-2">{mockData.performanceMetrics.flexibility}%</p>
                 <Progress value={mockData.performanceMetrics.flexibility} className="h-2" />
-                <p className="text-xs text-yellow-600 font-semibold mt-2">Needs attention</p>
+                <p className="text-xs text-[#123d73] font-semibold mt-2">Needs attention</p>
               </CardContent>
             </Card>
             <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
@@ -316,7 +340,7 @@ export default function DashboardPage() {
                 <p className="text-sm font-semibold text-gray-600 mb-2">Mental</p>
                 <p className="text-3xl font-bold text-gray-900 mb-2">{mockData.performanceMetrics.mental}%</p>
                 <Progress value={mockData.performanceMetrics.mental} className="h-2" />
-                <p className="text-xs text-green-600 font-semibold mt-2">Excellent!</p>
+                <p className="text-xs text-[#1c6dd0] font-semibold mt-2">Excellent!</p>
               </CardContent>
             </Card>
           </div>
@@ -370,7 +394,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
           <div className="space-y-6">
             <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-              <Zap className="h-6 w-6 text-blue-600" />
+              <Zap className="h-6 w-6 text-[#0f4d92]" />
               Today&apos;s Progress
             </h3>
             
@@ -425,14 +449,14 @@ export default function DashboardPage() {
 
           <div className="lg:col-span-2 space-y-6">
             <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-              <Calendar className="h-6 w-6 text-blue-600" />
+              <Calendar className="h-6 w-6 text-[#0f4d92]" />
               Upcoming
             </h3>
             
             <Card className="glass-card border-0 shadow-premium">
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
-                  <BookOpen className="h-6 w-6 text-blue-600" />
+                  <BookOpen className="h-6 w-6 text-[#0f4d92]" />
                   Academics Due
                 </CardTitle>
               </CardHeader>
@@ -464,7 +488,7 @@ export default function DashboardPage() {
             <Card className="glass-card border-0 shadow-premium">
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
-                  <Dumbbell className="h-6 w-6 text-blue-600" />
+                  <Dumbbell className="h-6 w-6 text-[#0f4d92]" />
                   Today&apos;s Training
                 </CardTitle>
               </CardHeader>
@@ -511,7 +535,7 @@ export default function DashboardPage() {
             <Card className="glass-card border-0 shadow-premium">
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
-                  <Calendar className="h-6 w-6 text-blue-600" />
+                  <Calendar className="h-6 w-6 text-[#0f4d92]" />
                   Personal Calendar
                 </CardTitle>
               </CardHeader>
@@ -529,7 +553,7 @@ export default function DashboardPage() {
                         </p>
                         {event.focus && <p className="text-xs text-gray-500 mt-1">{event.focus}</p>}
                       </div>
-                      <Badge className="capitalize bg-white text-gray-700 border border-gray-200">{event.type}</Badge>
+                      <Badge className="capitalize bg-[#e8f0fb] text-[#123a70] border border-[#c7d7ee]">{event.type}</Badge>
                     </div>
                   ))
                 ) : (
@@ -542,7 +566,7 @@ export default function DashboardPage() {
             <Card className="glass-card border-0 shadow-premium">
               <CardHeader className="pb-4">
                 <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
-                  <ListChecks className="h-6 w-6 text-blue-600" />
+                  <ListChecks className="h-6 w-6 text-[#0f4d92]" />
                   Workout Assignments
                 </CardTitle>
               </CardHeader>
@@ -566,8 +590,8 @@ export default function DashboardPage() {
                         className={cn(
                           "capitalize border-0 px-4 py-1",
                           workout.status === "Completed"
-                            ? "bg-emerald-500/90 text-white"
-                            : "bg-amber-200 text-amber-800"
+                            ? "bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white"
+                            : "bg-[#e2ebf9] text-[#0f2f5b]"
                         )}
                       >
                         {workout.status}
@@ -602,7 +626,7 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">Sessions</p>
                 <p className="text-4xl font-bold text-gray-900 mb-2">{mockData.weeklyStats.sessions}</p>
-                <p className="text-xs text-green-600 font-semibold">+2 from last week</p>
+                <p className="text-xs text-[#1c6dd0] font-semibold">+2 from last week</p>
               </CardContent>
             </Card>
             <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
@@ -612,7 +636,7 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">PRs Set</p>
                 <p className="text-4xl font-bold text-gray-900 mb-2">{mockData.weeklyStats.prsSet}</p>
-                <p className="text-xs text-green-600 font-semibold">New records!</p>
+                <p className="text-xs text-[#1c6dd0] font-semibold">New records!</p>
               </CardContent>
             </Card>
             <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
@@ -622,7 +646,7 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">Hydration Avg</p>
                 <p className="text-4xl font-bold text-gray-900 mb-2">{mockData.weeklyStats.hydrationAvg}%</p>
-                <p className="text-xs text-green-600 font-semibold">Good consistency</p>
+                <p className="text-xs text-[#1c6dd0] font-semibold">Good consistency</p>
               </CardContent>
             </Card>
             <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
@@ -632,7 +656,7 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">Assignments</p>
                 <p className="text-4xl font-bold text-gray-900 mb-2">{mockData.weeklyStats.assignments}</p>
-                <p className="text-xs text-green-600 font-semibold">5 completed</p>
+                <p className="text-xs text-[#1c6dd0] font-semibold">5 completed</p>
               </CardContent>
             </Card>
           </div>

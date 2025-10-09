@@ -56,7 +56,7 @@ export function Navigation() {
                 <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow animate-pulse-slow">
                   <Sparkles className="h-7 w-7 text-white" />
                 </div>
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white animate-pulse"></div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-[#0f4d92] rounded-full border-2 border-white animate-pulse"></div>
               </div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
@@ -119,7 +119,7 @@ export function Navigation() {
                         "px-2 py-1 text-xs font-bold rounded-full",
                         pathname === item.href
                           ? "bg-white/20 text-white"
-                          : "bg-red-100 text-red-600"
+                          : "bg-[#e2ebf9] text-[#0f2f5b]"
                       )}>
                         {item.badge}
                       </span>
@@ -144,7 +144,7 @@ export function Navigation() {
                   <div className="w-12 h-12 rounded-2xl gradient-secondary flex items-center justify-center text-white font-bold text-lg shadow-lg">
                     AJ
                   </div>
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"></div>
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#0f4d92] rounded-full border-2 border-white"></div>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-900">Alex Johnson</p>
@@ -152,11 +152,11 @@ export function Navigation() {
                     {role === "coach" ? "Head Coach" : "Track & Field • Elite"}
                   </p>
                   <div className="flex items-center mt-1">
-                    <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
-                    <span className="text-xs text-green-600 font-semibold">+12% this week</span>
+                    <TrendingUp className="h-3 w-3 text-[#1c6dd0] mr-1" />
+                    <span className="text-xs text-[#1c6dd0] font-semibold">+12% this week</span>
                   </div>
                 </div>
-                <Zap className="h-4 w-4 text-yellow-500" />
+                <Zap className="h-4 w-4 text-[#123d73]" />
               </div>
             </div>
           </div>
@@ -242,7 +242,7 @@ export function Navigation() {
                               "px-2 py-1 text-xs font-bold rounded-full",
                               pathname === item.href
                                 ? "bg-white/20 text-white"
-                                : "bg-red-100 text-red-600"
+                                : "bg-[#e2ebf9] text-[#0f2f5b]"
                             )}>
                               {item.badge}
                             </span>
