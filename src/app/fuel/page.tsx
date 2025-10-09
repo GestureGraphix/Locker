@@ -25,6 +25,7 @@ import {
 type MenuItem = {
   name: string
   description?: string
+  calories?: number
 }
 
 type MenuMeal = {
@@ -189,7 +190,7 @@ export default function Fuel() {
       const scheduledDate = new Date(`${menuDate}T12:00:00`)
       setNewMeal({
         mealType: normalizedType,
-        calories: "",
+        calories: item.calories ? item.calories.toString() : "",
         proteinG: "",
         notes: `${item.name}${item.description ? ` — ${item.description}` : ""} (${location})`,
         dateTime: scheduledDate.toISOString()
@@ -235,7 +236,7 @@ export default function Fuel() {
       const locationPattern = /(college|hall|dining|commons|grill|kitchen|buttery|library)/i
       const mealPattern = /(breakfast|brunch|lunch|dinner|supper|snack|grab|late night|special)/i
 
-      const locationMap = new Map<string, Map<string, Set<string>>>()
+      const locationMap = new Map<string, Map<string, Map<string, MenuItem>>>()
 
       const ensureBucket = (location: string, meal: string) => {
         const normalizedLocation = location || "General"
@@ -245,7 +246,7 @@ export default function Fuel() {
         }
         const mealMap = locationMap.get(normalizedLocation)!
         if (!mealMap.has(normalizedMeal)) {
-          mealMap.set(normalizedMeal, new Set())
+          mealMap.set(normalizedMeal, new Map())
         }
         return mealMap.get(normalizedMeal)!
       }
@@ -285,8 +286,62 @@ export default function Fuel() {
           const bucket = ensureBucket(currentLocation, currentMeal)
           cleaned.forEach((item) => {
             const normalizedItem = item.replace(/\s+/g, " ")
-            if (normalizedItem.length > 0) {
-              bucket.add(normalizedItem)
+            if (!normalizedItem) return
+
+            const parseItem = (value: string): MenuItem => {
+              const result: MenuItem = { name: value }
+
+              const caloriesMatch = value.match(/(\d{2,4})\s*(?:k?cal|calories)/i)
+              if (caloriesMatch) {
+                result.calories = parseInt(caloriesMatch[1], 10)
+              }
+
+              const working = value
+                .replace(/\(?\d{2,4}\s*(?:k?cal|calories)\)?/gi, "")
+                .replace(/\s{2,}/g, " ")
+                .trim()
+
+              const descriptionSeparators = [" — ", " - ", " – ", ": "]
+              for (const separator of descriptionSeparators) {
+                if (working.includes(separator)) {
+                  const [namePart, ...descriptionParts] = working.split(separator)
+                  const description = descriptionParts.join(separator).trim()
+                  result.name = namePart.trim()
+                  if (description) {
+                    result.description = description
+                  }
+                  return result
+                }
+              }
+
+              const parenthetical = working.match(/^(.*?)(?:\s*\((.+)\))$/)
+              if (parenthetical) {
+                const [, name, desc] = parenthetical
+                result.name = name.trim()
+                if (desc?.trim()) {
+                  result.description = desc.trim()
+                }
+              } else {
+                result.name = working
+              }
+
+              return result
+            }
+
+            const parsed = parseItem(normalizedItem)
+            const key = parsed.name.toLowerCase()
+            if (!key) return
+
+            if (!bucket.has(key)) {
+              bucket.set(key, parsed)
+            } else {
+              const existing = bucket.get(key)!
+              if (!existing.description && parsed.description) {
+                existing.description = parsed.description
+              }
+              if (existing.calories == null && parsed.calories != null) {
+                existing.calories = parsed.calories
+              }
             }
           })
         }
@@ -310,7 +365,7 @@ export default function Fuel() {
           if (items.size === 0) return
           mealList.push({
             mealType,
-            items: Array.from(items).map((item) => ({ name: item }))
+            items: Array.from(items.values())
           })
         })
 
@@ -924,13 +979,20 @@ export default function Fuel() {
                                       <p className="text-xs text-muted-foreground">{item.description}</p>
                                     )}
                                   </div>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleAddFromMenu(meal.mealType, item, location.location)}
-                                  >
-                                    Add
-                                  </Button>
+                                  <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                                    {typeof item.calories === "number" && (
+                                      <Badge variant="secondary" className="whitespace-nowrap">
+                                        {item.calories} cal
+                                      </Badge>
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleAddFromMenu(meal.mealType, item, location.location)}
+                                    >
+                                      Add
+                                    </Button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
