@@ -1,59 +1,26 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useMemo, useState } from "react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Dumbbell, 
-  Plus, 
-  Calendar, 
-  Clock, 
+import { useRole } from "@/components/role-context"
+import { CoachDashboard } from "@/components/coach-dashboard"
+import {
+  Dumbbell,
+  Plus,
+  Calendar,
+  Clock,
   Target,
-  TrendingUp,
   Activity,
   Zap,
   Award,
   Timer
 } from "lucide-react"
-
-// Mock data
-const mockSessions = [
-  { 
-    id: 1, 
-    type: "practice", 
-    title: "Morning Practice", 
-    startAt: "2024-01-15T06:00:00Z", 
-    endAt: "2024-01-15T08:00:00Z", 
-    intensity: "high", 
-    notes: "Focus on technique",
-    completed: true
-  },
-  { 
-    id: 2, 
-    type: "lift", 
-    title: "Strength Training", 
-    startAt: "2024-01-15T16:00:00Z", 
-    endAt: "2024-01-15T17:30:00Z", 
-    intensity: "medium", 
-    notes: "Upper body focus",
-    completed: false
-  },
-  { 
-    id: 3, 
-    type: "rehab", 
-    title: "Recovery Session", 
-    startAt: "2024-01-16T10:00:00Z", 
-    endAt: "2024-01-16T11:00:00Z", 
-    intensity: "low", 
-    notes: "Foam rolling and stretching",
-    completed: false
-  }
-]
 
 const mockPRs = [
   { id: 1, exercise: "Bench Press", loadKg: 95, reps: 5, date: "2024-01-14", intensity: "high" },
@@ -99,7 +66,9 @@ const formatTime = (dateString: string) => {
 }
 
 export default function Training() {
-  const [sessions, setSessions] = useState(mockSessions)
+  const { role, athletes, scheduleSession, toggleSessionCompletion } = useRole()
+  const primaryAthlete = athletes[0]
+  const sessions = primaryAthlete?.sessions ?? []
   const [prs, setPRs] = useState(mockPRs)
   const [isAddSessionOpen, setIsAddSessionOpen] = useState(false)
   const [isAddPROpen, setIsAddPROpen] = useState(false)
@@ -120,20 +89,23 @@ export default function Training() {
   })
 
   const handleAddSession = () => {
+    if (!primaryAthlete) return
     if (newSession.title && newSession.startAt && newSession.endAt) {
-      const session = {
-        id: sessions.length + 1,
-        ...newSession,
-        completed: false
-      }
-      setSessions(prev => [...prev, session])
+      scheduleSession(primaryAthlete.id, {
+        type: newSession.type,
+        title: newSession.title,
+        startAt: newSession.startAt,
+        endAt: newSession.endAt,
+        intensity: newSession.intensity,
+        notes: newSession.notes,
+      })
       setNewSession({
         type: "practice",
         title: "",
         startAt: "",
         endAt: "",
         intensity: "medium",
-        notes: ""
+        notes: "",
       })
       setIsAddSessionOpen(false)
     }
@@ -160,16 +132,31 @@ export default function Training() {
   }
 
   const toggleSessionComplete = (id: number) => {
-    setSessions(prev => 
-      prev.map(session => 
-        session.id === id ? { ...session, completed: !session.completed } : session
-      )
-    )
+    if (!primaryAthlete) return
+    toggleSessionCompletion(primaryAthlete.id, id)
   }
 
-  const upcomingSessions = sessions.filter(session => !session.completed)
+  const upcomingSessions = useMemo(() => {
+    const activeSessions = primaryAthlete?.sessions ?? []
+    return activeSessions
+      .filter((session) => !session.completed)
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
+  }, [primaryAthlete])
   const completedSessions = sessions.filter(session => session.completed)
   const recentPRs = prs.slice(0, 5)
+
+  if (role === "coach") {
+    return <CoachDashboard />
+  }
+
+  if (!primaryAthlete) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold text-foreground">Training</h1>
+        <p className="text-muted-foreground">No athlete data available yet.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

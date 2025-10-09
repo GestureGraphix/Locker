@@ -15,11 +15,13 @@ import {
   Menu,
   ChevronRight,
   Zap,
-  TrendingUp
+  TrendingUp,
+  Target
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useRole } from "./role-context"
 
-const navigation = [
+const athleteNavigation = [
   { name: "Dashboard", href: "/", icon: House, badge: null },
   { name: "Academics", href: "/academics", icon: BookOpen, badge: "3" },
   { name: "Training", href: "/training", icon: Dumbbell, badge: null },
@@ -28,8 +30,19 @@ const navigation = [
   { name: "Account", href: "/account", icon: User, badge: null },
 ]
 
+const coachNavigation = [
+  { name: "Coach Dashboard", href: "/", icon: Dumbbell, badge: null },
+  { name: "Training Plans", href: "/training", icon: Target, badge: null },
+  { name: "Academics", href: "/academics", icon: BookOpen, badge: null },
+  { name: "Fuel", href: "/fuel", icon: Apple, badge: null },
+  { name: "Mobility", href: "/mobility", icon: Activity, badge: null },
+  { name: "Account", href: "/account", icon: User, badge: null },
+]
+
 export function Navigation() {
   const pathname = usePathname()
+  const { role, setRole } = useRole()
+  const navigation = role === "coach" ? coachNavigation : athleteNavigation
 
   return (
     <>
@@ -47,13 +60,37 @@ export function Navigation() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
-                <p className="text-sm text-gray-600 font-medium">Athlete Dashboard</p>
+                <p className="text-sm text-gray-600 font-medium">
+                  {role === "coach" ? "Coach Portal" : "Athlete Dashboard"}
+                </p>
               </div>
             </div>
           </div>
 
           {/* Navigation */}
           <div className="flex-grow px-6 py-8">
+            <div className="mb-6 grid grid-cols-2 gap-2">
+              <Button
+                variant={role === "athlete" ? "default" : "outline"}
+                className={cn(
+                  "rounded-xl font-semibold",
+                  role === "athlete" ? "gradient-primary text-white border-0 shadow-glow" : "bg-white/70"
+                )}
+                onClick={() => setRole("athlete")}
+              >
+                Athlete
+              </Button>
+              <Button
+                variant={role === "coach" ? "default" : "outline"}
+                className={cn(
+                  "rounded-xl font-semibold",
+                  role === "coach" ? "gradient-secondary text-white border-0 shadow-glow" : "bg-white/70"
+                )}
+                onClick={() => setRole("coach")}
+              >
+                Coach
+              </Button>
+            </div>
             <nav className="space-y-3">
               {navigation.map((item) => (
                 <Link
@@ -111,7 +148,9 @@ export function Navigation() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-900">Alex Johnson</p>
-                  <p className="text-xs text-gray-600 font-medium">Track & Field • Elite</p>
+                  <p className="text-xs text-gray-600 font-medium">
+                    {role === "coach" ? "Head Coach" : "Track & Field • Elite"}
+                  </p>
                   <div className="flex items-center mt-1">
                     <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
                     <span className="text-xs text-green-600 font-semibold">+12% this week</span>
@@ -148,11 +187,35 @@ export function Navigation() {
                     </div>
                     <div>
                       <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
-                      <p className="text-sm text-gray-600 font-medium">Athlete Dashboard</p>
+                      <p className="text-sm text-gray-600 font-medium">
+                        {role === "coach" ? "Coach Portal" : "Athlete Dashboard"}
+                      </p>
                     </div>
                   </div>
                 </div>
                 <div className="flex-grow px-4 py-6">
+                  <div className="mb-4 grid grid-cols-2 gap-2">
+                    <Button
+                      variant={role === "athlete" ? "default" : "outline"}
+                      className={cn(
+                        "rounded-xl font-semibold",
+                        role === "athlete" ? "gradient-primary text-white border-0" : "bg-white/80"
+                      )}
+                      onClick={() => setRole("athlete")}
+                    >
+                      Athlete
+                    </Button>
+                    <Button
+                      variant={role === "coach" ? "default" : "outline"}
+                      className={cn(
+                        "rounded-xl font-semibold",
+                        role === "coach" ? "gradient-secondary text-white border-0" : "bg-white/80"
+                      )}
+                      onClick={() => setRole("coach")}
+                    >
+                      Coach
+                    </Button>
+                  </div>
                   <nav className="space-y-3">
                     {navigation.map((item) => (
                       <Link
@@ -199,7 +262,9 @@ export function Navigation() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-gray-900">Alex Johnson</p>
-                      <p className="text-xs text-gray-600 font-medium">Track & Field</p>
+                      <p className="text-xs text-gray-600 font-medium">
+                        {role === "coach" ? "Head Coach" : "Track & Field"}
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -451,9 +451,9 @@ export default function Fuel() {
         </TabsList>
 
         <TabsContent value="meals" className="space-y-4">
-          {/* Today's Meals */}
+          {/* Today’s Meals */}
           <div>
-            <h2 className="text-xl font-semibold mb-4">Today's Meals</h2>
+            <h2 className="text-xl font-semibold mb-4">Today’s Meals</h2>
             <div className="space-y-3">
               {todayMeals.map(meal => (
                 <Card key={meal.id}>
@@ -592,21 +592,21 @@ export default function Fuel() {
             {hydrationPercentage < 70 && (
               <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200">
                 <p className="text-sm text-yellow-800">
-                  💧 You're at {hydrationPercentage}% of your hydration goal. Consider drinking more water!
+                  💧 You’re at {hydrationPercentage}% of your hydration goal. Consider drinking more water!
                 </p>
               </div>
             )}
             {totalProtein < 100 && (
               <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
                 <p className="text-sm text-blue-800">
-                  🥩 You've consumed {totalProtein}g protein today. Aim for 100-150g for optimal recovery.
+                  🥩 You’ve consumed {totalProtein}g protein today. Aim for 100-150g for optimal recovery.
                 </p>
               </div>
             )}
             {completedMeals < 3 && (
               <div className="p-3 rounded-lg bg-green-50 border border-green-200">
                 <p className="text-sm text-green-800">
-                  🍽️ You've completed {completedMeals} meals today. Don't forget dinner!
+                  🍽️ You’ve completed {completedMeals} meals today. Don’t forget dinner!
                 </p>
               </div>
             )}

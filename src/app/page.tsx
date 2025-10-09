@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { NumberScale } from "@/components/number-scale"
 import { Tile } from "@/components/tile"
+import { useRole } from "@/components/role-context"
+import { CoachDashboard } from "@/components/coach-dashboard"
 import {
   BookOpen,
   Dumbbell,
@@ -14,31 +16,18 @@ import {
   Activity,
   User,
   Calendar,
-  Clock,
   Droplets,
   Target,
-  TrendingUp,
-  AlertCircle,
   CheckCircle2,
   ArrowRight,
   Plus,
   Zap,
   Award,
   Sparkles,
-  BarChart3,
-  Flame,
-  Heart,
   Brain,
-  Star,
-  Trophy,
-  Timer,
   Battery,
   Activity as ActivityIcon,
-  ChevronUp,
-  ChevronDown,
-  Play,
-  Pause,
-  RotateCcw
+  ListChecks
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -85,16 +74,81 @@ const mockData = {
   }
 }
 
+const isSameDay = (value: string, reference: Date) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return false
+  return (
+    date.getDate() === reference.getDate() &&
+    date.getMonth() === reference.getMonth() &&
+    date.getFullYear() === reference.getFullYear()
+  )
+}
+
+const formatSessionTimeRange = (startAt: string, endAt: string) => {
+  if (!startAt || !endAt) return ""
+  const start = new Date(startAt)
+  const end = new Date(endAt)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return ""
+  const format = (date: Date) =>
+    date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+
+  return `${format(start)} - ${format(end)}`
+}
+
+const formatDateLabel = (value: string) => {
+  if (!value) return "TBD"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  })
+}
+
 export default function DashboardPage() {
   const [mentalState, setMentalState] = useState<number | null>(mockData.checkIn.mental)
   const [physicalState, setPhysicalState] = useState<number | null>(mockData.checkIn.physical)
   const [checkInCompleted, setCheckInCompleted] = useState(mockData.checkIn.completed)
+  const { role, athletes } = useRole()
+
+  const primaryAthlete = athletes[0]
+  const athleteSessions = primaryAthlete?.sessions ?? []
+
+  const today = new Date()
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+
+  const todaysSessions = athleteSessions.filter((session) => isSameDay(session.startAt, today))
+  const sessionsCompletedToday = todaysSessions.filter((session) => session.completed).length
+
+  const upcomingCalendar = useMemo(() => {
+    const calendar = primaryAthlete?.calendar ?? []
+    return calendar
+      .filter((event) => {
+        const eventDate = new Date(event.date)
+        if (Number.isNaN(eventDate.getTime())) return true
+        return eventDate.getTime() >= startOfToday
+      })
+      .slice(0, 5)
+  }, [primaryAthlete, startOfToday])
+
+  const workoutAssignments = useMemo(() => {
+    const workouts = primaryAthlete?.workouts ?? []
+    return workouts.slice(0, 5)
+  }, [primaryAthlete])
 
   const handleCheckIn = () => {
     if (mentalState && physicalState) {
       setCheckInCompleted(true)
       console.log("Daily Check-in completed:", { mentalState, physicalState })
     }
+  }
+
+  if (role === "coach") {
+    return <CoachDashboard />
   }
 
   const getPriorityBadge = (priority: string) => {
@@ -362,7 +416,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-gray-600">Sessions Completed</p>
-                    <p className="text-3xl font-bold text-gray-900">{mockData.todayStats.sessionsCompleted}</p>
+                    <p className="text-3xl font-bold text-gray-900">{sessionsCompletedToday}</p>
                   </div>
                 </div>
               </CardContent>
@@ -415,30 +469,116 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {mockData.todaysSessions.map((session) => (
-                  <div key={session.id} className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300">
-                    <div className="flex items-center space-x-4">
-                      <div className={cn(
-                        "w-12 h-12 rounded-xl flex items-center justify-center",
-                        session.completed ? "gradient-success" : "bg-gray-100"
-                      )}>
-                        <Dumbbell className={cn(
-                          "h-6 w-6",
-                          session.completed ? "text-white" : "text-gray-400"
-                        )} />
-                      </div>
-                      <div>
-                        <p className="font-bold text-gray-900">{session.title}</p>
-                        <p className="text-sm text-gray-600">{session.time}</p>
-                        <div className="flex items-center gap-4 mt-1">
-                          <span className="text-xs text-gray-500">{session.calories} cal</span>
-                          <span className="text-xs text-gray-500">{session.heartRate} bpm</span>
+                {todaysSessions.length > 0 ? (
+                  todaysSessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div
+                          className={cn(
+                            "w-12 h-12 rounded-xl flex items-center justify-center",
+                            session.completed ? "gradient-success" : "bg-gray-100"
+                          )}
+                        >
+                          <Dumbbell
+                            className={cn(
+                              "h-6 w-6",
+                              session.completed ? "text-white" : "text-gray-400"
+                            )}
+                          />
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900">{session.title}</p>
+                          <p className="text-sm text-gray-600">{formatSessionTimeRange(session.startAt, session.endAt)}</p>
+                          <div className="flex flex-wrap items-center gap-4 mt-1 text-xs text-gray-500">
+                            {session.focus && <span>{session.focus}</span>}
+                            {session.assignedBy && <span>By {session.assignedBy}</span>}
+                          </div>
                         </div>
                       </div>
+                      {getSessionIntensityBadge(session.intensity)}
                     </div>
-                    {getSessionIntensityBadge(session.intensity)}
+                  ))
+                ) : (
+                  <div className="p-6 text-center rounded-2xl border border-dashed border-gray-300 bg-white/60 text-sm text-gray-500">
+                    No training sessions scheduled for today yet.
                   </div>
-                ))}
+                )}
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-0 shadow-premium">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
+                  <Calendar className="h-6 w-6 text-blue-600" />
+                  Personal Calendar
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {upcomingCalendar.length > 0 ? (
+                  upcomingCalendar.map((event) => (
+                    <div
+                      key={event.id}
+                      className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
+                    >
+                      <div>
+                        <p className="font-bold text-gray-900">{event.title}</p>
+                        <p className="text-sm text-gray-600">
+                          {formatDateLabel(event.date)} • {event.timeRange}
+                        </p>
+                        {event.focus && <p className="text-xs text-gray-500 mt-1">{event.focus}</p>}
+                      </div>
+                      <Badge className="capitalize bg-white text-gray-700 border border-gray-200">{event.type}</Badge>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-6 text-center rounded-2xl border border-dashed border-gray-300 bg-white/60 text-sm text-gray-500">
+                    No upcoming events on the calendar.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-0 shadow-premium">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
+                  <ListChecks className="h-6 w-6 text-blue-600" />
+                  Workout Assignments
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {workoutAssignments.length > 0 ? (
+                  workoutAssignments.map((workout) => (
+                    <div
+                      key={workout.id}
+                      className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
+                    >
+                      <div>
+                        <p className="font-bold text-gray-900">{workout.title}</p>
+                        <p className="text-sm text-gray-600">
+                          Due {formatDateLabel(workout.dueDate)} • {workout.focus}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Assigned by {workout.assignedBy ?? "staff"}
+                        </p>
+                      </div>
+                      <Badge
+                        className={cn(
+                          "capitalize border-0 px-4 py-1",
+                          workout.status === "Completed"
+                            ? "bg-emerald-500/90 text-white"
+                            : "bg-amber-200 text-amber-800"
+                        )}
+                      >
+                        {workout.status}
+                      </Badge>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-6 text-center rounded-2xl border border-dashed border-gray-300 bg-white/60 text-sm text-gray-500">
+                    No workouts assigned yet. Your coach will add them here.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
