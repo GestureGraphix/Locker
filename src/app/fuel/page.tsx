@@ -9,16 +9,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
-import { 
-  Apple, 
-  Plus, 
-  Droplets, 
+import {
+  Apple,
+  Plus,
+  Droplets,
   Coffee,
   GlassWater,
   Zap,
   Target,
-  TrendingUp,
-  Calendar,
   Clock
 } from "lucide-react"
 
@@ -82,11 +80,11 @@ const getMealTypeIcon = (type: string) => {
 
 const getMealTypeColor = (type: string) => {
   switch (type) {
-    case "breakfast": return "bg-orange-100 text-orange-800 border-orange-200"
-    case "lunch": return "bg-blue-100 text-blue-800 border-blue-200"
-    case "dinner": return "bg-purple-100 text-purple-800 border-purple-200"
-    case "snack": return "bg-green-100 text-green-800 border-green-200"
-    default: return "bg-gray-100 text-gray-800 border-gray-200"
+    case "breakfast": return "bg-[#f2f6fb] text-[#1c4f8f] border-[#d7e3f5]"
+    case "lunch": return "bg-[#d9e3f5] text-[#0f4d92] border-[#b3c7e6]"
+    case "dinner": return "bg-[#c7dbf3] text-[#0f2f5b] border-[#a8c2e5]"
+    case "snack": return "bg-[#e4f1ff] text-[#12467f] border-[#c5ddf5]"
+    default: return "bg-[#e8f0fb] text-[#123a70] border-[#c7d7ee]"
   }
 }
 
@@ -330,7 +328,7 @@ export default function Fuel() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Target className="h-5 w-5 text-green-600" />
+              <Target className="h-5 w-5 text-[#1c6dd0]" />
               <div>
                 <p className="text-sm font-medium">Hydration Goal</p>
                 <p className="text-2xl font-bold">{hydrationPercentage}%</p>
@@ -341,7 +339,7 @@ export default function Fuel() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Apple className="h-5 w-5 text-orange-600" />
+              <Apple className="h-5 w-5 text-[#0f4d92]" />
               <div>
                 <p className="text-sm font-medium">Calories Today</p>
                 <p className="text-2xl font-bold">{totalCalories}</p>
@@ -352,7 +350,7 @@ export default function Fuel() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Zap className="h-5 w-5 text-purple-600" />
+              <Zap className="h-5 w-5 text-[#123d73]" />
               <div>
                 <p className="text-sm font-medium">Protein Today</p>
                 <p className="text-2xl font-bold">{totalProtein}g</p>
@@ -590,22 +588,22 @@ export default function Fuel() {
         <CardContent>
           <div className="space-y-3">
             {hydrationPercentage < 70 && (
-              <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200">
-                <p className="text-sm text-yellow-800">
+              <div className="p-3 rounded-lg bg-[#eef5ff] border border-[#c7d7ee]">
+                <p className="text-sm text-[#0f2f5b]">
                   💧 You’re at {hydrationPercentage}% of your hydration goal. Consider drinking more water!
                 </p>
               </div>
             )}
             {totalProtein < 100 && (
-              <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
-                <p className="text-sm text-blue-800">
+              <div className="p-3 rounded-lg bg-[#e1ecfb] border border-[#b3c7e6]">
+                <p className="text-sm text-[#0f3a78]">
                   🥩 You’ve consumed {totalProtein}g protein today. Aim for 100-150g for optimal recovery.
                 </p>
               </div>
             )}
             {completedMeals < 3 && (
-              <div className="p-3 rounded-lg bg-green-50 border border-green-200">
-                <p className="text-sm text-green-800">
+              <div className="p-3 rounded-lg bg-[#dbe7f8] border border-[#b3c7e6]">
+                <p className="text-sm text-[#0f4d92]">
                   🍽️ You’ve completed {completedMeals} meals today. Don’t forget dinner!
                 </p>
               </div>

@@ -244,12 +244,12 @@ const getTypeIcon = (type: string) => {
 
 const getTypeColor = (type: string) => {
   switch (type) {
-    case "exam": return "bg-red-100 text-red-800 border-red-200"
-    case "assignment": return "bg-blue-100 text-blue-800 border-blue-200"
-    case "reading": return "bg-green-100 text-green-800 border-green-200"
-    case "essay": return "bg-purple-100 text-purple-800 border-purple-200"
-    case "calendar": return "bg-amber-100 text-amber-800 border-amber-200"
-    default: return "bg-gray-100 text-gray-800 border-gray-200"
+    case "exam": return "bg-[#d9e3f5] text-[#0f4d92] border-[#b3c7e6]"
+    case "assignment": return "bg-[#e4f1ff] text-[#12467f] border-[#c5ddf5]"
+    case "reading": return "bg-[#edf2fa] text-[#123a70] border-[#c7d7ee]"
+    case "essay": return "bg-[#c7dbf3] text-[#0f2f5b] border-[#a8c2e5]"
+    case "calendar": return "bg-[#f2f6fb] text-[#1c4f8f] border-[#d7e3f5]"
+    default: return "bg-[#e8f0fb] text-[#123a70] border-[#c7d7ee]"
   }
 }
 
@@ -486,7 +486,7 @@ export default function Academics() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <BookOpen className="h-5 w-5 text-blue-600" />
+              <BookOpen className="h-5 w-5 text-[#0f4d92]" />
               <div>
                 <p className="text-sm font-medium">Total Items</p>
                 <p className="text-2xl font-bold">{academicItems.length}</p>
@@ -497,7 +497,7 @@ export default function Academics() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <AlertCircle className="h-5 w-5 text-red-600" />
+              <AlertCircle className="h-5 w-5 text-[#123d73]" />
               <div>
                 <p className="text-sm font-medium">Overdue</p>
                 <p className="text-2xl font-bold">{overdueItems.length}</p>
@@ -508,7 +508,7 @@ export default function Academics() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
+              <CheckCircle className="h-5 w-5 text-[#1c6dd0]" />
               <div>
                 <p className="text-sm font-medium">Completed</p>
                 <p className="text-2xl font-bold">
@@ -575,7 +575,7 @@ export default function Academics() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span className={formatDate(item.dueAt) === "Overdue" ? "text-red-600" : ""}>
+                        <span className={formatDate(item.dueAt) === "Overdue" ? "text-[#123d73] font-semibold" : ""}>
                           {formatDate(item.dueAt)}
                         </span>
                       </div>
@@ -604,9 +604,9 @@ export default function Academics() {
 
       {/* Overdue Items Alert */}
       {overdueItems.length > 0 && (
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-[#b3c7e6] bg-[#eef5ff]">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-800">
+            <CardTitle className="flex items-center gap-2 text-[#0f4d92]">
               <AlertCircle className="h-5 w-5" />
               Overdue Items
             </CardTitle>
@@ -614,12 +614,12 @@ export default function Academics() {
           <CardContent>
             <div className="space-y-2">
               {overdueItems.map(item => (
-                <div key={item.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-red-200">
+                <div key={item.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-[#c7d7ee]">
                   <div>
                     <p className="font-medium">{item.title}</p>
                     <p className="text-sm text-muted-foreground">{item.course}</p>
                   </div>
-                  <Badge className="bg-red-100 text-red-800 border-red-200">
+                  <Badge className="bg-[#d9e3f5] text-[#0f2f5b] border-[#b3c7e6]">
                     Overdue
                   </Badge>
                 </div>

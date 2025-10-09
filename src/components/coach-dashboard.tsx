@@ -77,11 +77,11 @@ const isUpcoming = (value: string) => {
 const typeBadge = (type: string) => {
   switch (type) {
     case "lift":
-      return <Badge className="bg-purple-100 text-purple-700 border-purple-200">Strength</Badge>
+      return <Badge className="bg-[#d9e3f5] text-[#0f4d92] border-[#b3c7e6]">Strength</Badge>
     case "rehab":
-      return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Recovery</Badge>
+      return <Badge className="bg-[#e4f1ff] text-[#12467f] border-[#c5ddf5]">Recovery</Badge>
     default:
-      return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Practice</Badge>
+      return <Badge className="bg-[#edf2fa] text-[#123a70] border-[#c7d7ee]">Practice</Badge>
   }
 }
 
@@ -155,7 +155,7 @@ function CoachAthleteCard({
           <CardTitle className="text-xl text-gray-900">{name}</CardTitle>
           <p className="text-sm text-gray-500 font-medium">{sport} • {team}</p>
         </div>
-        <Badge className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-0">{level}</Badge>
+        <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] text-white border-0">{level}</Badge>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="p-4 rounded-2xl bg-white/80 border border-white/60 shadow-sm">
@@ -180,7 +180,7 @@ function CoachAthleteCard({
 
         <div>
           <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <CalendarIcon className="h-4 w-4 text-indigo-500" /> Calendar Highlights
+            <CalendarIcon className="h-4 w-4 text-[#0f4d92]" /> Calendar Highlights
           </h4>
           <div className="space-y-2">
             {calendarHighlights.map((event) => (
@@ -202,7 +202,7 @@ function CoachAthleteCard({
 
         <div>
           <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <ListChecks className="h-4 w-4 text-emerald-500" /> Workout Plan
+            <ListChecks className="h-4 w-4 text-[#1c6dd0]" /> Workout Plan
           </h4>
           <div className="space-y-2">
             {activeWorkouts.map((workout) => (
@@ -217,8 +217,8 @@ function CoachAthleteCard({
                   className={cn(
                     "capitalize border-0",
                     workout.status === "Completed"
-                      ? "bg-emerald-500/90 text-white"
-                      : "bg-amber-200 text-amber-800"
+                      ? "bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white"
+                      : "bg-[#e2ebf9] text-[#0f2f5b]"
                   )}
                 >
                   {workout.status}
@@ -320,7 +320,7 @@ function CoachAthleteCard({
                   onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
                   placeholder="Key coaching points, equipment needs, etc."
                   rows={3}
-                  className="w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                  className="w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c7dbf3]"
                 />
               </div>
             </div>
@@ -381,7 +381,7 @@ export function CoachDashboard() {
             Monitor athlete readiness, assign sessions, and keep calendars in sync.
           </p>
         </div>
-        <Badge className="bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">
+        <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] text-white border-0">
           <Users className="h-4 w-4 mr-2" /> {athletes.length} Athletes
         </Badge>
       </div>
@@ -394,7 +394,7 @@ export function CoachDashboard() {
                 <p className="text-xs uppercase tracking-wide text-gray-500">Team Sessions</p>
                 <p className="text-2xl font-bold text-gray-900">{totalSessions}</p>
               </div>
-              <Dumbbell className="h-8 w-8 text-indigo-500" />
+              <Dumbbell className="h-8 w-8 text-[#0f4d92]" />
             </div>
           </CardContent>
         </Card>
@@ -405,7 +405,7 @@ export function CoachDashboard() {
                 <p className="text-xs uppercase tracking-wide text-gray-500">Completion Rate</p>
                 <p className="text-2xl font-bold text-gray-900">{completionRate}%</p>
               </div>
-              <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+              <CheckCircle2 className="h-8 w-8 text-[#1c6dd0]" />
             </div>
           </CardContent>
         </Card>
@@ -416,7 +416,7 @@ export function CoachDashboard() {
                 <p className="text-xs uppercase tracking-wide text-gray-500">Sessions Today</p>
                 <p className="text-2xl font-bold text-gray-900">{sessionsToday}</p>
               </div>
-              <Clock className="h-8 w-8 text-amber-500" />
+              <Clock className="h-8 w-8 text-[#87a8d0]" />
             </div>
           </CardContent>
         </Card>
@@ -427,7 +427,7 @@ export function CoachDashboard() {
                 <p className="text-xs uppercase tracking-wide text-gray-500">Open Assignments</p>
                 <p className="text-2xl font-bold text-gray-900">{upcomingAssignments}</p>
               </div>
-              <Target className="h-8 w-8 text-rose-500" />
+              <Target className="h-8 w-8 text-[#123d73]" />
             </div>
           </CardContent>
         </Card>
@@ -439,7 +439,7 @@ export function CoachDashboard() {
             <CardTitle className="text-xl text-gray-900">Upcoming Team Schedule</CardTitle>
             <p className="text-sm text-gray-500">Automated calendar view of all scheduled training blocks.</p>
           </div>
-          <Badge className="bg-blue-100 text-blue-600 border-blue-200">Next 5</Badge>
+          <Badge className="bg-[#edf2fa] text-[#123a70] border-[#c7d7ee]">Next 5</Badge>
         </CardHeader>
         <CardContent>
           <Table>
@@ -459,11 +459,11 @@ export function CoachDashboard() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {session.type === "lift" ? (
-                          <Dumbbell className="h-4 w-4 text-purple-500" />
+                          <Dumbbell className="h-4 w-4 text-[#0f4d92]" />
                         ) : session.type === "rehab" ? (
-                          <Activity className="h-4 w-4 text-emerald-500" />
+                          <Activity className="h-4 w-4 text-[#1c6dd0]" />
                         ) : (
-                          <LineChart className="h-4 w-4 text-blue-500" />
+                          <LineChart className="h-4 w-4 text-[#123a70]" />
                         )}
                         <div>
                           <p className="font-semibold text-gray-900">{session.title}</p>
@@ -474,7 +474,7 @@ export function CoachDashboard() {
                     <TableCell className="text-sm text-gray-600">{athlete?.name ?? "Team"}</TableCell>
                     <TableCell className="text-sm text-gray-600">{formatDateTime(session.startAt)}</TableCell>
                     <TableCell>
-                      <Badge className="capitalize bg-white text-gray-700 border border-gray-200">
+                      <Badge className="capitalize bg-[#e8f0fb] text-[#0f2f5b] border border-[#c7d7ee]">
                         {session.intensity}
                       </Badge>
                     </TableCell>
@@ -495,7 +495,7 @@ export function CoachDashboard() {
 
       <div>
         <h2 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Users className="h-5 w-5 text-indigo-500" /> Athlete Roster
+          <Users className="h-5 w-5 text-[#0f4d92]" /> Athlete Roster
         </h2>
         <div className="grid gap-4 lg:grid-cols-2">
           {athletes.map((athlete) => (

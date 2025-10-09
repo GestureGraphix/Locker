@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -14,10 +13,8 @@ import {
   Play, 
   Clock,
   Target,
-  Calendar,
   BookOpen,
   Zap,
-  Award,
   TrendingUp
 } from "lucide-react"
 
@@ -119,17 +116,6 @@ const getGroupIcon = (group: string) => {
   }
 }
 
-const getGroupColor = (group: string) => {
-  switch (group) {
-    case "back": return "bg-blue-100 text-blue-800 border-blue-200"
-    case "hips": return "bg-green-100 text-green-800 border-green-200"
-    case "hamstrings": return "bg-purple-100 text-purple-800 border-purple-200"
-    case "quads": return "bg-orange-100 text-orange-800 border-orange-200"
-    case "ankles": return "bg-pink-100 text-pink-800 border-pink-200"
-    default: return "bg-gray-100 text-gray-800 border-gray-200"
-  }
-}
-
 const exerciseGroups = [
   { name: "back", label: "Back", icon: "🫁" },
   { name: "hips", label: "Hips", icon: "🦴" },
@@ -144,7 +130,6 @@ export default function Mobility() {
   const [mobilityLogs, setMobilityLogs] = useState(mockMobilityLogs)
   const [isAddExerciseOpen, setIsAddExerciseOpen] = useState(false)
   const [isLogExerciseOpen, setIsLogExerciseOpen] = useState(false)
-  const [selectedExercise, setSelectedExercise] = useState<typeof exercises[0] | null>(null)
   const [newExercise, setNewExercise] = useState({
     group: "back",
     name: "",
@@ -188,7 +173,6 @@ export default function Mobility() {
   }
 
   const openLogDialog = (exercise: typeof exercises[0]) => {
-    setSelectedExercise(exercise)
     setNewLog(prev => ({ ...prev, exerciseId: exercise.id.toString() }))
     setIsLogExerciseOpen(true)
   }
@@ -350,7 +334,7 @@ export default function Mobility() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Clock className="h-5 w-5 text-green-600" />
+              <Clock className="h-5 w-5 text-[#1c6dd0]" />
               <div>
                 <p className="text-sm font-medium">This Week</p>
                 <p className="text-2xl font-bold">{totalMinutesThisWeek}m</p>
@@ -361,7 +345,7 @@ export default function Mobility() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Target className="h-5 w-5 text-blue-600" />
+              <Target className="h-5 w-5 text-[#0f4d92]" />
               <div>
                 <p className="text-sm font-medium">Exercises Done</p>
                 <p className="text-2xl font-bold">{uniqueExercisesThisWeek}</p>
@@ -372,7 +356,7 @@ export default function Mobility() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <TrendingUp className="h-5 w-5 text-purple-600" />
+              <TrendingUp className="h-5 w-5 text-[#123d73]" />
               <div>
                 <p className="text-sm font-medium">Avg Session</p>
                 <p className="text-2xl font-bold">8m</p>

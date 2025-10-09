@@ -31,10 +31,10 @@ const mockPRs = [
 
 const getIntensityColor = (intensity: string) => {
   switch (intensity) {
-    case "high": return "bg-red-100 text-red-800 border-red-200"
-    case "medium": return "bg-yellow-100 text-yellow-800 border-yellow-200"
-    case "low": return "bg-green-100 text-green-800 border-green-200"
-    default: return "bg-gray-100 text-gray-800 border-gray-200"
+    case "high": return "bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white border-0"
+    case "medium": return "bg-[#1c6dd0] text-white border-[#1c6dd0]"
+    case "low": return "bg-[#e2ebf9] text-[#0f2f5b] border-[#b3c7e6]"
+    default: return "bg-[#e8f0fb] text-[#123a70] border-[#c7d7ee]"
   }
 }
 
@@ -328,7 +328,7 @@ export default function Training() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Award className="h-5 w-5 text-yellow-600" />
+              <Award className="h-5 w-5 text-[#0f2f5b]" />
               <div>
                 <p className="text-sm font-medium">PRs This Month</p>
                 <p className="text-2xl font-bold">{prs.length}</p>
@@ -339,7 +339,7 @@ export default function Training() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Timer className="h-5 w-5 text-green-600" />
+              <Timer className="h-5 w-5 text-[#1c6dd0]" />
               <div>
                 <p className="text-sm font-medium">Avg Session Time</p>
                 <p className="text-2xl font-bold">1.5h</p>
@@ -350,7 +350,7 @@ export default function Training() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Zap className="h-5 w-5 text-red-600" />
+              <Zap className="h-5 w-5 text-[#123d73]" />
               <div>
                 <p className="text-sm font-medium">High Intensity</p>
                 <p className="text-2xl font-bold">
@@ -456,7 +456,7 @@ export default function Training() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge className="bg-green-100 text-green-800 border-green-200">
+                          <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white border-0">
                             Completed
                           </Badge>
                         </TableCell>

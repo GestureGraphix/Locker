@@ -7,18 +7,15 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  User, 
-  Edit, 
-  Save, 
+import {
+  Edit,
+  Save,
   X,
   Calendar,
-  TrendingUp,
   Target,
   Award,
   Activity,
   Droplets,
-  Apple,
   BookOpen,
   Dumbbell,
   Settings,
@@ -240,7 +237,7 @@ export default function Account() {
                   <label className="text-sm font-medium">Allergies</label>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {profile.allergies.map((allergy, index) => (
-                      <Badge key={index} variant="outline" className="bg-red-50 text-red-800 border-red-200">
+                      <Badge key={index} variant="outline" className="bg-[#eef5ff] text-[#0f2f5b] border-[#c7d7ee]">
                         {allergy}
                       </Badge>
                     ))}
@@ -333,7 +330,7 @@ export default function Account() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Dumbbell className="h-5 w-5 text-blue-600" />
+                  <Dumbbell className="h-5 w-5 text-[#0f4d92]" />
                   <div>
                     <p className="text-sm font-medium">Sessions This Month</p>
                     <p className="text-2xl font-bold">{mockStats.sessionsThisMonth}</p>
@@ -344,7 +341,7 @@ export default function Account() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Droplets className="h-5 w-5 text-green-600" />
+                  <Droplets className="h-5 w-5 text-[#1c6dd0]" />
                   <div>
                     <p className="text-sm font-medium">Hydration Average</p>
                     <p className="text-2xl font-bold">{mockStats.hydrationAverage}%</p>
@@ -355,7 +352,7 @@ export default function Account() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <BookOpen className="h-5 w-5 text-purple-600" />
+                  <BookOpen className="h-5 w-5 text-[#123d73]" />
                   <div>
                     <p className="text-sm font-medium">Academic Items</p>
                     <p className="text-2xl font-bold">{mockStats.academicItemsCompleted}</p>
@@ -366,7 +363,7 @@ export default function Account() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Award className="h-5 w-5 text-yellow-600" />
+                  <Award className="h-5 w-5 text-[#0f2f5b]" />
                   <div>
                     <p className="text-sm font-medium">PRs This Month</p>
                     <p className="text-2xl font-bold">{mockStats.prsThisMonth}</p>
@@ -377,7 +374,7 @@ export default function Account() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Activity className="h-5 w-5 text-pink-600" />
+                  <Activity className="h-5 w-5 text-[#1c4f8f]" />
                   <div>
                     <p className="text-sm font-medium">Mobility Minutes</p>
                     <p className="text-2xl font-bold">{mockStats.mobilityMinutesThisWeek}</p>
@@ -430,15 +427,15 @@ export default function Account() {
                       <h3 className="font-semibold mb-3">{month.month}</h3>
                       <div className="grid grid-cols-3 gap-4 text-center">
                         <div>
-                          <p className="text-2xl font-bold text-blue-600">{month.sessions}</p>
+                          <p className="text-2xl font-bold text-[#0f4d92]">{month.sessions}</p>
                           <p className="text-xs text-muted-foreground">Sessions</p>
                         </div>
                         <div>
-                          <p className="text-2xl font-bold text-green-600">{month.hydration}%</p>
+                          <p className="text-2xl font-bold text-[#1c6dd0]">{month.hydration}%</p>
                           <p className="text-xs text-muted-foreground">Hydration</p>
                         </div>
                         <div>
-                          <p className="text-2xl font-bold text-purple-600">{month.academics}</p>
+                          <p className="text-2xl font-bold text-[#123d73]">{month.academics}</p>
                           <p className="text-xs text-muted-foreground">Academic Items</p>
                         </div>
                       </div>

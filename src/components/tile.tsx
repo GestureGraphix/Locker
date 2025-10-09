@@ -21,10 +21,10 @@ export function Tile({ title, description, href, icon: Icon, className }: TilePr
               <Icon className="h-8 w-8 text-white" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{title}</h3>
+              <h3 className="text-xl font-bold text-gray-900 group-hover:text-[#0f4d92] transition-colors">{title}</h3>
               <p className="text-gray-600 font-medium">{description}</p>
             </div>
-            <div className="w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="w-full h-1 bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           </div>
         </CardContent>
       </Card>
