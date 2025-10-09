@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,8 +17,25 @@ import {
   GlassWater,
   Zap,
   Target,
-  Clock
+  Clock,
+  Loader2,
+  RefreshCcw
 } from "lucide-react"
+
+type MenuItem = {
+  name: string
+  description?: string
+}
+
+type MenuMeal = {
+  mealType: string
+  items: MenuItem[]
+}
+
+type MenuLocation = {
+  location: string
+  meals: MenuMeal[]
+}
 
 // Mock data
 const mockHydrationLogs = [
@@ -109,6 +126,7 @@ const formatTime = (dateString: string) => {
 export default function Fuel() {
   const [hydrationLogs, setHydrationLogs] = useState(mockHydrationLogs)
   const [mealLogs, setMealLogs] = useState(mockMealLogs)
+  const [activeTab, setActiveTab] = useState("meals")
   const [isAddHydrationOpen, setIsAddHydrationOpen] = useState(false)
   const [isAddMealOpen, setIsAddMealOpen] = useState(false)
   const [newHydration, setNewHydration] = useState({
@@ -122,6 +140,246 @@ export default function Fuel() {
     notes: "",
     dateTime: new Date().toISOString()
   })
+  const [menuDate, setMenuDate] = useState(new Date().toISOString().split("T")[0])
+  const [menuData, setMenuData] = useState<MenuLocation[]>([])
+  const [menuLoading, setMenuLoading] = useState(false)
+  const [menuError, setMenuError] = useState<string | null>(null)
+  const [menuSource, setMenuSource] = useState<"live" | "fallback" | null>(null)
+
+  const menuDateStrings = useMemo(() => {
+    const baseDate = menuDate ? new Date(`${menuDate}T00:00:00`) : new Date()
+    const selectedDate = Number.isNaN(baseDate.getTime()) ? new Date() : baseDate
+    return {
+      long: selectedDate.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric"
+      }),
+      medium: selectedDate.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric"
+      })
+    }
+  }, [menuDate])
+
+  const resetMealForm = useCallback(() => {
+    setNewMeal({
+      mealType: "breakfast",
+      calories: "",
+      proteinG: "",
+      notes: "",
+      dateTime: new Date().toISOString()
+    })
+  }, [])
+
+  const normalizeMealType = useCallback((value: string) => {
+    const lower = value.toLowerCase()
+    if (lower.includes("breakfast") || lower.includes("brunch")) return "breakfast"
+    if (lower.includes("lunch") || lower.includes("midday")) return "lunch"
+    if (lower.includes("dinner") || lower.includes("supper") || lower.includes("evening")) return "dinner"
+    if (lower.includes("snack") || lower.includes("late") || lower.includes("grab")) return "snack"
+    return "lunch"
+  }, [])
+
+  const handleAddFromMenu = useCallback(
+    (mealTypeLabel: string, item: MenuItem, location: string) => {
+      const normalizedType = normalizeMealType(mealTypeLabel)
+      const scheduledDate = new Date(`${menuDate}T12:00:00`)
+      setNewMeal({
+        mealType: normalizedType,
+        calories: "",
+        proteinG: "",
+        notes: `${item.name}${item.description ? ` — ${item.description}` : ""} (${location})`,
+        dateTime: scheduledDate.toISOString()
+      })
+      setIsAddMealOpen(true)
+    },
+    [menuDate, normalizeMealType]
+  )
+
+  const parseMenuHtml = useCallback(
+    (html: string): MenuLocation[] => {
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(html, "text/html")
+
+      const candidateDateStrings = [menuDateStrings.long, menuDateStrings.medium].filter(Boolean) as string[]
+      let container: Element | Document = doc
+
+      if (candidateDateStrings.length > 0) {
+        const headings = Array.from(doc.querySelectorAll("h1,h2,h3,h4,h5,h6"))
+        const headingForDate = headings.find((heading) => {
+          const text = heading.textContent?.trim() ?? ""
+          return candidateDateStrings.some((target) => text.includes(target))
+        })
+
+        if (headingForDate) {
+          let potentialContainer: Element | null = headingForDate.parentElement
+          while (potentialContainer && potentialContainer !== doc.body) {
+            if (potentialContainer.querySelector("li")) {
+              container = potentialContainer
+              break
+            }
+            potentialContainer = potentialContainer.parentElement
+          }
+          if (!potentialContainer && headingForDate.nextElementSibling) {
+            container = headingForDate.nextElementSibling
+          }
+        }
+      }
+
+      const section = container instanceof Document ? container.body : container
+      const nodes = Array.from(section.querySelectorAll("h1,h2,h3,h4,h5,h6,strong,b,li,p"))
+
+      const locationPattern = /(college|hall|dining|commons|grill|kitchen|buttery|library)/i
+      const mealPattern = /(breakfast|brunch|lunch|dinner|supper|snack|grab|late night|special)/i
+
+      const locationMap = new Map<string, Map<string, Set<string>>>()
+
+      const ensureBucket = (location: string, meal: string) => {
+        const normalizedLocation = location || "General"
+        const normalizedMeal = meal || "All Day"
+        if (!locationMap.has(normalizedLocation)) {
+          locationMap.set(normalizedLocation, new Map())
+        }
+        const mealMap = locationMap.get(normalizedLocation)!
+        if (!mealMap.has(normalizedMeal)) {
+          mealMap.set(normalizedMeal, new Set())
+        }
+        return mealMap.get(normalizedMeal)!
+      }
+
+      let currentLocation = "General"
+      let currentMeal = "All Day"
+
+      for (const node of nodes) {
+        const tag = node.tagName.toLowerCase()
+        const text = node.textContent?.replace(/\s+/g, " ").trim() ?? ""
+        if (!text) continue
+
+        const lowerText = text.toLowerCase()
+
+        if (tag !== "li" && locationPattern.test(lowerText)) {
+          currentLocation = text
+          ensureBucket(currentLocation, currentMeal)
+          continue
+        }
+
+        if (mealPattern.test(lowerText)) {
+          const match = lowerText.match(mealPattern)
+          currentMeal = match ? match[0] : text
+          currentMeal = currentMeal
+            .replace(/(^|\s)([a-z])/g, (substring) => substring.toUpperCase())
+            .replace(/\bLate Night\b/i, "Late Night")
+          ensureBucket(currentLocation, currentMeal)
+          continue
+        }
+
+        const addItemsFromText = (raw: string) => {
+          const cleaned = raw
+            .split(/[•\-*]+/)
+            .map((segment) => segment.trim())
+            .filter(Boolean)
+          if (cleaned.length === 0) return
+          const bucket = ensureBucket(currentLocation, currentMeal)
+          cleaned.forEach((item) => {
+            const normalizedItem = item.replace(/\s+/g, " ")
+            if (normalizedItem.length > 0) {
+              bucket.add(normalizedItem)
+            }
+          })
+        }
+
+        if (tag === "li") {
+          addItemsFromText(text.replace(/^[-•\s]+/, ""))
+          continue
+        }
+
+        if (tag === "p" && /•|-/.test(text)) {
+          addItemsFromText(text)
+          continue
+        }
+      }
+
+      const menuLocations: MenuLocation[] = []
+
+      locationMap.forEach((meals, location) => {
+        const mealList: MenuMeal[] = []
+        meals.forEach((items, mealType) => {
+          if (items.size === 0) return
+          mealList.push({
+            mealType,
+            items: Array.from(items).map((item) => ({ name: item }))
+          })
+        })
+
+        if (mealList.length > 0) {
+          mealList.sort((a, b) => a.mealType.localeCompare(b.mealType))
+          menuLocations.push({ location, meals: mealList })
+        }
+      })
+
+      return menuLocations.sort((a, b) => a.location.localeCompare(b.location))
+    },
+    [menuDateStrings]
+  )
+
+  const fetchMenu = useCallback(async () => {
+    setMenuLoading(true)
+    setMenuError(null)
+    try {
+      const response = await fetch(`/api/yale-menu?date=${menuDate}`)
+      if (!response.ok) {
+        throw new Error("Unable to reach Yale Hospitality")
+      }
+      const payload = await response.json()
+
+      if (payload.source === "live" && payload.html) {
+        const parsedMenu = parseMenuHtml(payload.html)
+        if (parsedMenu.length > 0) {
+          setMenuData(parsedMenu)
+          setMenuSource("live")
+        } else if (Array.isArray(payload.fallbackMenu)) {
+          setMenuData(payload.fallbackMenu)
+          setMenuSource("fallback")
+          setMenuError("We could not interpret the live menu. Showing a sample menu instead.")
+        } else {
+          setMenuData([])
+          setMenuError("We could not find menu items for the selected date.")
+          setMenuSource(null)
+        }
+      } else if (payload.source === "fallback" && Array.isArray(payload.menu)) {
+        setMenuData(payload.menu)
+        setMenuSource("fallback")
+        if (payload.error) {
+          setMenuError(`Live data unavailable: ${payload.error}`)
+        }
+      } else {
+        setMenuData([])
+        setMenuError("Unexpected response while loading menu data.")
+        setMenuSource(null)
+      }
+    } catch (error) {
+      setMenuData([])
+      setMenuSource(null)
+      setMenuError(error instanceof Error ? error.message : "Unknown error loading menu")
+    } finally {
+      setMenuLoading(false)
+    }
+  }, [menuDate, parseMenuHtml])
+
+  useEffect(() => {
+    if (activeTab === "menu") {
+      fetchMenu()
+    }
+  }, [activeTab, fetchMenu])
+
+  useEffect(() => {
+    if (!isAddMealOpen) {
+      resetMealForm()
+    }
+  }, [isAddMealOpen, resetMealForm])
 
   const handleAddHydration = () => {
     if (newHydration.ounces) {
@@ -442,10 +700,11 @@ export default function Fuel() {
       </Card>
 
       {/* Main Content */}
-      <Tabs defaultValue="meals" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="meals">Meals</TabsTrigger>
           <TabsTrigger value="hydration">Hydration Log</TabsTrigger>
+          <TabsTrigger value="menu">Dining Menus</TabsTrigger>
         </TabsList>
 
         <TabsContent value="meals" className="space-y-4">
@@ -574,6 +833,116 @@ export default function Fuel() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="menu" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Apple className="h-5 w-5 text-primary" />
+                Yale Hospitality Menu Lookup
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                <div className="flex-1">
+                  <label className="text-sm font-medium" htmlFor="menu-date">
+                    Select a day
+                  </label>
+                  <Input
+                    id="menu-date"
+                    type="date"
+                    value={menuDate}
+                    onChange={(event) => setMenuDate(event.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button onClick={fetchMenu} disabled={menuLoading} variant="outline">
+                    {menuLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCcw className="mr-2 h-4 w-4" />
+                    )}
+                    Refresh menu
+                  </Button>
+                </div>
+              </div>
+
+              {menuError && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  {menuError}
+                </div>
+              )}
+
+              {menuSource && (
+                <div className="rounded-md border border-muted p-3 text-xs text-muted-foreground">
+                  {menuSource === "live"
+                    ? `Menu parsed from Yale Hospitality for ${menuDateStrings.long}.`
+                    : `Showing fallback example menu for ${menuDateStrings.long}.`}
+                </div>
+              )}
+
+              {menuLoading ? (
+                <div className="flex items-center justify-center py-10 text-muted-foreground">
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Fetching dining menu…
+                </div>
+              ) : menuData.length === 0 ? (
+                <div className="py-10 text-center text-muted-foreground">
+                  No dining menu items found for {menuDateStrings.long}.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {menuData.map((location) => (
+                    <Card key={location.location} className="border-primary/10">
+                      <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                          <span>{location.location}</span>
+                          <Badge variant="secondary">{location.meals.length} meal{location.meals.length === 1 ? "" : "s"}</Badge>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {location.meals.map((meal) => (
+                          <div key={`${location.location}-${meal.mealType}`} className="space-y-2 rounded-lg border border-border/50 p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                {getMealTypeIcon(normalizeMealType(meal.mealType))}
+                                <span className="font-medium">{meal.mealType}</span>
+                              </div>
+                              <Badge variant="outline">{meal.items.length} item{meal.items.length === 1 ? "" : "s"}</Badge>
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-2">
+                              {meal.items.map((item) => (
+                                <div
+                                  key={`${location.location}-${meal.mealType}-${item.name}`}
+                                  className="flex items-start justify-between gap-3 rounded-md border border-border/40 p-3"
+                                >
+                                  <div>
+                                    <p className="text-sm font-medium text-foreground">{item.name}</p>
+                                    {item.description && (
+                                      <p className="text-xs text-muted-foreground">{item.description}</p>
+                                    )}
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleAddFromMenu(meal.mealType, item, location.location)}
+                                  >
+                                    Add
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
