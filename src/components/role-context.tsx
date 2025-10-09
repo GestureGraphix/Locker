@@ -36,12 +36,23 @@ type WorkoutPlan = {
   assignedBy?: string
 }
 
+const normalizeTag = (tag: string) => tag.trim().toLowerCase()
+
+const normalizeTags = (tags: string[] = []) => {
+  const normalized = tags
+    .map(normalizeTag)
+    .filter((tag) => tag.length > 0)
+  return Array.from(new Set(normalized))
+}
+
 type Athlete = {
   id: number
   name: string
+  email: string
   sport: string
   level: string
   team: string
+  tags: string[]
   sessions: Session[]
   calendar: CalendarEvent[]
   workouts: WorkoutPlan[]
@@ -61,12 +72,23 @@ type ScheduleOptions = {
   assignedBy?: string
 }
 
+type AddAthleteInput = {
+  name?: string
+  email: string
+  sport?: string
+  level?: string
+  team?: string
+  tags?: string[]
+}
+
 type RoleContextValue = {
   role: Role
   setRole: (role: Role) => void
   athletes: Athlete[]
   scheduleSession: (athleteId: number, session: ScheduleSessionInput, options?: ScheduleOptions) => void
   toggleSessionCompletion: (athleteId: number, sessionId: number) => void
+  addAthlete: (input: AddAthleteInput) => void
+  assignSessionToTag: (tag: string, session: ScheduleSessionInput, options?: ScheduleOptions) => void
 }
 
 const RoleContext = createContext<RoleContextValue | undefined>(undefined)
@@ -106,9 +128,11 @@ const initialAthletes: Athlete[] = [
   {
     id: 1,
     name: "Alex Johnson",
+    email: "alex.johnson@locker.app",
     sport: "Track & Field",
     level: "Elite",
     team: "Sprints",
+    tags: ["track", "sprints"],
     sessions: [
       {
         id: 1,
@@ -151,73 +175,84 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<Role>("athlete")
   const [athletes, setAthletes] = useState(initialAthletes)
 
+  const applySessionToAthlete = useCallback(
+    (
+      athlete: Athlete,
+      session: ScheduleSessionInput,
+      options?: ScheduleOptions
+    ): Athlete => {
+      const startAtISO = toISO(session.startAt)
+      const endAtISO = toISO(session.endAt)
+      if (!startAtISO || !endAtISO) {
+        return athlete
+      }
+
+      const id = Date.now() + Math.floor(Math.random() * 1000)
+      const focus = options?.focus ?? session.notes ?? session.title
+      const assignedBy = options?.assignedBy ?? (role === "coach" ? "Coach" : "Self")
+
+      const newSession: Session = {
+        id,
+        type: session.type,
+        title: session.title,
+        startAt: startAtISO,
+        endAt: endAtISO,
+        intensity: session.intensity,
+        notes: session.notes,
+        completed: false,
+        assignedBy,
+        focus,
+      }
+
+      const updatedSessions = sortByDate([...athlete.sessions, newSession], (item) => item.startAt ?? "")
+
+      const event: CalendarEvent = {
+        id,
+        title: session.title,
+        date: startAtISO.includes("T") ? startAtISO.split("T")[0] : startAtISO,
+        timeRange: formatTimeRange(startAtISO, endAtISO),
+        type: session.type,
+        focus,
+      }
+
+      const updatedCalendar = sortByDate([...athlete.calendar, event], (item) => item.date ?? "")
+
+      const workout: WorkoutPlan = {
+        id,
+        title: session.title,
+        focus,
+        dueDate: event.date,
+        status: "Scheduled", // direct literal, matches union
+        intensity: session.intensity,
+        assignedBy,
+      }
+
+      const updatedWorkouts = sortByDate(
+        [...athlete.workouts.filter((w) => w.id !== id), workout],
+        (item) => item.dueDate
+      )
+
+      return {
+        ...athlete,
+        sessions: updatedSessions,
+        calendar: updatedCalendar,
+        workouts: updatedWorkouts,
+      }
+    },
+    [role]
+  )
+
   const scheduleSession = useCallback(
     (athleteId: number, session: ScheduleSessionInput, options?: ScheduleOptions) => {
       setAthletes((prev) =>
         prev.map((athlete): Athlete => {
           if (athlete.id !== athleteId) return athlete
 
-          const startAtISO = toISO(session.startAt)
-          const endAtISO = toISO(session.endAt)
-          if (!startAtISO || !endAtISO) {
-            return athlete
-          }
-
-          const id = Date.now() + Math.floor(Math.random() * 1000)
-          const focus = options?.focus ?? session.notes ?? session.title
-          const assignedBy = options?.assignedBy ?? (role === "coach" ? "Coach" : "Self")
-
-          const newSession: Session = {
-            id,
-            type: session.type,
-            title: session.title,
-            startAt: startAtISO,
-            endAt: endAtISO,
-            intensity: session.intensity,
-            notes: session.notes,
-            completed: false,
-            assignedBy,
-            focus,
-          }
-
-          const updatedSessions = sortByDate([...athlete.sessions, newSession], (item) => item.startAt ?? "")
-
-          const event: CalendarEvent = {
-            id,
-            title: session.title,
-            date: startAtISO.includes("T") ? startAtISO.split("T")[0] : startAtISO,
-            timeRange: formatTimeRange(startAtISO, endAtISO),
-            type: session.type,
-            focus,
-          }
-
-          const updatedCalendar = sortByDate([...athlete.calendar, event], (item) => item.date ?? "")
-
-          const workout: WorkoutPlan = {
-            id,
-            title: session.title,
-            focus,
-            dueDate: event.date,
-            status: "Scheduled", // direct literal, matches union
-            intensity: session.intensity,
-            assignedBy,
-          }
-
-          const updatedWorkouts = sortByDate(
-            [...athlete.workouts.filter((w) => w.id !== id), workout],
-            (item) => item.dueDate
-          )
-
-          return {
-            ...athlete,
-            sessions: updatedSessions,
-            calendar: updatedCalendar,
-            workouts: updatedWorkouts,
-          }
+          return applySessionToAthlete(athlete, session, options)
         })
       )
     },
-    [role]
+    [applySessionToAthlete]
   )
 
   const toggleSessionCompletion = useCallback((athleteId: number, sessionId: number) => {
@@ -251,9 +286,78 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     )
   }, [])
 
+  const addAthlete = useCallback((input: AddAthleteInput) => {
+    const email = input.email.trim().toLowerCase()
+    if (!email) return
+
+    const tags = normalizeTags(input.tags)
+
+    setAthletes((prev) => {
+      const existing = prev.find((athlete) => athlete.email.toLowerCase() === email)
+
+      if (existing) {
+        return prev.map((athlete) => {
+          if (athlete.email.toLowerCase() !== email) return athlete
+
+          const mergedTags = normalizeTags([...athlete.tags, ...tags])
+
+          return {
+            ...athlete,
+            name: input.name?.trim() || athlete.name,
+            sport: input.sport ?? athlete.sport,
+            level: input.level ?? athlete.level,
+            team: input.team ?? athlete.team,
+            tags: mergedTags,
+          }
+        })
+      }
+
+      const id = Date.now() + Math.floor(Math.random() * 1000)
+      const nameFromEmail = input.name?.trim() || email.split("@")[0]
+
+      const newAthlete: Athlete = {
+        id,
+        name: nameFromEmail,
+        email,
+        sport: input.sport ?? "Unknown Sport",
+        level: input.level ?? "Development",
+        team: input.team ?? "Independent",
+        tags,
+        sessions: [],
+        calendar: [],
+        workouts: [],
+      }
+
+      return [...prev, newAthlete]
+    })
+  }, [])
+
+  const assignSessionToTag = useCallback(
+    (tag: string, session: ScheduleSessionInput, options?: ScheduleOptions) => {
+      const normalizedTag = normalizeTag(tag)
+      if (!normalizedTag) return
+
+      setAthletes((prev) =>
+        prev.map((athlete) => {
+          if (!athlete.tags.includes(normalizedTag)) return athlete
+          return applySessionToAthlete(athlete, session, options)
+        })
+      )
+    },
+    [applySessionToAthlete]
+  )
+
   const value = useMemo(
-    () => ({ role, setRole, athletes, scheduleSession, toggleSessionCompletion }),
-    [role, athletes, scheduleSession, toggleSessionCompletion]
+    () => ({
+      role,
+      setRole,
+      athletes,
+      scheduleSession,
+      toggleSessionCompletion,
+      addAthlete,
+      assignSessionToTag,
+    }),
+    [role, athletes, scheduleSession, toggleSessionCompletion, addAthlete, assignSessionToTag]
   )
 
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>
