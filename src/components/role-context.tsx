@@ -90,7 +90,8 @@ const toISO = (value: string) => {
   return Number.isNaN(date.getTime()) ? value : date.toISOString()
 }
 
-const sortByDate = <T extends { startAt?: string; date?: string }>(items: T[], accessor: (item: T) => string) => {
+// Relaxed generic so we can sort any T using the accessor
+const sortByDate = <T,>(items: T[], accessor: (item: T) => string) => {
   return [...items].sort((a, b) => {
     const aDate = new Date(accessor(a)).getTime()
     const bDate = new Date(accessor(b)).getTime()
@@ -121,30 +122,6 @@ const initialAthletes: Athlete[] = [
         assignedBy: "Coach Rivera",
         focus: "Acceleration Drills",
       },
-      {
-        id: 2,
-        type: "lift",
-        title: "Strength Training",
-        startAt: "2024-01-15T16:00:00Z",
-        endAt: "2024-01-15T17:30:00Z",
-        intensity: "medium",
-        notes: "Upper body focus",
-        completed: false,
-        assignedBy: "Coach Rivera",
-        focus: "Upper Body Strength",
-      },
-      {
-        id: 3,
-        type: "rehab",
-        title: "Recovery Session",
-        startAt: "2024-01-16T10:00:00Z",
-        endAt: "2024-01-16T11:00:00Z",
-        intensity: "low",
-        notes: "Foam rolling and stretching",
-        completed: false,
-        assignedBy: "Medical Staff",
-        focus: "Mobility",
-      },
     ],
     calendar: [
       {
@@ -154,22 +131,6 @@ const initialAthletes: Athlete[] = [
         timeRange: "6:00 AM - 8:00 AM",
         type: "practice",
         focus: "Acceleration Drills",
-      },
-      {
-        id: 2,
-        title: "Strength Training",
-        date: "2024-01-15",
-        timeRange: "4:00 PM - 5:30 PM",
-        type: "lift",
-        focus: "Upper Body Strength",
-      },
-      {
-        id: 3,
-        title: "Recovery Session",
-        date: "2024-01-16",
-        timeRange: "10:00 AM - 11:00 AM",
-        type: "rehab",
-        focus: "Mobility",
       },
     ],
     workouts: [
@@ -182,108 +143,6 @@ const initialAthletes: Athlete[] = [
         intensity: "high",
         assignedBy: "Coach Rivera",
       },
-      {
-        id: 2,
-        title: "Upper Body Circuit",
-        focus: "Strength",
-        dueDate: "2024-01-15",
-        status: "Scheduled",
-        intensity: "medium",
-        assignedBy: "Coach Rivera",
-      },
-      {
-        id: 3,
-        title: "Mobility Flow",
-        focus: "Recovery",
-        dueDate: "2024-01-16",
-        status: "Scheduled",
-        intensity: "low",
-        assignedBy: "Medical Staff",
-      },
-    ],
-  },
-  {
-    id: 2,
-    name: "Jordan Lee",
-    sport: "Basketball",
-    level: "Varsity",
-    team: "Guards",
-    sessions: [
-      {
-        id: 4,
-        type: "practice",
-        title: "Shooting Drills",
-        startAt: "2024-01-15T07:30:00Z",
-        endAt: "2024-01-15T09:00:00Z",
-        intensity: "medium",
-        notes: "Catch and shoot focus",
-        completed: false,
-        assignedBy: "Coach Taylor",
-        focus: "Perimeter Shooting",
-      },
-    ],
-    calendar: [
-      {
-        id: 4,
-        title: "Shooting Drills",
-        date: "2024-01-15",
-        timeRange: "7:30 AM - 9:00 AM",
-        type: "practice",
-        focus: "Perimeter Shooting",
-      },
-    ],
-    workouts: [
-      {
-        id: 4,
-        title: "Perimeter Shooting",
-        focus: "Skill",
-        dueDate: "2024-01-15",
-        status: "Scheduled",
-        intensity: "medium",
-        assignedBy: "Coach Taylor",
-      },
-    ],
-  },
-  {
-    id: 3,
-    name: "Samantha Ortiz",
-    sport: "Swimming",
-    level: "Elite",
-    team: "Sprint Freestyle",
-    sessions: [
-      {
-        id: 5,
-        type: "practice",
-        title: "Sprint Sets",
-        startAt: "2024-01-15T05:30:00Z",
-        endAt: "2024-01-15T07:00:00Z",
-        intensity: "high",
-        notes: "50m repeats",
-        completed: true,
-        assignedBy: "Coach Chen",
-        focus: "Anaerobic Capacity",
-      },
-    ],
-    calendar: [
-      {
-        id: 5,
-        title: "Sprint Sets",
-        date: "2024-01-15",
-        timeRange: "5:30 AM - 7:00 AM",
-        type: "practice",
-        focus: "Anaerobic Capacity",
-      },
-    ],
-    workouts: [
-      {
-        id: 5,
-        title: "Sprint Set Review",
-        focus: "Performance",
-        dueDate: "2024-01-15",
-        status: "Completed",
-        intensity: "high",
-        assignedBy: "Coach Chen",
-      },
     ],
   },
 ]
@@ -292,78 +151,82 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<Role>("athlete")
   const [athletes, setAthletes] = useState(initialAthletes)
 
-  const scheduleSession = useCallback((athleteId: number, session: ScheduleSessionInput, options?: ScheduleOptions) => {
-    setAthletes((prev) =>
-      prev.map((athlete) => {
-        if (athlete.id !== athleteId) return athlete
+  const scheduleSession = useCallback(
+    (athleteId: number, session: ScheduleSessionInput, options?: ScheduleOptions) => {
+      setAthletes((prev) =>
+        prev.map((athlete): Athlete => {
+          if (athlete.id !== athleteId) return athlete
 
-        const startAtISO = toISO(session.startAt)
-        const endAtISO = toISO(session.endAt)
-        if (!startAtISO || !endAtISO) {
-          return athlete
-        }
+          const startAtISO = toISO(session.startAt)
+          const endAtISO = toISO(session.endAt)
+          if (!startAtISO || !endAtISO) {
+            return athlete
+          }
 
-        const id = Date.now() + Math.floor(Math.random() * 1000)
-        const focus = options?.focus ?? session.notes ?? session.title
-        const assignedBy = options?.assignedBy ?? (role === "coach" ? "Coach" : "Self")
+          const id = Date.now() + Math.floor(Math.random() * 1000)
+          const focus = options?.focus ?? session.notes ?? session.title
+          const assignedBy = options?.assignedBy ?? (role === "coach" ? "Coach" : "Self")
 
-        const newSession: Session = {
-          id,
-          type: session.type,
-          title: session.title,
-          startAt: startAtISO,
-          endAt: endAtISO,
-          intensity: session.intensity,
-          notes: session.notes,
-          completed: false,
-          assignedBy,
-          focus,
-        }
+          const newSession: Session = {
+            id,
+            type: session.type,
+            title: session.title,
+            startAt: startAtISO,
+            endAt: endAtISO,
+            intensity: session.intensity,
+            notes: session.notes,
+            completed: false,
+            assignedBy,
+            focus,
+          }
 
-        const updatedSessions = sortByDate([...athlete.sessions, newSession], (item) => item.startAt ?? "")
+          const updatedSessions = sortByDate([...athlete.sessions, newSession], (item) => item.startAt ?? "")
 
-        const event: CalendarEvent = {
-          id,
-          title: session.title,
-          date: startAtISO.includes("T") ? startAtISO.split("T")[0] : startAtISO,
-          timeRange: formatTimeRange(startAtISO, endAtISO),
-          type: session.type,
-          focus,
-        }
+          const event: CalendarEvent = {
+            id,
+            title: session.title,
+            date: startAtISO.includes("T") ? startAtISO.split("T")[0] : startAtISO,
+            timeRange: formatTimeRange(startAtISO, endAtISO),
+            type: session.type,
+            focus,
+          }
 
-        const updatedCalendar = sortByDate([...athlete.calendar, event], (item) => item.date ?? "")
+          const updatedCalendar = sortByDate([...athlete.calendar, event], (item) => item.date ?? "")
 
-        const workout: WorkoutPlan = {
-          id,
-          title: session.title,
-          focus,
-          dueDate: event.date,
-          status: "Scheduled",
-          intensity: session.intensity,
-          assignedBy,
-        }
+          const workout: WorkoutPlan = {
+            id,
+            title: session.title,
+            focus,
+            dueDate: event.date,
+            status: "Scheduled", // direct literal, matches union
+            intensity: session.intensity,
+            assignedBy,
+          }
 
-        const updatedWorkouts = sortByDate([...athlete.workouts.filter((w) => w.id !== id), workout], (item) => item.dueDate)
+          const updatedWorkouts = sortByDate(
+            [...athlete.workouts.filter((w) => w.id !== id), workout],
+            (item) => item.dueDate
+          )
 
-        return {
-          ...athlete,
-          sessions: updatedSessions,
-          calendar: updatedCalendar,
-          workouts: updatedWorkouts,
-        }
-      })
-    )
-  }, [role])
+          return {
+            ...athlete,
+            sessions: updatedSessions,
+            calendar: updatedCalendar,
+            workouts: updatedWorkouts,
+          }
+        })
+      )
+    },
+    [role]
+  )
 
   const toggleSessionCompletion = useCallback((athleteId: number, sessionId: number) => {
     setAthletes((prev) =>
-      prev.map((athlete) => {
+      prev.map((athlete): Athlete => {
         if (athlete.id !== athleteId) return athlete
 
         const updatedSessions = athlete.sessions.map((session) =>
-          session.id === sessionId
-            ? { ...session, completed: !session.completed }
-            : session
+          session.id === sessionId ? { ...session, completed: !session.completed } : session
         )
 
         const completedSession = updatedSessions.find((session) => session.id === sessionId)
@@ -372,7 +235,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           workout.id === sessionId
             ? {
                 ...workout,
-                status: completedSession && completedSession.completed ? "Completed" : "Scheduled",
+                status: (completedSession && completedSession.completed
+                  ? "Completed"
+                  : "Scheduled") as WorkoutPlan["status"], // 👈 cast to union
               }
             : workout
         )
