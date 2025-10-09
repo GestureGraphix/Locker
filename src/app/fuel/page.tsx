@@ -200,322 +200,36 @@ export default function Fuel() {
     [menuDate, normalizeMealType]
   )
 
-  const parseMenuHtml = useCallback(
-    (html: string): MenuLocation[] => {
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(html, "text/html")
-
-      const candidateDateStrings = [menuDateStrings.long, menuDateStrings.medium].filter(Boolean) as string[]
-      let container: Element | Document = doc
-
-      if (candidateDateStrings.length > 0) {
-        const headings = Array.from(doc.querySelectorAll("h1,h2,h3,h4,h5,h6"))
-        const headingForDate = headings.find((heading) => {
-          const text = heading.textContent?.trim() ?? ""
-          return candidateDateStrings.some((target) => text.includes(target))
-        })
-
-        if (headingForDate) {
-          let potentialContainer: Element | null = headingForDate.parentElement
-          while (potentialContainer && potentialContainer !== doc.body) {
-            if (potentialContainer.querySelector("li")) {
-              container = potentialContainer
-              break
-            }
-            potentialContainer = potentialContainer.parentElement
-          }
-          if (!potentialContainer && headingForDate.nextElementSibling) {
-            container = headingForDate.nextElementSibling
-          }
-        }
-      }
-
-      const section = container instanceof Document ? container.body : container
-      const nodes = Array.from(section.querySelectorAll("h1,h2,h3,h4,h5,h6,strong,b,li,p"))
-
-      const normalizeLocationName = (value: string) =>
-        value
-          .toLowerCase()
-          .replace(/[^a-z\s]/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-
-      const locationAliases: Array<[string, string]> = [
-        ["Benjamin Franklin College", "Benjamin Franklin"],
-        ["Benjamin Franklin", "Benjamin Franklin"],
-        ["Berkeley College", "Berkeley"],
-        ["Berkeley", "Berkeley"],
-        ["Branford College", "Branford"],
-        ["Branford", "Branford"],
-        ["Davenport College", "Davenport"],
-        ["Davenport", "Davenport"],
-        ["Ezra Stiles College", "Ezra Stiles"],
-        ["Ezra Stiles", "Ezra Stiles"],
-        ["Grace Hopper College", "Grace Hopper"],
-        ["Grace Hopper", "Grace Hopper"],
-        ["Jonathan Edwards College", "Jonathan Edwards"],
-        ["Jonathan Edwards", "Jonathan Edwards"],
-        ["Morse College", "Morse"],
-        ["Morse", "Morse"],
-        ["Pauli Murray College", "Pauli Murray"],
-        ["Pauli Murray", "Pauli Murray"],
-        ["Pierson College", "Pierson"],
-        ["Pierson", "Pierson"],
-        ["Saybrook College", "Saybrook"],
-        ["Saybrook", "Saybrook"],
-        ["Silliman College", "Silliman"],
-        ["Silliman", "Silliman"],
-        ["Timothy Dwight College", "Timothy Dwight"],
-        ["Timothy Dwight", "Timothy Dwight"],
-        ["Trumbull College", "Trumbull"],
-        ["Trumbull", "Trumbull"],
-        ["Commons", "Commons"],
-        ["Old Campus", "Old Campus"],
-        ["Old Campus Dining", "Old Campus"],
-        ["West Campus", "West Campus"],
-        ["Science Hill", "Science Hill"],
-        ["Steep Cafe", "Steep Cafe"],
-        ["Elm", "Elm"],
-        ["Elm City", "Elm"],
-        ["Elm City Cafe", "Elm"],
-        ["Elm Dining", "Elm"],
-        ["Elm Kitchen", "Elm"],
-        ["Schwarzman", "Schwarzman"],
-        ["Schwarzman Center", "Schwarzman"],
-        ["Commons Dining", "Commons"],
-        ["Davenport Dining", "Davenport"],
-        ["Pierson Dining", "Pierson"],
-        ["Silliman Dining", "Silliman"],
-        ["Saybrook Dining", "Saybrook"],
-        ["Branford Dining", "Branford"],
-        ["Berkeley Dining", "Berkeley"],
-        ["Trumbull Dining", "Trumbull"],
-        ["Timothy Dwight Dining", "Timothy Dwight"],
-        ["Grace Hopper Dining", "Grace Hopper"],
-        ["Ezra Stiles Dining", "Ezra Stiles"],
-        ["Morse Dining", "Morse"],
-        ["Jonathan Edwards Dining", "Jonathan Edwards"],
-        ["Benjamin Franklin Dining", "Benjamin Franklin"],
-        ["Pauli Murray Dining", "Pauli Murray"]
-      ]
-
-      const knownLocationMap = new Map(
-        locationAliases.map(([alias, canonical]) => [normalizeLocationName(alias), canonical])
-      )
-
-      const preferredLocationKeys = new Set(
-        ["Jonathan Edwards", "Jonathan Edwards College"].map((name) => normalizeLocationName(name))
-      )
-
-      const locationPattern = /(college|hall|dining|commons|grill|kitchen|buttery|library)/i
-      const mealPattern = /(breakfast|brunch|lunch|dinner|supper|snack|grab|late night|special)/i
-
-      const locationMap = new Map<string, Map<string, Map<string, MenuItem>>>()
-
-      const ensureBucket = (location: string, meal: string) => {
-        const normalizedLocation = location || "General"
-        const normalizedMeal = meal || "All Day"
-        if (!locationMap.has(normalizedLocation)) {
-          locationMap.set(normalizedLocation, new Map())
-        }
-        const mealMap = locationMap.get(normalizedLocation)!
-        if (!mealMap.has(normalizedMeal)) {
-          mealMap.set(normalizedMeal, new Map())
-        }
-        return mealMap.get(normalizedMeal)!
-      }
-
-      let currentLocation = "General"
-      let currentMeal = "All Day"
-
-      for (const node of nodes) {
-        const tag = node.tagName.toLowerCase()
-        const text = node.textContent?.replace(/\s+/g, " ").trim() ?? ""
-        if (!text) continue
-
-        const lowerText = text.toLowerCase()
-        const normalizedLocationText = normalizeLocationName(text)
-        const canonicalLocation = normalizedLocationText
-          ? knownLocationMap.get(normalizedLocationText)
-          : undefined
-
-        if (canonicalLocation) {
-          currentLocation = canonicalLocation
-          ensureBucket(currentLocation, currentMeal)
-          continue
-        }
-
-        if (tag !== "li" && locationPattern.test(lowerText)) {
-          currentLocation = text
-          ensureBucket(currentLocation, currentMeal)
-          continue
-        }
-
-        if (mealPattern.test(lowerText)) {
-          const match = lowerText.match(mealPattern)
-          currentMeal = match ? match[0] : text
-          currentMeal = currentMeal
-            .replace(/(^|\s)([a-z])/g, (substring) => substring.toUpperCase())
-            .replace(/\bLate Night\b/i, "Late Night")
-          ensureBucket(currentLocation, currentMeal)
-          continue
-        }
-
-        const addItemsFromText = (raw: string) => {
-          const cleaned = raw
-            .split(/[•\-*]+/)
-            .map((segment) => segment.trim())
-            .filter(Boolean)
-          if (cleaned.length === 0) return
-          const bucket = ensureBucket(currentLocation, currentMeal)
-          cleaned.forEach((item) => {
-            const normalizedItem = item.replace(/\s+/g, " ")
-            if (!normalizedItem) return
-
-            const parseItem = (value: string): MenuItem => {
-              const result: MenuItem = { name: value }
-
-              const caloriesMatch = value.match(/(\d{2,4})\s*(?:k?cal|calories)/i)
-              if (caloriesMatch) {
-                result.calories = parseInt(caloriesMatch[1], 10)
-              }
-
-              const working = value
-                .replace(/\(?\d{2,4}\s*(?:k?cal|calories)\)?/gi, "")
-                .replace(/\s{2,}/g, " ")
-                .trim()
-
-              const descriptionSeparators = [" — ", " - ", " – ", ": "]
-              for (const separator of descriptionSeparators) {
-                if (working.includes(separator)) {
-                  const [namePart, ...descriptionParts] = working.split(separator)
-                  const description = descriptionParts.join(separator).trim()
-                  result.name = namePart.trim()
-                  if (description) {
-                    result.description = description
-                  }
-                  return result
-                }
-              }
-
-              const parenthetical = working.match(/^(.*?)(?:\s*\((.+)\))$/)
-              if (parenthetical) {
-                const [, name, desc] = parenthetical
-                result.name = name.trim()
-                if (desc?.trim()) {
-                  result.description = desc.trim()
-                }
-              } else {
-                result.name = working
-              }
-
-              return result
-            }
-
-            const parsed = parseItem(normalizedItem)
-            const key = parsed.name.toLowerCase()
-            if (!key) return
-
-            if (!bucket.has(key)) {
-              bucket.set(key, parsed)
-            } else {
-              const existing = bucket.get(key)!
-              if (!existing.description && parsed.description) {
-                existing.description = parsed.description
-              }
-              if (existing.calories == null && parsed.calories != null) {
-                existing.calories = parsed.calories
-              }
-            }
-          })
-        }
-
-        if (tag === "li") {
-          addItemsFromText(text.replace(/^[-•\s]+/, ""))
-          continue
-        }
-
-        if (tag === "p" && /•|-/.test(text)) {
-          addItemsFromText(text)
-          continue
-        }
-      }
-
-      const menuLocations: MenuLocation[] = []
-
-      locationMap.forEach((meals, location) => {
-        const mealList: MenuMeal[] = []
-        meals.forEach((items, mealType) => {
-          if (items.size === 0) return
-          mealList.push({
-            mealType,
-            items: Array.from(items.values())
-          })
-        })
-
-        if (mealList.length > 0) {
-          mealList.sort((a, b) => a.mealType.localeCompare(b.mealType))
-          menuLocations.push({ location, meals: mealList })
-        }
-      })
-
-      const canonicalizedLocations = menuLocations.map((location) => {
-        const normalized = normalizeLocationName(location.location)
-        const canonical = normalized ? knownLocationMap.get(normalized) : undefined
-        if (canonical && canonical !== location.location) {
-          return { ...location, location: canonical }
-        }
-        return location
-      })
-
-      const filteredLocations = canonicalizedLocations.filter((location) => {
-        if (preferredLocationKeys.size === 0) return true
-        const normalized = normalizeLocationName(location.location)
-        return normalized ? preferredLocationKeys.has(normalized) : false
-      })
-
-      const locationsToReturn =
-        filteredLocations.length > 0 ? filteredLocations : canonicalizedLocations
-
-      return locationsToReturn.sort((a, b) => a.location.localeCompare(b.location))
-    },
-    [menuDateStrings]
-  )
-
   const fetchMenu = useCallback(async () => {
     setMenuLoading(true)
     setMenuError(null)
     try {
       const response = await fetch(`/api/yale-menu?date=${menuDate}`)
       if (!response.ok) {
-        throw new Error("Unable to reach Yale Hospitality")
+        throw new Error("Unable to reach Yale Dining")
       }
       const payload = await response.json()
 
-      if (payload.source === "live" && payload.html) {
-        const parsedMenu = parseMenuHtml(payload.html)
-        if (parsedMenu.length > 0) {
-          setMenuData(parsedMenu)
-          setMenuSource("live")
-        } else if (Array.isArray(payload.fallbackMenu)) {
-          setMenuData(payload.fallbackMenu)
-          setMenuSource("fallback")
-          setMenuError("We could not interpret the live menu. Showing a sample menu instead.")
-        } else {
-          setMenuData([])
-          setMenuError("We could not find menu items for the selected date.")
-          setMenuSource(null)
-        }
-      } else if (payload.source === "fallback" && Array.isArray(payload.menu)) {
-        setMenuData(payload.menu)
-        setMenuSource("fallback")
-        if (payload.error) {
-          setMenuError(`Live data unavailable: ${payload.error}`)
-        }
-      } else {
+      const menuItems: MenuLocation[] = Array.isArray(payload.menu) ? payload.menu : []
+
+      if (menuItems.length === 0) {
         setMenuData([])
-        setMenuError("Unexpected response while loading menu data.")
         setMenuSource(null)
+        if (payload.source === "live") {
+          setMenuError("We could not find menu items for the selected date.")
+        } else if (payload.error) {
+          setMenuError(`Live data unavailable: ${payload.error}`)
+        } else {
+          setMenuError("Unexpected response while loading menu data.")
+        }
+        return
+      }
+
+      setMenuData(menuItems)
+      setMenuSource(payload.source ?? null)
+
+      if (payload.source === "fallback" && payload.error) {
+        setMenuError(`Live data unavailable: ${payload.error}`)
       }
     } catch (error) {
       setMenuData([])
@@ -524,7 +238,7 @@ export default function Fuel() {
     } finally {
       setMenuLoading(false)
     }
-  }, [menuDate, parseMenuHtml])
+  }, [menuDate])
 
   useEffect(() => {
     if (activeTab === "menu") {
@@ -1035,7 +749,7 @@ export default function Fuel() {
               {menuSource && (
                 <div className="rounded-md border border-muted p-3 text-xs text-muted-foreground">
                   {menuSource === "live"
-                    ? `Menu parsed from Yale Hospitality for ${menuDateStrings.long}.`
+                    ? `Menu retrieved from Yale Dining (Nutrislice) for ${menuDateStrings.long}.`
                     : `Showing fallback example menu for ${menuDateStrings.long}.`}
                 </div>
               )}
