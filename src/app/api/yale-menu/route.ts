@@ -15,15 +15,6 @@ const MENU_SLUG_CANDIDATES = [
 
 const PAGE_MEAL_CONFIG = [
   {
-    label: "Breakfast",
-    slug: "breakfast",
-    buildPath: (date: string) => {
-      void date
-      return `/${SCHOOL_SLUG}/breakfast`
-    },
-    matchers: ["breakfast"]
-  },
-  {
     label: "Lunch",
     slug: "lunch",
     buildPath: (date: string) => `/${SCHOOL_SLUG}/lunch/${date}`,
@@ -37,10 +28,19 @@ const PAGE_MEAL_CONFIG = [
   }
 ] as const
 
+type NutritionFact = {
+  name: string
+  amount?: number
+  unit?: string
+  percentDailyValue?: number
+  display?: string
+}
+
 type MenuItem = {
   name: string
   description?: string
   calories?: number
+  nutritionFacts: NutritionFact[]
 }
 
 type MenuMeal = {
@@ -58,27 +58,85 @@ const FALLBACK_MENU_ITEMS: MenuLocation[] = [
     location: "Jonathan Edwards College",
     meals: [
       {
-        mealType: "Breakfast",
-        items: [
-          { name: "Steel-cut oatmeal", description: "With dried fruit and brown sugar", calories: 220 },
-          { name: "Cage-free scrambled eggs", description: "Served with roasted tomatoes", calories: 180 },
-          { name: "Greek yogurt parfait", description: "Fresh berries and granola", calories: 260 }
-        ]
-      },
-      {
         mealType: "Lunch",
         items: [
-          { name: "Roasted turkey sandwich", description: "Cranberry aioli on multigrain", calories: 430 },
-          { name: "Butternut squash soup", description: "Toasted pepitas", calories: 210 },
-          { name: "Spinach and strawberry salad", description: "Poppy seed dressing", calories: 180 }
+          {
+            name: "Roasted turkey sandwich",
+            description: "Cranberry aioli on multigrain",
+            calories: 430,
+            nutritionFacts: [
+              { name: "Calories", amount: 430, unit: "kcal" },
+              { name: "Protein", amount: 28, unit: "g" },
+              { name: "Total Fat", amount: 12, unit: "g" },
+              { name: "Carbohydrates", amount: 42, unit: "g" },
+              { name: "Sodium", amount: 820, unit: "mg" }
+            ]
+          },
+          {
+            name: "Butternut squash soup",
+            description: "Toasted pepitas",
+            calories: 210,
+            nutritionFacts: [
+              { name: "Calories", amount: 210, unit: "kcal" },
+              { name: "Total Fat", amount: 8, unit: "g" },
+              { name: "Carbohydrates", amount: 30, unit: "g" },
+              { name: "Fiber", amount: 4, unit: "g" },
+              { name: "Sodium", amount: 540, unit: "mg" }
+            ]
+          },
+          {
+            name: "Spinach and strawberry salad",
+            description: "Poppy seed dressing",
+            calories: 180,
+            nutritionFacts: [
+              { name: "Calories", amount: 180, unit: "kcal" },
+              { name: "Protein", amount: 6, unit: "g" },
+              { name: "Total Fat", amount: 9, unit: "g" },
+              { name: "Carbohydrates", amount: 20, unit: "g" },
+              { name: "Fiber", amount: 3, unit: "g" }
+            ]
+          }
         ]
       },
       {
         mealType: "Dinner",
         items: [
-          { name: "Baked pesto pasta", description: "Mozzarella and cherry tomatoes", calories: 520 },
-          { name: "Citrus roasted carrots", description: "Orange glaze and parsley", calories: 160 },
-          { name: "Lemon olive oil cake", description: "With blueberry compote", calories: 340 }
+          {
+            name: "Baked pesto pasta",
+            description: "Mozzarella and cherry tomatoes",
+            calories: 520,
+            nutritionFacts: [
+              { name: "Calories", amount: 520, unit: "kcal" },
+              { name: "Protein", amount: 22, unit: "g" },
+              { name: "Total Fat", amount: 24, unit: "g" },
+              { name: "Carbohydrates", amount: 58, unit: "g" },
+              { name: "Sodium", amount: 880, unit: "mg" }
+            ]
+          },
+          {
+            name: "Citrus roasted carrots",
+            description: "Orange glaze and parsley",
+            calories: 160,
+            nutritionFacts: [
+              { name: "Calories", amount: 160, unit: "kcal" },
+              { name: "Total Fat", amount: 6, unit: "g" },
+              { name: "Carbohydrates", amount: 24, unit: "g" },
+              { name: "Fiber", amount: 5, unit: "g" },
+              { name: "Sodium", amount: 210, unit: "mg" }
+            ]
+          },
+          {
+            name: "Lemon olive oil cake",
+            description: "With blueberry compote",
+            calories: 340,
+            nutritionFacts: [
+              { name: "Calories", amount: 340, unit: "kcal" },
+              { name: "Total Fat", amount: 14, unit: "g" },
+              { name: "Carbohydrates", amount: 48, unit: "g" },
+              { name: "Sugar", amount: 32, unit: "g" },
+              { name: "Protein", amount: 5, unit: "g" }
+            ]
+          }
         ]
       }
     ]
@@ -162,7 +220,11 @@ const normalizeMealName = (meal: string) => {
     .replace(/(^|\s)([a-z])/g, (match) => match.toUpperCase())
 }
 
-const parseCalories = (value: unknown): number | undefined => {
+const TARGET_MEAL_KEYS = new Set(["lunch", "dinner"])
+
+const isTargetMealType = (meal: string) => TARGET_MEAL_KEYS.has(normalizeMealName(meal).toLowerCase())
+
+const parseNumericValue = (value: unknown): number | undefined => {
   if (value == null) return undefined
   if (typeof value === "number" && Number.isFinite(value)) return value
   if (typeof value === "string") {
@@ -170,6 +232,200 @@ const parseCalories = (value: unknown): number | undefined => {
     return Number.isFinite(numeric) ? numeric : undefined
   }
   return undefined
+}
+
+const parseCalories = (value: unknown): number | undefined => parseNumericValue(value)
+
+const coerceString = (value: unknown): string | undefined => {
+  if (typeof value === "string" && value.trim()) return value.trim()
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  return undefined
+}
+
+const formatNutritionName = (value: string): string => {
+  const normalized = value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim()
+  if (!normalized) return value
+  return normalized.replace(/(^|\s)([a-z])/g, (segment) => segment.toUpperCase())
+}
+
+const buildNutritionFactFromRecord = (
+  record: Record<string, unknown>,
+  fallbackName?: string
+): NutritionFact | null => {
+  const rawName =
+    coerceString(record["name"]) ??
+    coerceString(record["label"]) ??
+    coerceString(record["title"]) ??
+    coerceString(record["nutrient"]) ??
+    coerceString(record["nutrient_name"]) ??
+    coerceString(record["display_name"]) ??
+    fallbackName
+
+  const amount =
+    parseNumericValue(record["value"]) ??
+    parseNumericValue(record["amount"]) ??
+    parseNumericValue(record["quantity"]) ??
+    parseNumericValue(record["qty"]) ??
+    parseNumericValue(record["nutrient_value"]) ??
+    parseNumericValue(record["nutrientValue"]) ??
+    parseNumericValue(record["grams"]) ??
+    parseNumericValue(record["g"]) ??
+    parseNumericValue(record["serving_size"]) ??
+    parseNumericValue(record["per_serving"]) ??
+    parseNumericValue(record["value_per_serving"])
+
+  const unit =
+    coerceString(record["unit"]) ??
+    coerceString(record["uom"]) ??
+    coerceString(record["unit_name"]) ??
+    coerceString(record["unitName"]) ??
+    coerceString(record["measure"]) ??
+    coerceString(record["measurement"]) ??
+    coerceString(record["amount_uom"]) ??
+    coerceString(record["amount_unit"]) ??
+    coerceString(record["per_unit"])
+
+  const percentDailyValue =
+    parseNumericValue(record["percent_daily_value"]) ??
+    parseNumericValue(record["percentDailyValue"]) ??
+    parseNumericValue(record["percent_dv"]) ??
+    parseNumericValue(record["percentDV"]) ??
+    parseNumericValue(record["daily_value_percent"]) ??
+    parseNumericValue(record["percent"]) ??
+    parseNumericValue(record["dv"])
+
+  const display =
+    coerceString(record["display"]) ??
+    coerceString(record["display_value"]) ??
+    coerceString(record["value_display"]) ??
+    coerceString(record["amount_with_unit"]) ??
+    coerceString(record["displayAmount"])
+
+  const resolvedName = rawName ? formatNutritionName(rawName) : fallbackName ? formatNutritionName(fallbackName) : undefined
+
+  if (!resolvedName) return null
+
+  if (
+    amount === undefined &&
+    percentDailyValue === undefined &&
+    (unit == null || unit === "") &&
+    (display == null || display === "")
+  ) {
+    return null
+  }
+
+  return {
+    name: resolvedName,
+    amount,
+    unit: unit ?? undefined,
+    percentDailyValue,
+    display: display ?? undefined
+  }
+}
+
+const collectNutritionFacts = (data: NutrisliceMenuItem): NutritionFact[] => {
+  type StackEntry = { value: unknown; fallbackName?: string }
+  const stack: StackEntry[] = []
+  const visited = new Set<object>()
+
+  const push = (value: unknown, fallbackName?: string) => {
+    if (value == null) return
+    stack.push({ value, fallbackName })
+  }
+
+  const registerSources = (value: unknown) => {
+    if (!value || typeof value !== "object") return
+    const record = value as Record<string, unknown>
+    push(record["nutrition"], undefined)
+    push(record["nutrition_info"], undefined)
+    push(record["nutritionInfo"], undefined)
+    push(record["nutrition_facts"], undefined)
+    push(record["nutritionFacts"], undefined)
+    push(record["full_nutrition"], undefined)
+    push(record["fullNutrition"], undefined)
+    push(record["nutrients"], undefined)
+    push(record["serving_size"], "Serving Size")
+    push(record["servingSize"], "Serving Size")
+    push(record["portion_size"], "Portion Size")
+    push(record["portionSize"], "Portion Size")
+  }
+
+  registerSources(data)
+  if (data.food) {
+    registerSources(data.food)
+  }
+
+  const facts = new Map<string, NutritionFact>()
+
+  const mergeFact = (fact: NutritionFact | null) => {
+    if (!fact) return
+    const key = fact.name.trim().toLowerCase()
+    const existing = facts.get(key)
+    if (!existing) {
+      facts.set(key, { ...fact })
+      return
+    }
+
+    if (existing.amount === undefined && fact.amount !== undefined) {
+      existing.amount = fact.amount
+    }
+    if (!existing.unit && fact.unit) {
+      existing.unit = fact.unit
+    }
+    if (existing.percentDailyValue === undefined && fact.percentDailyValue !== undefined) {
+      existing.percentDailyValue = fact.percentDailyValue
+    }
+    if (!existing.display && fact.display) {
+      existing.display = fact.display
+    }
+  }
+
+  while (stack.length > 0) {
+    const current = stack.pop()!
+    const { value, fallbackName } = current
+
+    if (value == null) continue
+
+    if (typeof value === "number") {
+      if (fallbackName) {
+        mergeFact({ name: formatNutritionName(fallbackName), amount: value })
+      }
+      continue
+    }
+
+    if (typeof value === "string") {
+      if (!fallbackName) continue
+      const amount = parseNumericValue(value)
+      if (amount !== undefined) {
+        mergeFact({ name: formatNutritionName(fallbackName), amount })
+      } else {
+        mergeFact({ name: formatNutritionName(fallbackName), display: value.trim() })
+      }
+      continue
+    }
+
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        stack.push({ value: entry, fallbackName })
+      }
+      continue
+    }
+
+    if (typeof value === "object") {
+      const objectValue = value as Record<string, unknown>
+      if (visited.has(objectValue)) continue
+      visited.add(objectValue)
+
+      mergeFact(buildNutritionFactFromRecord(objectValue, fallbackName))
+
+      for (const [key, nested] of Object.entries(objectValue)) {
+        if (key === "name" || key === "label" || key === "title") continue
+        stack.push({ value: nested, fallbackName: fallbackName ?? key })
+      }
+    }
+  }
+
+  return Array.from(facts.values()).sort((a, b) => a.name.localeCompare(b.name))
 }
 
 const extractMenuItem = (raw: unknown): MenuItem | null => {
@@ -205,7 +461,14 @@ const extractMenuItem = (raw: unknown): MenuItem | null => {
     parseCalories(data.calories) ??
     parseCalories(data.nutrition_info?.calories)
 
-  return { name: name.trim(), description: description?.trim() || undefined, calories }
+  const nutritionFacts = collectNutritionFacts(data)
+
+  return {
+    name: name.trim(),
+    description: description?.trim() || undefined,
+    calories,
+    nutritionFacts
+  }
 }
 
 const buildMealsFromDay = (day: NutrisliceDay): MenuMeal[] => {
@@ -238,6 +501,7 @@ const buildMealsFromDay = (day: NutrisliceDay): MenuMeal[] => {
 
   for (const [mealName, rawItems] of Object.entries(mealBuckets)) {
     if (!Array.isArray(rawItems)) continue
+    if (!isTargetMealType(mealName)) continue
 
     const collected: MenuItem[] = []
     const seenNames = new Set<string>()
@@ -390,6 +654,7 @@ const normalizeForComparison = (value: string) => normalizeMealName(value).toLow
 
 const mergeMealCollections = (target: Map<string, MenuMeal>, incoming: MenuMeal[]) => {
   for (const meal of incoming) {
+    if (!isTargetMealType(meal.mealType)) continue
     const key = normalizeForComparison(meal.mealType)
     const existing = target.get(key)
     if (!existing) {
