@@ -459,22 +459,25 @@ export default function Fuel() {
         }
       })
 
-      const filteredLocations = menuLocations
-        .map((location) => {
-          const normalized = normalizeLocationName(location.location)
-          const canonical = normalized ? knownLocationMap.get(normalized) : undefined
-          if (canonical && canonical !== location.location) {
-            return { ...location, location: canonical }
-          }
-          return location
-        })
-        .filter((location) => {
-          if (preferredLocationKeys.size === 0) return true
-          const normalized = normalizeLocationName(location.location)
-          return normalized ? preferredLocationKeys.has(normalized) : false
-        })
+      const canonicalizedLocations = menuLocations.map((location) => {
+        const normalized = normalizeLocationName(location.location)
+        const canonical = normalized ? knownLocationMap.get(normalized) : undefined
+        if (canonical && canonical !== location.location) {
+          return { ...location, location: canonical }
+        }
+        return location
+      })
 
-      return filteredLocations.sort((a, b) => a.location.localeCompare(b.location))
+      const filteredLocations = canonicalizedLocations.filter((location) => {
+        if (preferredLocationKeys.size === 0) return true
+        const normalized = normalizeLocationName(location.location)
+        return normalized ? preferredLocationKeys.has(normalized) : false
+      })
+
+      const locationsToReturn =
+        filteredLocations.length > 0 ? filteredLocations : canonicalizedLocations
+
+      return locationsToReturn.sort((a, b) => a.location.localeCompare(b.location))
     },
     [menuDateStrings]
   )
