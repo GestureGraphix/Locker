@@ -187,7 +187,16 @@ const formatTime = (dateString: string) => {
 
 export default function Fuel() {
   const [hydrationLogs, setHydrationLogs] = useState(mockHydrationLogs)
-  const [mealLogs, setMealLogs] = useState(mockMealLogs)
+  const [mealLogs, setMealLogs] = useState<{ 
+    id: number; 
+    dateTime: string; 
+    mealType: string; 
+    calories: number; 
+    proteinG: number; 
+    notes: string; 
+    completed: boolean; 
+    nutritionFacts: NutritionFact[]; 
+  }[]>(mockMealLogs)
   const [activeTab, setActiveTab] = useState("meals")
   const [isAddHydrationOpen, setIsAddHydrationOpen] = useState(false)
   const [isAddMealOpen, setIsAddMealOpen] = useState(false)
