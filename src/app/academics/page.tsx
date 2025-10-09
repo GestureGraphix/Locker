@@ -43,39 +43,19 @@ type NewItem = {
 
 type RawIcsEvent = Record<string, string>
 
+type Course = {
+  id: number
+  name: string
+  code: string
+  professor: string
+  source?: "manual" | "ics"
+}
+
 const decodeIcsText = (value: string) =>
   value
     .replace(/\\n/g, "\n")
     .replace(/\\,/g, ",")
     .replace(/\\;/g, ";")
-
-const parseIcsDate = (value: string) => {
-  const raw = value.trim()
-
-  if (/^\d{8}T\d{6}Z$/.test(raw)) {
-    return new Date(raw)
-  }
-
-  if (/^\d{8}T\d{6}$/.test(raw)) {
-    const year = Number(raw.slice(0, 4))
-    const month = Number(raw.slice(4, 6)) - 1
-    const day = Number(raw.slice(6, 8))
-    const hours = Number(raw.slice(9, 11))
-    const minutes = Number(raw.slice(11, 13))
-    const seconds = Number(raw.slice(13, 15))
-    return new Date(year, month, day, hours, minutes, seconds)
-  }
-
-  if (/^\d{8}$/.test(raw)) {
-    const year = Number(raw.slice(0, 4))
-    const month = Number(raw.slice(4, 6)) - 1
-    const day = Number(raw.slice(6, 8))
-    return new Date(year, month, day)
-  }
-
-  const parsed = new Date(raw)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
 
 const parseIcsContent = (content: string): RawIcsEvent[] => {
   const unfolded = content.replace(/\r?\n[ \t]/g, "")
@@ -110,69 +90,98 @@ const parseIcsContent = (content: string): RawIcsEvent[] => {
   return events
 }
 
-const extractCourseFromSummary = (summary: string) => {
-  const courseMatch = summary.match(/([A-Z]{2,4}\s?\d{3}[A-Z]?)/)
-  if (courseMatch?.[1]) {
-    return courseMatch[1].replace(/\s+/, " ")
+const parseCourseDetails = (summary: string) => {
+  const cleanSummary = summary.trim()
+  const match = cleanSummary.match(/^([A-Z]{2,4}\s?\d{3}[A-Z]?)/)
+
+  if (match?.[1]) {
+    const code = match[1].replace(/\s+/, " ")
+    const remainder = cleanSummary.slice(match[0].length).replace(/^[-–:\s]+/, "")
+    return {
+      code,
+      name: remainder || code
+    }
   }
-  return summary || "Calendar"
+
+  const fallback = cleanSummary || "Imported Course"
+  return {
+    code: fallback,
+    name: fallback
+  }
 }
 
-const mergeIcsEvents = (rawEvents: RawIcsEvent[], existingItems: AcademicItem[]) => {
-  const existingExternalIds = new Set(
-    existingItems
-      .map(item => item.externalId)
-      .filter((id): id is string => Boolean(id))
+const extractProfessorFromEvent = (event: RawIcsEvent) => {
+  const descriptionRaw = event["DESCRIPTION"]
+  if (descriptionRaw) {
+    const decoded = decodeIcsText(descriptionRaw)
+    const professorMatch = decoded.match(/(?:Professor|Instructor)[:\-]\s*(.+)/i)
+    if (professorMatch?.[1]) {
+      return professorMatch[1].trim()
+    }
+
+    const firstLine = decoded
+      .split(/\n+/)
+      .map(line => line.trim())
+      .find(Boolean)
+
+    if (firstLine) {
+      return firstLine
+    }
+  }
+
+  const locationRaw = event["LOCATION"]
+  if (locationRaw) {
+    const location = decodeIcsText(locationRaw).trim()
+    if (location) {
+      return location
+    }
+  }
+
+  return "Instructor TBA"
+}
+
+const mergeIcsCourses = (rawEvents: RawIcsEvent[], existingCourses: Course[]) => {
+  const existingKeys = new Set(
+    existingCourses.map(course => `${course.code.toLowerCase()}|${course.name.toLowerCase()}`)
   )
 
-  let nextId = existingItems.reduce((max, item) => Math.max(max, item.id), 0) + 1
-  const newItems: AcademicItem[] = []
+  let nextId = existingCourses.reduce((max, course) => Math.max(max, course.id), 0) + 1
+  const newCourses: Course[] = []
 
   for (const rawEvent of rawEvents) {
-    const dtStart = rawEvent["DTSTART"]
     const summaryRaw = rawEvent["SUMMARY"]
-    if (!dtStart || !summaryRaw) continue
-
-    const startDate = parseIcsDate(dtStart)
-    if (!startDate) continue
+    if (!summaryRaw) continue
 
     const summary = decodeIcsText(summaryRaw).trim()
-    const course = extractCourseFromSummary(summary)
-    const description = rawEvent["DESCRIPTION"]
-      ? decodeIcsText(rawEvent["DESCRIPTION"]).replace(/\n+/g, " ").trim()
-      : ""
+    if (!summary) continue
 
-    const externalId = rawEvent["UID"]?.trim()
-    const identifier = externalId || `${summary}-${startDate.toISOString()}`
+    const { code, name } = parseCourseDetails(summary)
+    const identifier = `${code.toLowerCase()}|${name.toLowerCase()}`
 
-    if (existingExternalIds.has(identifier)) {
+    if (existingKeys.has(identifier)) {
       continue
     }
 
-    existingExternalIds.add(identifier)
+    existingKeys.add(identifier)
 
-    newItems.push({
+    newCourses.push({
       id: nextId++,
-      course,
-      type: "calendar",
-      title: summary,
-      dueAt: startDate.toISOString(),
-      notes: description,
-      completed: false,
-      source: "ics",
-      externalId: identifier
+      code,
+      name,
+      professor: extractProfessorFromEvent(rawEvent),
+      source: "ics"
     })
   }
 
-  return { items: [...existingItems, ...newItems], added: newItems.length }
+  return { courses: [...existingCourses, ...newCourses], added: newCourses.length }
 }
 
 // Mock data
-const mockCourses = [
-  { id: 1, name: "Calculus II", code: "MATH 201", professor: "Dr. Smith" },
-  { id: 2, name: "Physics I", code: "PHYS 101", professor: "Dr. Johnson" },
-  { id: 3, name: "Biomechanics", code: "KIN 301", professor: "Dr. Williams" },
-  { id: 4, name: "Sports Psychology", code: "PSYC 250", professor: "Dr. Brown" }
+const mockCourses: Course[] = [
+  { id: 1, name: "Calculus II", code: "MATH 201", professor: "Dr. Smith", source: "manual" },
+  { id: 2, name: "Physics I", code: "PHYS 101", professor: "Dr. Johnson", source: "manual" },
+  { id: 3, name: "Biomechanics", code: "KIN 301", professor: "Dr. Williams", source: "manual" },
+  { id: 4, name: "Sports Psychology", code: "PSYC 250", professor: "Dr. Brown", source: "manual" }
 ]
 
 const mockAcademicItems: AcademicItem[] = [
@@ -257,7 +266,7 @@ const formatDate = (dateString: string) => {
 }
 
 export default function Academics() {
-  const [courses] = useState(mockCourses)
+  const [courses, setCourses] = useState(mockCourses)
   const [academicItems, setAcademicItems] = useState<AcademicItem[]>(mockAcademicItems)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
@@ -293,7 +302,7 @@ export default function Academics() {
     }
   }
 
-  const handleIcsUpload = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleScheduleUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -305,18 +314,18 @@ export default function Academics() {
         const rawEvents = parseIcsContent(text)
         let addedCount = 0
 
-        setAcademicItems(prev => {
-          const { items, added } = mergeIcsEvents(rawEvents, prev)
+        setCourses(prev => {
+          const { courses: mergedCourses, added } = mergeIcsCourses(rawEvents, prev)
           addedCount = added
-          return items
+          return mergedCourses
         })
 
         if (addedCount > 0) {
-          setImportStatus(`Imported ${addedCount} new event${addedCount > 1 ? "s" : ""}.`)
+          setImportStatus(`Imported ${addedCount} new course${addedCount > 1 ? "s" : ""}.`)
         } else {
-          setImportStatus("No new events found in the uploaded calendar.")
+          setImportStatus("No new courses found in the uploaded schedule.")
         }
-      } catch (_error) {
+      } catch {
         setImportStatus("We couldn't process that calendar file. Please try again.")
       }
     }
@@ -366,21 +375,21 @@ export default function Academics() {
             <DialogTrigger asChild>
               <Button variant="outline">
                 <Calendar className="h-4 w-4 mr-2" />
-                Import .ics
+                Import Schedule
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Import Calendar (.ics)</DialogTitle>
+                <DialogTitle>Import Schedule (.ics)</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Upload an iCalendar (.ics) file to automatically add events to your upcoming schedule.
+                  Upload an iCalendar (.ics) file to automatically add courses from your schedule.
                 </p>
                 <Input
                   type="file"
                   accept=".ics,text/calendar"
-                  onChange={handleIcsUpload}
+                  onChange={handleScheduleUpload}
                 />
                 {importStatus && (
                   <p className="text-sm text-muted-foreground">{importStatus}</p>
