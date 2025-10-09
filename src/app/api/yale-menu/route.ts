@@ -1,9 +1,6 @@
-import vm from "node:vm"
-
 import { NextRequest, NextResponse } from "next/server"
 
 const NUTRISLICE_BASE_URL = "https://yaledining.nutrislice.com/menu/api"
-const NUTRISLICE_BASE_PAGE_URL = "https://yaledining.nutrislice.com/menu"
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
@@ -12,21 +9,6 @@ const MENU_SLUG_CANDIDATES = [
   "jonathan-edwards-college",
   "jonathan-edwards-college-dining-hall"
 ]
-
-const PAGE_MEAL_CONFIG = [
-  {
-    label: "Lunch",
-    slug: "lunch",
-    buildPath: (date: string) => `/${SCHOOL_SLUG}/lunch/${date}`,
-    matchers: ["lunch"]
-  },
-  {
-    label: "Dinner",
-    slug: "dinner",
-    buildPath: (date: string) => `/${SCHOOL_SLUG}/dinner/${date}`,
-    matchers: ["dinner"]
-  }
-] as const
 
 type NutritionFact = {
   name: string
@@ -532,236 +514,6 @@ const buildMealsFromDay = (day: NutrisliceDay): MenuMeal[] => {
   return meals
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-
-const extractNuxtStateFromHtml = (html: string): unknown => {
-  const inlineMatch = html.match(/<script[^>]*>\s*window\.__NUXT__=(.*?);\s*<\/script>/s)
-  if (inlineMatch) {
-    const scriptContent = inlineMatch[1]
-    const context = { window: {} as Record<string, unknown> }
-    try {
-      vm.createContext(context)
-      vm.runInContext(`window.__NUXT__=${scriptContent}`, context)
-      return context.window.__NUXT__
-    } catch (error) {
-      console.error("Failed to evaluate inline __NUXT__ state", error)
-    }
-  }
-
-  const jsonMatch = html.match(/<script[^>]*id=["']__NUXT_DATA__["'][^>]*>(.*?)<\/script>/s)
-  if (jsonMatch) {
-    try {
-      return JSON.parse(jsonMatch[1])
-    } catch (error) {
-      console.error("Failed to parse __NUXT_DATA__ JSON", error)
-    }
-  }
-
-  return null
-}
-
-const coerceMenuItemsByMeal = (
-  value: unknown
-): Record<string, Array<number | string | NutrisliceMenuItem>> | undefined => {
-  if (!isRecord(value)) return undefined
-  const result: Record<string, Array<number | string | NutrisliceMenuItem>> = {}
-  for (const [key, raw] of Object.entries(value)) {
-    if (Array.isArray(raw)) {
-      result[key] = raw as Array<number | string | NutrisliceMenuItem>
-    }
-  }
-  return Object.keys(result).length > 0 ? result : undefined
-}
-
-const coerceMenuItemsById = (value: unknown): Record<string, NutrisliceMenuItem> | undefined => {
-  if (!isRecord(value)) return undefined
-  const result: Record<string, NutrisliceMenuItem> = {}
-  for (const [key, raw] of Object.entries(value)) {
-    if (raw && typeof raw === "object") {
-      result[key] = raw as NutrisliceMenuItem
-    }
-  }
-  return Object.keys(result).length > 0 ? result : undefined
-}
-
-const coerceMenuItemsArray = (value: unknown): NutrisliceMenuItem[] | undefined => {
-  if (!Array.isArray(value)) return undefined
-  return value as NutrisliceMenuItem[]
-}
-
-const collectNutrisliceDays = (state: unknown): NutrisliceDay[] => {
-  const days: NutrisliceDay[] = []
-  const visited = new Set<unknown>()
-  const stack: unknown[] = [state]
-
-  while (stack.length > 0) {
-    const current = stack.pop()
-    if (current == null) continue
-
-    if (Array.isArray(current)) {
-      for (const item of current) {
-        stack.push(item)
-      }
-      continue
-    }
-
-    if (!isRecord(current)) continue
-    if (visited.has(current)) continue
-    visited.add(current)
-
-    const rawMenuItemsByMeal =
-      current["menu_items_by_meal"] ?? current["menuItemsByMeal"] ?? current["menu_itemsByMeal"]
-    const menuItemsByMeal = coerceMenuItemsByMeal(rawMenuItemsByMeal)
-
-    if (menuItemsByMeal) {
-      const rawMenuItems = current["menu_items"] ?? current["menuItems"]
-      const rawMenuItemsById = current["menu_items_by_id"] ?? current["menuItemsById"]
-      const rawDate =
-        typeof current["date"] === "string"
-          ? (current["date"] as string)
-          : typeof current["service_date"] === "string"
-          ? (current["service_date"] as string)
-          : undefined
-
-      days.push({
-        date: rawDate,
-        menu_items: coerceMenuItemsArray(rawMenuItems),
-        menu_items_by_id: coerceMenuItemsById(rawMenuItemsById),
-        menu_items_by_meal: menuItemsByMeal
-      })
-    }
-
-    for (const value of Object.values(current)) {
-      stack.push(value)
-    }
-  }
-
-  return days
-}
-
-const findDayForDate = (days: NutrisliceDay[], date: string): NutrisliceDay | null => {
-  const exact = days.find((day) => day.date === date)
-  if (exact) return exact
-
-  const loose = days.find((day) => day.date?.startsWith(date))
-  if (loose) return loose
-
-  return days[0] ?? null
-}
-
-const normalizeForComparison = (value: string) => normalizeMealName(value).toLowerCase()
-
-const mergeMealCollections = (target: Map<string, MenuMeal>, incoming: MenuMeal[]) => {
-  for (const meal of incoming) {
-    if (!isTargetMealType(meal.mealType)) continue
-    const key = normalizeForComparison(meal.mealType)
-    const existing = target.get(key)
-    if (!existing) {
-      target.set(key, {
-        mealType: normalizeMealName(meal.mealType),
-        items: [...meal.items]
-      })
-      continue
-    }
-
-    const seen = new Set(existing.items.map((item) => item.name))
-    for (const item of meal.items) {
-      if (!seen.has(item.name)) {
-        existing.items.push(item)
-        seen.add(item.name)
-      }
-    }
-  }
-}
-
-const fetchMealsFromPage = async (
-  date: string,
-  config: (typeof PAGE_MEAL_CONFIG)[number]
-): Promise<MenuMeal[]> => {
-  const headers = {
-    "User-Agent": USER_AGENT,
-    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    Referer: `${NUTRISLICE_BASE_PAGE_URL}/${SCHOOL_SLUG}`
-  }
-
-  const path = config.buildPath(date)
-  const url = `${NUTRISLICE_BASE_PAGE_URL}${path}`
-  const response = await fetch(url, {
-    headers,
-    cache: "no-store"
-  })
-
-  if (!response.ok) {
-    throw new Error(`Request to ${url} failed with status ${response.status}`)
-  }
-
-  const html = await response.text()
-  const state = extractNuxtStateFromHtml(html)
-  if (!state) {
-    throw new Error(`Unable to locate __NUXT__ state in response from ${url}`)
-  }
-
-  const days = collectNutrisliceDays(state)
-  if (days.length === 0) {
-    throw new Error(`Unable to locate menu data in response from ${url}`)
-  }
-
-  const targetDay = findDayForDate(days, date)
-  if (!targetDay) {
-    throw new Error(`Unable to find menu day for ${date} in response from ${url}`)
-  }
-
-  const meals = buildMealsFromDay(targetDay)
-  const targetMatchers = new Set(config.matchers.map((matcher) => normalizeForComparison(matcher)))
-  const filtered = meals.filter((meal) => {
-    const normalized = normalizeForComparison(meal.mealType)
-    for (const matcher of targetMatchers) {
-      if (normalized.includes(matcher)) {
-        return true
-      }
-    }
-    return false
-  })
-
-  return filtered.length > 0 ? filtered : meals
-}
-
-const fetchNutrisliceMenuFromPages = async (date: string): Promise<MenuLocation[] | null> => {
-  const mealMap = new Map<string, MenuMeal>()
-  const errors: string[] = []
-
-  await Promise.all(
-    PAGE_MEAL_CONFIG.map(async (config) => {
-      try {
-        const meals = await fetchMealsFromPage(date, config)
-        mergeMealCollections(mealMap, meals)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        errors.push(`[${config.slug}] ${message}`)
-      }
-    })
-  )
-
-  if (mealMap.size > 0) {
-    const meals = Array.from(mealMap.values())
-    meals.sort((a, b) => a.mealType.localeCompare(b.mealType))
-    return [
-      {
-        location: "Jonathan Edwards College",
-        meals
-      }
-    ]
-  }
-
-  if (errors.length > 0) {
-    console.error("Unable to load Nutrislice menu via page scraping", errors)
-  }
-
-  return null
-}
-
 const fetchNutrisliceMenuFromApi = async (date: string): Promise<MenuLocation[] | null> => {
   const startCandidates = computeWeekCandidates(date)
 
@@ -819,21 +571,12 @@ const fetchNutrisliceMenuFromApi = async (date: string): Promise<MenuLocation[] 
   return null
 }
 
-const fetchNutrisliceMenu = async (date: string): Promise<MenuLocation[] | null> => {
-  const scraped = await fetchNutrisliceMenuFromPages(date)
-  if (scraped && scraped.length > 0) {
-    return scraped
-  }
-
-  return fetchNutrisliceMenuFromApi(date)
-}
-
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const date = url.searchParams.get("date") ?? new Date().toISOString().split("T")[0]
 
   try {
-    const liveMenu = await fetchNutrisliceMenu(date)
+    const liveMenu = await fetchNutrisliceMenuFromApi(date)
     if (liveMenu) {
       return NextResponse.json({
         date,
