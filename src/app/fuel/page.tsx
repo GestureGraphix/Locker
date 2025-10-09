@@ -210,7 +210,11 @@ export default function Fuel() {
     proteinG: "",
     notes: "",
     dateTime: new Date().toISOString(),
-    nutritionFacts: [] as NutritionFact[]
+    nutritionFacts: [] as NutritionFact[],
+    portion: "1",
+    baseCalories: undefined as number | undefined,
+    baseProteinG: undefined as number | undefined,
+    isFromMenu: false
   })
   const [menuDate, setMenuDate] = useState(new Date().toISOString().split("T")[0])
   const [menuData, setMenuData] = useState<MenuLocation[]>([])
@@ -243,7 +247,11 @@ export default function Fuel() {
       proteinG: "",
       notes: "",
       dateTime: new Date().toISOString(),
-      nutritionFacts: []
+      nutritionFacts: [],
+      portion: "1",
+      baseCalories: undefined,
+      baseProteinG: undefined,
+      isFromMenu: false
     })
   }, [])
 
@@ -268,7 +276,11 @@ export default function Fuel() {
         proteinG: protein != null ? protein.toString() : "",
         notes: `${item.name}${item.description ? ` — ${item.description}` : ""} (${location})`,
         dateTime: scheduledDate.toISOString(),
-        nutritionFacts: item.nutritionFacts ?? []
+        nutritionFacts: item.nutritionFacts ?? [],
+        portion: "1",
+        baseCalories: calories ?? undefined,
+        baseProteinG: protein ?? undefined,
+        isFromMenu: calories != null || protein != null
       })
       setIsAddMealOpen(true)
     },
@@ -363,26 +375,47 @@ export default function Fuel() {
   }
 
   const handleAddMeal = () => {
-    if (newMeal.mealType && newMeal.calories) {
-      const log = {
-        id: mealLogs.length + 1,
-        ...newMeal,
-        calories: parseInt(newMeal.calories),
-        proteinG: parseInt(newMeal.proteinG) || 0,
-        nutritionFacts: newMeal.nutritionFacts ?? [],
-        completed: true
-      }
-      setMealLogs(prev => [...prev, log])
-      setNewMeal({
-        mealType: "breakfast",
-        calories: "",
-        proteinG: "",
-        notes: "",
-        dateTime: new Date().toISOString(),
-        nutritionFacts: []
-      })
-      setIsAddMealOpen(false)
+    const portionValue = Number.parseFloat(newMeal.portion)
+    const portionMultiplier = newMeal.isFromMenu
+      ? Number.isFinite(portionValue) && portionValue > 0
+        ? portionValue
+        : 1
+      : 1
+
+    const baseCalories = newMeal.baseCalories ?? (newMeal.calories ? Number.parseFloat(newMeal.calories) : undefined)
+    if (!newMeal.mealType || baseCalories == null || Number.isNaN(baseCalories)) {
+      return
     }
+
+    const baseProtein = newMeal.baseProteinG ?? (newMeal.proteinG ? Number.parseFloat(newMeal.proteinG) : undefined) ?? 0
+    const totalCalories = Math.round(baseCalories * portionMultiplier)
+    const totalProtein = Number((baseProtein * portionMultiplier).toFixed(1))
+
+    const log = {
+      id: mealLogs.length + 1,
+      mealType: newMeal.mealType,
+      calories: totalCalories,
+      proteinG: Number.isNaN(totalProtein) ? 0 : totalProtein,
+      notes: newMeal.notes,
+      dateTime: newMeal.dateTime,
+      nutritionFacts: newMeal.nutritionFacts ?? [],
+      completed: true
+    }
+
+    setMealLogs(prev => [...prev, log])
+    setNewMeal({
+      mealType: "breakfast",
+      calories: "",
+      proteinG: "",
+      notes: "",
+      dateTime: new Date().toISOString(),
+      nutritionFacts: [],
+      portion: "1",
+      baseCalories: undefined,
+      baseProteinG: undefined,
+      isFromMenu: false
+    })
+    setIsAddMealOpen(false)
   }
 
   const toggleMealComplete = (id: number) => {
@@ -397,12 +430,25 @@ export default function Fuel() {
   const hydrationGoal = 80 // oz
   const hydrationPercentage = Math.round((todayHydration / hydrationGoal) * 100)
 
-  const todayMeals = mealLogs.filter(meal => 
+  const todayMeals = mealLogs.filter(meal =>
     new Date(meal.dateTime).toDateString() === new Date().toDateString()
   )
   const totalCalories = todayMeals.reduce((sum, meal) => sum + meal.calories, 0)
   const totalProtein = todayMeals.reduce((sum, meal) => sum + meal.proteinG, 0)
   const completedMeals = todayMeals.filter(meal => meal.completed).length
+
+  const parsedPortion = Number.parseFloat(newMeal.portion)
+  const portionMultiplierPreview = Number.isFinite(parsedPortion) && parsedPortion > 0 ? parsedPortion : 1
+  const effectiveBaseCalories = newMeal.baseCalories ?? (newMeal.calories ? Number.parseFloat(newMeal.calories) : undefined)
+  const effectiveBaseProtein = newMeal.baseProteinG ?? (newMeal.proteinG ? Number.parseFloat(newMeal.proteinG) : undefined)
+  const portionCaloriesPreview =
+    newMeal.isFromMenu && effectiveBaseCalories != null && !Number.isNaN(effectiveBaseCalories)
+      ? Math.round(effectiveBaseCalories * portionMultiplierPreview)
+      : undefined
+  const portionProteinPreview =
+    newMeal.isFromMenu && effectiveBaseProtein != null && !Number.isNaN(effectiveBaseProtein)
+      ? Number((effectiveBaseProtein * portionMultiplierPreview).toFixed(1))
+      : undefined
 
   return (
     <div className="space-y-6">
@@ -497,26 +543,58 @@ export default function Fuel() {
                     <option value="snack">Snack</option>
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">Calories</label>
-                    <Input 
-                      type="number"
-                      value={newMeal.calories}
-                      onChange={(e) => setNewMeal(prev => ({ ...prev, calories: e.target.value }))}
-                      placeholder="450"
-                    />
+                {newMeal.isFromMenu && (effectiveBaseCalories != null || effectiveBaseProtein != null) ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium">Portions</label>
+                      <Input
+                        type="number"
+                        min="0.25"
+                        step="0.25"
+                        value={newMeal.portion}
+                        onChange={(e) => setNewMeal(prev => ({ ...prev, portion: e.target.value }))}
+                        placeholder="1"
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Per portion{effectiveBaseCalories != null ? ` · ${Math.round(effectiveBaseCalories)} cal` : ""}
+                        {effectiveBaseProtein != null ? ` · ${Number((effectiveBaseProtein).toFixed(1))}g protein` : ""}
+                      </p>
+                    </div>
+                    {(portionCaloriesPreview != null || portionProteinPreview != null) && (
+                      <div className="rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 p-3">
+                        <p className="text-sm font-medium text-foreground">
+                          Total for {portionMultiplierPreview} portion{portionMultiplierPreview === 1 ? "" : "s"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {portionCaloriesPreview != null ? `${portionCaloriesPreview} cal` : null}
+                          {portionCaloriesPreview != null && portionProteinPreview != null ? " · " : null}
+                          {portionProteinPreview != null ? `${portionProteinPreview}g protein` : null}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="text-sm font-medium">Protein (g)</label>
-                    <Input 
-                      type="number"
-                      value={newMeal.proteinG}
-                      onChange={(e) => setNewMeal(prev => ({ ...prev, proteinG: e.target.value }))}
-                      placeholder="25"
-                    />
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium">Calories</label>
+                      <Input
+                        type="number"
+                        value={newMeal.calories}
+                        onChange={(e) => setNewMeal(prev => ({ ...prev, calories: e.target.value }))}
+                        placeholder="450"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Protein (g)</label>
+                      <Input
+                        type="number"
+                        value={newMeal.proteinG}
+                        onChange={(e) => setNewMeal(prev => ({ ...prev, proteinG: e.target.value }))}
+                        placeholder="25"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
                 <div>
                   <label className="text-sm font-medium">Notes</label>
                   <Input
@@ -540,7 +618,10 @@ export default function Fuel() {
                       })}
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      Auto-filled from the Yale Dining menu. Edit calories or protein above if needed.
+                      Auto-filled from the Yale Dining menu.
+                      {newMeal.isFromMenu
+                        ? " Portions adjust calories and protein automatically."
+                        : " Edit calories or protein above if needed."}
                     </p>
                   </div>
                 )}
