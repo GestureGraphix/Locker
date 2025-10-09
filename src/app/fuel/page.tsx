@@ -22,10 +22,19 @@ import {
   RefreshCcw
 } from "lucide-react"
 
+type NutritionFact = {
+  name: string
+  amount?: number
+  unit?: string
+  percentDailyValue?: number
+  display?: string
+}
+
 type MenuItem = {
   name: string
   description?: string
   calories?: number
+  nutritionFacts: NutritionFact[]
 }
 
 type MenuMeal = {
@@ -48,43 +57,95 @@ const mockHydrationLogs = [
 ]
 
 const mockMealLogs = [
-  { 
-    id: 1, 
-    dateTime: "2024-01-15T08:00:00Z", 
-    mealType: "breakfast", 
-    calories: 450, 
-    proteinG: 25, 
+  {
+    id: 1,
+    dateTime: "2024-01-15T08:00:00Z",
+    mealType: "breakfast",
+    calories: 450,
+    proteinG: 25,
     notes: "Oatmeal with berries and protein powder",
-    completed: true
+    completed: true,
+    nutritionFacts: []
   },
-  { 
-    id: 2, 
-    dateTime: "2024-01-15T12:30:00Z", 
-    mealType: "lunch", 
-    calories: 650, 
-    proteinG: 40, 
+  {
+    id: 2,
+    dateTime: "2024-01-15T12:30:00Z",
+    mealType: "lunch",
+    calories: 650,
+    proteinG: 40,
     notes: "Grilled chicken salad",
-    completed: true
+    completed: true,
+    nutritionFacts: []
   },
-  { 
-    id: 3, 
-    dateTime: "2024-01-15T18:00:00Z", 
-    mealType: "dinner", 
-    calories: 0, 
-    proteinG: 0, 
+  {
+    id: 3,
+    dateTime: "2024-01-15T18:00:00Z",
+    mealType: "dinner",
+    calories: 0,
+    proteinG: 0,
     notes: "Planned: Salmon with quinoa",
-    completed: false
+    completed: false,
+    nutritionFacts: []
   },
-  { 
-    id: 4, 
-    dateTime: "2024-01-15T15:00:00Z", 
-    mealType: "snack", 
-    calories: 200, 
-    proteinG: 15, 
+  {
+    id: 4,
+    dateTime: "2024-01-15T15:00:00Z",
+    mealType: "snack",
+    calories: 200,
+    proteinG: 15,
     notes: "Greek yogurt with nuts",
-    completed: true
+    completed: true,
+    nutritionFacts: []
   }
 ]
+
+const nutritionValueToNumber = (value?: number | string): number | undefined => {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value.replace(/[^0-9.\-]+/g, ""))
+    if (!Number.isNaN(parsed)) {
+      return parsed
+    }
+  }
+  return undefined
+}
+
+const formatNutritionFactValue = (fact: NutritionFact): string | null => {
+  if (fact.display && fact.display.trim().length > 0) {
+    return fact.display.trim()
+  }
+  if (fact.amount != null) {
+    return `${fact.amount}${fact.unit ? ` ${fact.unit}` : ""}`.trim()
+  }
+  return null
+}
+
+const PREFERRED_FACT_ORDER = ["calorie", "protein", "carbohydrate", "fat", "fiber", "sugar"]
+
+const getFeaturedNutritionFacts = (facts: NutritionFact[]): NutritionFact[] => {
+  if (!facts.length) return []
+  const prioritized: NutritionFact[] = []
+  for (const key of PREFERRED_FACT_ORDER) {
+    const match = facts.find(f => f.name.toLowerCase().includes(key))
+    if (match && !prioritized.includes(match)) {
+      prioritized.push(match)
+    }
+  }
+  const remainder = facts.filter(f => !prioritized.includes(f))
+  return [...prioritized, ...remainder].slice(0, 4)
+}
+
+const getCaloriesFromMenuItem = (item: MenuItem): number | undefined => {
+  if (typeof item.calories === "number") return item.calories
+  const caloriesFact = item.nutritionFacts.find(f => f.name.toLowerCase().includes("calorie"))
+  return nutritionValueToNumber(caloriesFact?.amount ?? caloriesFact?.display ?? undefined)
+}
+
+const getProteinFromMenuItem = (item: MenuItem): number | undefined => {
+  const proteinFact = item.nutritionFacts.find(f => f.name.toLowerCase().includes("protein"))
+  if (!proteinFact) return undefined
+  return nutritionValueToNumber(proteinFact.amount ?? proteinFact.display ?? undefined)
+}
 
 const getMealTypeIcon = (type: string) => {
   switch (type) {
@@ -139,7 +200,8 @@ export default function Fuel() {
     calories: "",
     proteinG: "",
     notes: "",
-    dateTime: new Date().toISOString()
+    dateTime: new Date().toISOString(),
+    nutritionFacts: [] as NutritionFact[]
   })
   const [menuDate, setMenuDate] = useState(new Date().toISOString().split("T")[0])
   const [menuData, setMenuData] = useState<MenuLocation[]>([])
@@ -171,7 +233,8 @@ export default function Fuel() {
       calories: "",
       proteinG: "",
       notes: "",
-      dateTime: new Date().toISOString()
+      dateTime: new Date().toISOString(),
+      nutritionFacts: []
     })
   }, [])
 
@@ -188,12 +251,15 @@ export default function Fuel() {
     (mealTypeLabel: string, item: MenuItem, location: string) => {
       const normalizedType = normalizeMealType(mealTypeLabel)
       const scheduledDate = new Date(`${menuDate}T12:00:00`)
+      const calories = getCaloriesFromMenuItem(item)
+      const protein = getProteinFromMenuItem(item)
       setNewMeal({
         mealType: normalizedType,
-        calories: item.calories ? item.calories.toString() : "",
-        proteinG: "",
+        calories: calories != null ? calories.toString() : "",
+        proteinG: protein != null ? protein.toString() : "",
         notes: `${item.name}${item.description ? ` — ${item.description}` : ""} (${location})`,
-        dateTime: scheduledDate.toISOString()
+        dateTime: scheduledDate.toISOString(),
+        nutritionFacts: item.nutritionFacts ?? []
       })
       setIsAddMealOpen(true)
     },
@@ -225,7 +291,23 @@ export default function Fuel() {
         return
       }
 
-      setMenuData(menuItems)
+      const normalizedMenu = menuItems.map(location => ({
+        ...location,
+        meals: location.meals.map(meal => ({
+          ...meal,
+          items: meal.items.map(item => {
+            const nutritionFacts = Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []
+            const calories = getCaloriesFromMenuItem({ ...item, nutritionFacts })
+            return {
+              ...item,
+              calories: calories != null ? calories : item.calories,
+              nutritionFacts
+            }
+          })
+        }))
+      }))
+
+      setMenuData(normalizedMenu)
       setMenuSource(payload.source ?? null)
 
       if (payload.source === "fallback" && payload.error) {
@@ -278,6 +360,7 @@ export default function Fuel() {
         ...newMeal,
         calories: parseInt(newMeal.calories),
         proteinG: parseInt(newMeal.proteinG) || 0,
+        nutritionFacts: newMeal.nutritionFacts ?? [],
         completed: true
       }
       setMealLogs(prev => [...prev, log])
@@ -286,7 +369,8 @@ export default function Fuel() {
         calories: "",
         proteinG: "",
         notes: "",
-        dateTime: new Date().toISOString()
+        dateTime: new Date().toISOString(),
+        nutritionFacts: []
       })
       setIsAddMealOpen(false)
     }
@@ -426,12 +510,31 @@ export default function Fuel() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Notes</label>
-                  <Input 
+                  <Input
                     value={newMeal.notes}
                     onChange={(e) => setNewMeal(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="What did you eat?"
                   />
                 </div>
+                {newMeal.nutritionFacts.length > 0 && (
+                  <div className="rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 p-3">
+                    <p className="text-sm font-medium text-foreground">Nutrition snapshot</p>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[0.65rem] text-muted-foreground">
+                      {getFeaturedNutritionFacts(newMeal.nutritionFacts).map(fact => {
+                        const value = formatNutritionFactValue(fact)
+                        if (!value) return null
+                        return (
+                          <Badge key={`dialog-${fact.name}`} variant="outline" className="border-dashed px-2 py-0">
+                            {fact.name}: {value}
+                          </Badge>
+                        )
+                      })}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Auto-filled from the Yale Dining menu. Edit calories or protein above if needed.
+                    </p>
+                  </div>
+                )}
                 <Button onClick={handleAddMeal} className="w-full">
                   Log Meal
                 </Button>
@@ -604,6 +707,23 @@ export default function Fuel() {
                           {meal.notes && (
                             <p className="text-sm text-muted-foreground mt-1">{meal.notes}</p>
                           )}
+                          {meal.nutritionFacts?.length ? (
+                            <div className="mt-2 flex flex-wrap gap-2 text-[0.7rem] text-muted-foreground">
+                              {getFeaturedNutritionFacts(meal.nutritionFacts).map(fact => {
+                                const value = formatNutritionFactValue(fact)
+                                if (!value) return null
+                                return (
+                                  <Badge
+                                    key={`${meal.id}-${fact.name}`}
+                                    variant="outline"
+                                    className="border-dashed px-2 py-0 text-[0.65rem] font-medium"
+                                  >
+                                    {fact.name}: {value}
+                                  </Badge>
+                                )
+                              })}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -784,33 +904,49 @@ export default function Fuel() {
                               <Badge variant="outline">{meal.items.length} item{meal.items.length === 1 ? "" : "s"}</Badge>
                             </div>
                             <div className="grid gap-2 md:grid-cols-2">
-                              {meal.items.map((item) => (
-                                <div
-                                  key={`${location.location}-${meal.mealType}-${item.name}`}
-                                  className="flex items-start justify-between gap-3 rounded-md border border-border/40 p-3"
-                                >
-                                  <div>
-                                    <p className="text-sm font-medium text-foreground">{item.name}</p>
-                                    {item.description && (
-                                      <p className="text-xs text-muted-foreground">{item.description}</p>
-                                    )}
+                              {meal.items.map((item) => {
+                                const calories = getCaloriesFromMenuItem(item)
+                                return (
+                                  <div
+                                    key={`${location.location}-${meal.mealType}-${item.name}`}
+                                    className="flex items-start justify-between gap-3 rounded-md border border-border/40 p-3"
+                                  >
+                                    <div>
+                                      <p className="text-sm font-medium text-foreground">{item.name}</p>
+                                      {item.description && (
+                                        <p className="text-xs text-muted-foreground">{item.description}</p>
+                                      )}
+                                      {item.nutritionFacts.length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-2 text-[0.65rem] text-muted-foreground">
+                                          {getFeaturedNutritionFacts(item.nutritionFacts).map(fact => {
+                                            const value = formatNutritionFactValue(fact)
+                                            if (!value) return null
+                                            return (
+                                              <Badge key={`${item.name}-${fact.name}`} variant="outline" className="border-dashed px-2 py-0">
+                                                {fact.name}: {value}
+                                              </Badge>
+                                            )
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                                      {calories != null && (
+                                        <Badge variant="secondary" className="whitespace-nowrap">
+                                          {Math.round(calories)} cal
+                                        </Badge>
+                                      )}
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleAddFromMenu(meal.mealType, item, location.location)}
+                                      >
+                                        Add
+                                      </Button>
+                                    </div>
                                   </div>
-                                  <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
-                                    {typeof item.calories === "number" && (
-                                      <Badge variant="secondary" className="whitespace-nowrap">
-                                        {item.calories} cal
-                                      </Badge>
-                                    )}
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleAddFromMenu(meal.mealType, item, location.location)}
-                                    >
-                                      Add
-                                    </Button>
-                                  </div>
-                                </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           </div>
                         ))}
