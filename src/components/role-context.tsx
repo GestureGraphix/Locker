@@ -634,26 +634,28 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     ({ email, role: loginRole, name }: LoginInput) => {
       const normalizedEmail = email.trim().toLowerCase()
       if (!normalizedEmail) return
-
+  
       if (loginRole === "athlete") {
-        let selectedAthlete: Athlete | null = null
-        setAthletes((prev) => {
-          const withoutSeed = prev.filter((athlete) => !athlete.isSeedData)
-          const existingIndex = withoutSeed.findIndex(
-            (athlete) => athlete.email.toLowerCase() === normalizedEmail
-          )
-          if (existingIndex !== -1) {
-            const next = [...withoutSeed]
-            const existing = next[existingIndex]
-            const updatedAthlete = {
-              ...existing,
-              name: name?.trim() || existing.name,
-            }
-            next[existingIndex] = updatedAthlete
-            selectedAthlete = updatedAthlete
-            return next
+        // Work with the current state synchronously to avoid TS 'never' narrowing
+        const withoutSeed: Athlete[] = athletes.filter((a) => !a.isSeedData)
+        const existingIndex = withoutSeed.findIndex(
+          (a) => a.email.toLowerCase() === normalizedEmail
+        )
+  
+        let nextAthletes: Athlete[]
+        let selected: Athlete
+  
+        if (existingIndex !== -1) {
+          const next = [...withoutSeed]
+          const existing = next[existingIndex]
+          const updatedAthlete: Athlete = {
+            ...existing,
+            name: name?.trim() || existing.name,
           }
-
+          next[existingIndex] = updatedAthlete
+          nextAthletes = next
+          selected = updatedAthlete
+        } else {
           const id = Date.now() + Math.floor(Math.random() * 1000)
           const inferredName = name?.trim() || normalizedEmail.split("@")[0]
           const newAthlete: Athlete = {
@@ -670,20 +672,24 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             hydrationLogs: [],
             mealLogs: [],
           }
-          selectedAthlete = newAthlete
-          return [...withoutSeed, newAthlete]
-        })
-        setActiveAthleteId(selectedAthlete?.id ?? null)
+          nextAthletes = [...withoutSeed, newAthlete]
+          selected = newAthlete
+        }
+  
+        // Commit updates
+        setAthletes(nextAthletes)
+        setActiveAthleteId(selected.id)
         setCurrentUser({
           email: normalizedEmail,
-          name: selectedAthlete?.name ?? name?.trim() ?? normalizedEmail,
+          name: selected.name ?? name?.trim() ?? normalizedEmail,
           role: "athlete",
-          athleteId: selectedAthlete?.id,
+          athleteId: selected.id,
         })
         setRoleState("athlete")
         return
       }
-
+  
+      // Coach login
       setCurrentUser({
         email: normalizedEmail,
         name: name?.trim() || normalizedEmail.split("@")[0],
@@ -691,8 +697,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       })
       setRoleState("coach")
     },
-    []
+    [athletes]
   )
+  
 
   const logout = useCallback(() => {
     setCurrentUser(null)
