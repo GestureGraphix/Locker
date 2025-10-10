@@ -1,0 +1,111 @@
+import type { Athlete, HydrationLog, MealLog } from "./role-types"
+
+export const initialHydrationLogs: HydrationLog[] = [
+  { id: 1, date: "2024-01-15", ounces: 8, source: "cup", time: "08:00" },
+  { id: 2, date: "2024-01-15", ounces: 12, source: "bottle", time: "10:30" },
+  { id: 3, date: "2024-01-15", ounces: 8, source: "cup", time: "12:00" },
+  { id: 4, date: "2024-01-15", ounces: 17, source: "shake", time: "14:00" },
+  { id: 5, date: "2024-01-15", ounces: 8, source: "cup", time: "16:30" },
+]
+
+export const initialMealLogs: MealLog[] = [
+  {
+    id: 1,
+    dateTime: "2024-01-15T08:00:00Z",
+    mealType: "breakfast",
+    calories: 450,
+    proteinG: 25,
+    notes: "Oatmeal with berries and protein powder",
+    completed: true,
+    nutritionFacts: [],
+  },
+  {
+    id: 2,
+    dateTime: "2024-01-15T12:30:00Z",
+    mealType: "lunch",
+    calories: 650,
+    proteinG: 40,
+    notes: "Grilled chicken salad",
+    completed: true,
+    nutritionFacts: [],
+  },
+  {
+    id: 3,
+    dateTime: "2024-01-15T18:00:00Z",
+    mealType: "dinner",
+    calories: 0,
+    proteinG: 0,
+    notes: "Planned: Salmon with quinoa",
+    completed: false,
+    nutritionFacts: [],
+  },
+  {
+    id: 4,
+    dateTime: "2024-01-15T15:00:00Z",
+    mealType: "snack",
+    calories: 200,
+    proteinG: 15,
+    notes: "Greek yogurt with nuts",
+    completed: true,
+    nutritionFacts: [],
+  },
+]
+
+export const initialAthletes: Athlete[] = [
+  {
+    id: 1,
+    name: "Alex Johnson",
+    email: "alex.johnson@locker.app",
+    sport: "Track & Field",
+    level: "Elite",
+    team: "Sprints",
+    tags: ["track", "sprints"],
+    sessions: [
+      {
+        id: 1,
+        type: "practice",
+        title: "Morning Practice",
+        startAt: "2024-01-15T06:00:00Z",
+        endAt: "2024-01-15T08:00:00Z",
+        intensity: "high",
+        notes: "Focus on technique",
+        completed: true,
+        assignedBy: "Coach Rivera",
+        focus: "Acceleration Drills",
+      },
+    ],
+    calendar: [
+      {
+        id: 1,
+        title: "Morning Practice",
+        date: "2024-01-15",
+        timeRange: "6:00 AM - 8:00 AM",
+        type: "practice",
+        focus: "Acceleration Drills",
+      },
+    ],
+    workouts: [
+      {
+        id: 1,
+        title: "Acceleration Drills",
+        focus: "Speed Mechanics",
+        dueDate: "2024-01-15",
+        status: "Completed",
+        intensity: "high",
+        assignedBy: "Coach Rivera",
+      },
+    ],
+    hydrationLogs: initialHydrationLogs,
+    mealLogs: initialMealLogs,
+    coachEmail: "coach.rivera@locker.app",
+    position: "Sprint Specialist",
+    heightCm: 175,
+    weightKg: 70,
+    allergies: ["Peanuts", "Shellfish"],
+    phone: "+1 (555) 123-4567",
+    location: "San Francisco, CA",
+    university: "University of California",
+    graduationYear: "2025",
+    isSeedData: true,
+  },
+]
