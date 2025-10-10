@@ -113,9 +113,7 @@ export default function DashboardPage() {
   const [mentalState, setMentalState] = useState<number | null>(mockData.checkIn.mental)
   const [physicalState, setPhysicalState] = useState<number | null>(mockData.checkIn.physical)
   const [checkInCompleted, setCheckInCompleted] = useState(mockData.checkIn.completed)
-  const { role, athletes } = useRole()
-
-  const primaryAthlete = athletes[0]
+  const { role, primaryAthlete } = useRole()
   const athleteSessions = primaryAthlete?.sessions ?? []
 
   const today = new Date()
@@ -149,6 +147,15 @@ export default function DashboardPage() {
 
   if (role === "coach") {
     return <CoachDashboard />
+  }
+
+  if (!primaryAthlete) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+        <p className="text-muted-foreground">Sign in to see your daily readiness insights.</p>
+      </div>
+    )
   }
 
   const getPriorityBadge = (priority: string) => {

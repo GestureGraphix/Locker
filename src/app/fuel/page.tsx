@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
+import { useRole, MealLog, NutritionFact } from "@/components/role-context"
 import {
   Apple,
   Plus,
@@ -23,14 +24,6 @@ import {
 } from "lucide-react"
 
 /* ======================== Types ======================== */
-
-type NutritionFact = {
-  name: string
-  amount?: number
-  unit?: string
-  percentDailyValue?: number
-  display?: string
-}
 
 type MenuItem = {
   name: string
@@ -48,71 +41,6 @@ type MenuLocation = {
   location: string
   meals: MenuMeal[]
 }
-
-type MealLog = {
-  id: number
-  dateTime: string
-  mealType: string
-  calories: number
-  proteinG: number
-  notes: string
-  completed: boolean
-  nutritionFacts: NutritionFact[]
-}
-
-/* ======================== Mocks ======================== */
-
-const mockHydrationLogs = [
-  { id: 1, date: "2024-01-15", ounces: 8, source: "cup", time: "08:00" },
-  { id: 2, date: "2024-01-15", ounces: 12, source: "bottle", time: "10:30" },
-  { id: 3, date: "2024-01-15", ounces: 8, source: "cup", time: "12:00" },
-  { id: 4, date: "2024-01-15", ounces: 17, source: "shake", time: "14:00" },
-  { id: 5, date: "2024-01-15", ounces: 8, source: "cup", time: "16:30" }
-]
-
-const mockMealLogs: MealLog[] = [
-  {
-    id: 1,
-    dateTime: "2024-01-15T08:00:00Z",
-    mealType: "breakfast",
-    calories: 450,
-    proteinG: 25,
-    notes: "Oatmeal with berries and protein powder",
-    completed: true,
-    nutritionFacts: []
-  },
-  {
-    id: 2,
-    dateTime: "2024-01-15T12:30:00Z",
-    mealType: "lunch",
-    calories: 650,
-    proteinG: 40,
-    notes: "Grilled chicken salad",
-    completed: true,
-    nutritionFacts: []
-  },
-  {
-    id: 3,
-    dateTime: "2024-01-15T18:00:00Z",
-    mealType: "dinner",
-    calories: 0,
-    proteinG: 0,
-    notes: "Planned: Salmon with quinoa",
-    completed: false,
-    nutritionFacts: []
-  },
-  {
-    id: 4,
-    dateTime: "2024-01-15T15:00:00Z",
-    mealType: "snack",
-    calories: 200,
-    proteinG: 15,
-    notes: "Greek yogurt with nuts",
-    completed: true,
-    nutritionFacts: []
-  }
-]
-
 /* ======================== Helpers ======================== */
 
 const toNumber = (value?: number | string): number | undefined => {
@@ -197,6 +125,9 @@ const formatTime = (dateString: string) => {
   return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
 }
 
+const getNextHydrationId = (logs: { id: number }[]): number =>
+  logs.reduce((maxId, log) => (log.id > maxId ? log.id : maxId), 0) + 1
+
 const getNextMealId = (meals: MealLog[]): number =>
   meals.reduce((maxId, meal) => (meal.id > maxId ? meal.id : maxId), 0) + 1
 
@@ -216,8 +147,9 @@ const getFeaturedNutritionFacts = (facts: NutritionFact[]): NutritionFact[] => {
 /* ======================== Component ======================== */
 
 export default function Fuel() {
-  const [hydrationLogs, setHydrationLogs] = useState(mockHydrationLogs)
-  const [mealLogs, setMealLogs] = useState<MealLog[]>(mockMealLogs)
+  const { primaryAthlete, updateHydrationLogs, updateMealLogs } = useRole()
+  const hydrationLogs = primaryAthlete?.hydrationLogs ?? []
+  const mealLogs = primaryAthlete?.mealLogs ?? []
   const [activeTab, setActiveTab] = useState("meals")
   const [isAddHydrationOpen, setIsAddHydrationOpen] = useState(false)
   const [isAddMealOpen, setIsAddMealOpen] = useState(false)
@@ -276,6 +208,7 @@ export default function Fuel() {
   /* -------- Add meal from menu (now guarantees non-zero if available) -------- */
   const handleAddFromMenu = useCallback(
     (mealTypeLabel: string, item: MenuItem, location: string) => {
+      if (!primaryAthlete) return
       const normalizedType = normalizeMealType(mealTypeLabel)
       const scheduledDate = new Date(`${menuDate}T12:00:00`)
       const dateTime = Number.isNaN(scheduledDate.getTime()) ? new Date() : scheduledDate
@@ -286,7 +219,7 @@ export default function Fuel() {
       const notes = `${item.name}${item.description ? ` — ${item.description}` : ""} (${location})`
       const clonedFacts = (Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []).map((f) => ({ ...f }))
 
-      setMealLogs((prev) => {
+      updateMealLogs(primaryAthlete.id, (prev) => {
         const nextId = getNextMealId(prev)
         const c = calories != null && Number.isFinite(calories) ? Math.round(calories) : 0
         const p = protein != null && Number.isFinite(protein) ? Number(protein.toFixed(1)) : 0
@@ -307,7 +240,7 @@ export default function Fuel() {
 
       setActiveTab("meals")
     },
-    [menuDate]
+    [menuDate, primaryAthlete, updateMealLogs]
   )
 
   /* -------- Fetch menu and normalize calories/protein on the way in -------- */
@@ -376,20 +309,53 @@ export default function Fuel() {
   /* -------- Logging hydration & manual meals -------- */
 
   const handleAddHydration = () => {
-    if (!newHydration.ounces) return
-    const log = {
-      id: hydrationLogs.length + 1,
-      date: new Date().toISOString().split("T")[0],
-      ounces: parseInt(newHydration.ounces),
-      source: newHydration.source,
-      time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-    }
-    setHydrationLogs((prev) => [...prev, log])
+    if (!primaryAthlete || !newHydration.ounces) return
+    const ounces = Number.parseInt(newHydration.ounces, 10)
+    if (Number.isNaN(ounces)) return
+    const now = new Date()
+    updateHydrationLogs(primaryAthlete.id, (prev) => [
+      ...prev,
+      {
+        id: getNextHydrationId(prev),
+        date: now.toISOString().split("T")[0],
+        ounces,
+        source: newHydration.source,
+        time: now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+      }
+    ])
     setNewHydration({ ounces: "", source: "cup" })
     setIsAddHydrationOpen(false)
   }
 
+  const quickAddHydration = useCallback(
+    (ounces: number, source: string) => {
+      if (!primaryAthlete) return
+      const now = new Date()
+      updateHydrationLogs(primaryAthlete.id, (prev) => [
+        ...prev,
+        {
+          id: getNextHydrationId(prev),
+          date: now.toISOString().split("T")[0],
+          ounces,
+          source,
+          time: now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+        }
+      ])
+    },
+    [primaryAthlete, updateHydrationLogs]
+  )
+
+  if (!primaryAthlete) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold text-foreground">Fuel</h1>
+        <p className="text-muted-foreground">Sign in to start tracking your meals and hydration.</p>
+      </div>
+    )
+  }
+
   const handleAddMeal = () => {
+    if (!primaryAthlete) return
     const portionValue = Number.parseFloat(newMeal.portion)
     const portion = Number.isFinite(portionValue) && portionValue > 0 ? portionValue : 1
     const baseCalories =
@@ -400,7 +366,7 @@ export default function Fuel() {
     const totalCalories = Math.round(baseCalories * portion)
     const totalProtein = Number((baseProtein * portion).toFixed(1))
 
-    setMealLogs((prev) => [
+    updateMealLogs(primaryAthlete.id, (prev) => [
       ...prev,
       {
         id: getNextMealId(prev),
@@ -418,7 +384,10 @@ export default function Fuel() {
   }
 
   const toggleMealComplete = (id: number) => {
-    setMealLogs((prev) => prev.map((m) => (m.id === id ? { ...m, completed: !m.completed } : m)))
+    if (!primaryAthlete) return
+    updateMealLogs(primaryAthlete.id, (prev) =>
+      prev.map((m) => (m.id === id ? { ...m, completed: !m.completed } : m))
+    )
   }
 
   /* -------- Derived totals -------- */
@@ -696,48 +665,21 @@ export default function Fuel() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const log = {
-                    id: hydrationLogs.length + 1,
-                    date: new Date().toISOString().split("T")[0],
-                    ounces: 8,
-                    source: "cup",
-                    time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-                  }
-                  setHydrationLogs((prev) => [...prev, log])
-                }}
+                onClick={() => quickAddHydration(8, "cup")}
               >
                 +8oz
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const log = {
-                    id: hydrationLogs.length + 1,
-                    date: new Date().toISOString().split("T")[0],
-                    ounces: 12,
-                    source: "bottle",
-                    time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-                  }
-                  setHydrationLogs((prev) => [...prev, log])
-                }}
+                onClick={() => quickAddHydration(12, "bottle")}
               >
                 +12oz
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const log = {
-                    id: hydrationLogs.length + 1,
-                    date: new Date().toISOString().split("T")[0],
-                    ounces: 17,
-                    source: "shake",
-                    time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-                  }
-                  setHydrationLogs((prev) => [...prev, log])
-                }}
+                onClick={() => quickAddHydration(17, "shake")}
               >
                 +17oz
               </Button>

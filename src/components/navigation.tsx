@@ -14,12 +14,11 @@ import {
   User,
   Menu,
   ChevronRight,
-  Zap,
-  TrendingUp,
   Target
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRole } from "./role-context"
+import { LoginDialog } from "./login-dialog"
 
 const athleteNavigation = [
   { name: "Dashboard", href: "/", icon: House, badge: null },
@@ -138,27 +137,7 @@ export function Navigation() {
 
           {/* User Profile */}
           <div className="px-6 py-6 border-t border-white/10">
-            <div className="relative group">
-              <div className="flex items-center space-x-4 p-4 rounded-2xl bg-gradient-to-r from-gray-50 to-white/50 hover:from-gray-100 hover:to-white/70 transition-all duration-300 cursor-pointer">
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-2xl gradient-secondary flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                    AJ
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#0f4d92] rounded-full border-2 border-white"></div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900">Alex Johnson</p>
-                  <p className="text-xs text-gray-600 font-medium">
-                    {role === "coach" ? "Head Coach" : "Track & Field • Elite"}
-                  </p>
-                  <div className="flex items-center mt-1">
-                    <TrendingUp className="h-3 w-3 text-[#1c6dd0] mr-1" />
-                    <span className="text-xs text-[#1c6dd0] font-semibold">+12% this week</span>
-                  </div>
-                </div>
-                <Zap className="h-4 w-4 text-[#123d73]" />
-              </div>
-            </div>
+            <LoginDialog />
           </div>
         </div>
       </nav>
@@ -256,17 +235,7 @@ export function Navigation() {
                   </nav>
                 </div>
                 <div className="px-4 py-4 border-t border-white/10">
-                  <div className="flex items-center space-x-3 p-4 rounded-2xl bg-gradient-to-r from-gray-50 to-white/50">
-                    <div className="w-10 h-10 rounded-xl gradient-secondary flex items-center justify-center text-white font-bold">
-                      AJ
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-gray-900">Alex Johnson</p>
-                      <p className="text-xs text-gray-600 font-medium">
-                        {role === "coach" ? "Head Coach" : "Track & Field"}
-                      </p>
-                    </div>
-                  </div>
+                  <LoginDialog />
                 </div>
               </div>
             </SheetContent>
