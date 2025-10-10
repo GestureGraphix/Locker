@@ -12,14 +12,19 @@ const defaultFormState = (role: "athlete" | "coach") => ({
   role,
   email: "",
   name: "",
+  password: "",
+  confirmPassword: "",
 })
 
+type AuthMode = "signIn" | "createAccount"
+
 export function LoginDialog() {
-  const { currentUser, login, logout, primaryAthlete } = useRole()
+  const { currentUser, login, logout, createAccount, primaryAthlete } = useRole()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const initialRole: "athlete" | "coach" = currentUser?.role ?? "athlete"
   const [form, setForm] = useState(defaultFormState(initialRole))
+  const [mode, setMode] = useState<AuthMode>("signIn")
 
   const displayName = useMemo(() => {
     if (!currentUser) return "Guest"
@@ -36,7 +41,10 @@ export function LoginDialog() {
       role: currentUser?.role ?? "athlete",
       email: currentUser?.email ?? "",
       name: currentUser?.name ?? "",
+      password: "",
+      confirmPassword: "",
     })
+    setMode("signIn")
     setError(null)
   }
 
@@ -49,17 +57,76 @@ export function LoginDialog() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!form.email.trim()) {
-      setError("Email is required to sign in.")
+    const email = form.email.trim()
+    if (!email) {
+      setError("Email is required.")
       return
     }
-    login({ role: form.role, email: form.email, name: form.name })
+
+    if (!form.password) {
+      setError("Password is required.")
+      return
+    }
+
+    if (mode === "createAccount") {
+      if (form.password.length < 8) {
+        setError("Password must be at least 8 characters long.")
+        return
+      }
+      if (form.password !== form.confirmPassword) {
+        setError("Passwords do not match.")
+        return
+      }
+
+      const result = createAccount({
+        role: form.role,
+        email,
+        password: form.password,
+        name: form.name,
+      })
+
+      if (!result.success) {
+        setError(result.error)
+        return
+      }
+    } else {
+      const result = login({
+        role: form.role,
+        email,
+        password: form.password,
+      })
+
+      if (!result.success) {
+        setError(result.error)
+        return
+      }
+    }
+
     setOpen(false)
+    resetForm()
   }
+
+  const dialogTitle = mode === "createAccount" ? "Create account" : currentUser ? "Manage account" : "Sign in"
+  const dialogDescription = mode === "createAccount"
+    ? "Create a new Locker account to track your performance, hydration, and training."
+    : currentUser
+      ? "Update your details, switch accounts, or sign out."
+      : "Sign in to save your meals, hydration, and training updates."
 
   const handleLogout = () => {
     logout()
     setOpen(false)
+  }
+
+  const handleModeChange = (nextMode: AuthMode) => {
+    setMode(nextMode)
+    setError(null)
+    setForm((prev) => ({
+      ...prev,
+      name: nextMode === "createAccount" ? prev.name || "" : prev.name,
+      password: "",
+      confirmPassword: "",
+    }))
   }
 
   return (
@@ -94,12 +161,8 @@ export function LoginDialog() {
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{currentUser ? "Manage account" : "Sign in"}</DialogTitle>
-          <DialogDescription>
-            {currentUser
-              ? "Update your details or sign out to switch accounts."
-              : "Sign in to save your meals, hydration, and training updates."}
-          </DialogDescription>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           {currentUser && (
@@ -114,6 +177,12 @@ export function LoginDialog() {
               </Button>
             </div>
           )}
+          <Tabs value={mode} onValueChange={(value) => handleModeChange(value as AuthMode)} className="w-full">
+            <TabsList className="grid grid-cols-2">
+              <TabsTrigger value="signIn">Sign in</TabsTrigger>
+              <TabsTrigger value="createAccount">Create account</TabsTrigger>
+            </TabsList>
+          </Tabs>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <span className="text-xs font-semibold uppercase text-gray-500">Role</span>
@@ -140,17 +209,43 @@ export function LoginDialog() {
                 required
               />
             </div>
+            {mode === "createAccount" && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-600">Name</label>
+                <Input
+                  value={form.name}
+                  onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="Display name (optional)"
+                />
+              </div>
+            )}
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-600">Name</label>
+              <label className="text-xs font-semibold text-gray-600">Password</label>
               <Input
-                value={form.name}
-                onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="Display name (optional)"
+                type="password"
+                value={form.password}
+                onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+                placeholder={mode === "createAccount" ? "Choose a password" : "Your password"}
+                required
               />
             </div>
+            {mode === "createAccount" && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-600">Confirm password</label>
+                <Input
+                  type="password"
+                  value={form.confirmPassword}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                  }
+                  placeholder="Re-enter your password"
+                  required
+                />
+              </div>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <Button type="submit" className="w-full">
-              {currentUser ? "Save & switch" : "Sign in"}
+              {mode === "createAccount" ? "Create account" : "Sign in"}
             </Button>
           </form>
         </div>

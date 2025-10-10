@@ -143,18 +143,32 @@ type UpdateAthleteInput = Partial<
   >
 >
 
-type UserAccount = {
+type StoredAccount = {
   email: string
   name: string
   role: Role
+  password: string
   athleteId?: number
 }
+
+type UserAccount = Omit<StoredAccount, "password">
 
 type LoginInput = {
   email: string
   role: Role
+  password: string
+}
+
+type CreateAccountInput = {
+  email: string
+  role: Role
+  password: string
   name?: string
 }
+
+type AuthResult =
+  | { success: true }
+  | { success: false; error: string }
 
 type RoleContextValue = {
   role: Role
@@ -170,7 +184,8 @@ type RoleContextValue = {
   updateHydrationLogs: (athleteId: number, updater: (logs: HydrationLog[]) => HydrationLog[]) => void
   updateMealLogs: (athleteId: number, updater: (logs: MealLog[]) => MealLog[]) => void
   currentUser: UserAccount | null
-  login: (input: LoginInput) => void
+  login: (input: LoginInput) => AuthResult
+  createAccount: (input: CreateAccountInput) => AuthResult
   logout: () => void
   updateAthleteProfile: (athleteId: number, updates: UpdateAthleteInput) => void
 }
@@ -324,6 +339,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [role, setRoleState] = useState<Role>("athlete")
   const [athletes, setAthletes] = useState<Athlete[]>(initialAthletes)
   const [activeAthleteId, setActiveAthleteId] = useState<number | null>(initialAthletes[0]?.id ?? null)
+  const [accounts, setAccounts] = useState<StoredAccount[]>([])
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null)
 
   useEffect(() => {
@@ -336,6 +352,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         athletes?: Athlete[]
         activeAthleteId?: number | null
         currentUser?: UserAccount | null
+        accounts?: StoredAccount[]
       }
 
       if (parsed.role) setRoleState(parsed.role)
@@ -361,6 +378,20 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       if (parsed.currentUser) {
         setCurrentUser(parsed.currentUser)
       }
+      if (Array.isArray(parsed.accounts)) {
+        const normalizedAccounts = parsed.accounts
+          .filter((account): account is StoredAccount =>
+            typeof account?.email === "string" &&
+            typeof account?.password === "string" &&
+            (account?.role === "athlete" || account?.role === "coach")
+          )
+          .map((account) => ({
+            ...account,
+            email: account.email.trim().toLowerCase(),
+            name: account.name?.trim() || account.email.trim().toLowerCase(),
+          }))
+        setAccounts(normalizedAccounts)
+      }
     } catch (error) {
       console.error("Failed to load Locker state", error)
     }
@@ -373,9 +404,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       athletes,
       activeAthleteId,
       currentUser,
+      accounts,
     })
     window.localStorage.setItem(STORAGE_KEY, payload)
-  }, [role, athletes, activeAthleteId, currentUser])
+  }, [role, athletes, activeAthleteId, currentUser, accounts])
 
   const setRole = useCallback((nextRole: Role) => {
     setRoleState(nextRole)
@@ -631,35 +663,37 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   )
 
   const login = useCallback(
-    ({ email, role: loginRole, name }: LoginInput) => {
+    ({ email, role: loginRole, password }: LoginInput): AuthResult => {
       const normalizedEmail = email.trim().toLowerCase()
-      if (!normalizedEmail) return
-  
+      if (!normalizedEmail) {
+        return { success: false, error: "Email is required to sign in." }
+      }
+
+      const account = accounts.find(
+        (stored) => stored.email === normalizedEmail && stored.role === loginRole
+      )
+
+      if (!account) {
+        return { success: false, error: "No account found for that email." }
+      }
+
+      if (account.password !== password) {
+        return { success: false, error: "Incorrect password." }
+      }
+
+      const { password: _password, ...accountWithoutPassword } = account
+      void _password
+
       if (loginRole === "athlete") {
-        // Work with the current state synchronously to avoid TS 'never' narrowing
-        const withoutSeed: Athlete[] = athletes.filter((a) => !a.isSeedData)
-        const existingIndex = withoutSeed.findIndex(
-          (a) => a.email.toLowerCase() === normalizedEmail
-        )
-  
-        let nextAthletes: Athlete[]
-        let selected: Athlete
-  
-        if (existingIndex !== -1) {
-          const next = [...withoutSeed]
-          const existing = next[existingIndex]
-          const updatedAthlete: Athlete = {
-            ...existing,
-            name: name?.trim() || existing.name,
-          }
-          next[existingIndex] = updatedAthlete
-          nextAthletes = next
-          selected = updatedAthlete
-        } else {
-          const id = Date.now() + Math.floor(Math.random() * 1000)
-          const inferredName = name?.trim() || normalizedEmail.split("@")[0]
+        const athleteId = accountWithoutPassword.athleteId
+        const existingAthlete = athleteId
+          ? athletes.find((athlete) => athlete.id === athleteId)
+          : undefined
+
+        if (!existingAthlete) {
+          const inferredName = accountWithoutPassword.name || normalizedEmail.split("@")[0]
           const newAthlete: Athlete = {
-            id,
+            id: athleteId ?? Date.now() + Math.floor(Math.random() * 1000),
             name: inferredName,
             email: normalizedEmail,
             sport: "",
@@ -672,32 +706,107 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             hydrationLogs: [],
             mealLogs: [],
           }
-          nextAthletes = [...withoutSeed, newAthlete]
-          selected = newAthlete
+
+          setAthletes((prev) => {
+            const withoutSeed = prev.filter((athlete) => !athlete.isSeedData)
+            return [...withoutSeed, newAthlete]
+          })
+          setActiveAthleteId(newAthlete.id)
+          setCurrentUser({ ...accountWithoutPassword, athleteId: newAthlete.id })
+          setRoleState("athlete")
+          setAccounts((prev) =>
+            prev.map((stored) =>
+              stored.email === account.email && stored.role === account.role
+                ? { ...stored, athleteId: newAthlete.id }
+                : stored
+            )
+          )
+          return { success: true }
         }
-  
-        // Commit updates
-        setAthletes(nextAthletes)
-        setActiveAthleteId(selected.id)
-        setCurrentUser({
-          email: normalizedEmail,
-          name: selected.name ?? name?.trim() ?? normalizedEmail,
-          role: "athlete",
-          athleteId: selected.id,
-        })
+
+        setActiveAthleteId(existingAthlete.id)
+        setCurrentUser({ ...accountWithoutPassword, athleteId: existingAthlete.id })
         setRoleState("athlete")
-        return
+        return { success: true }
       }
-  
-      // Coach login
-      setCurrentUser({
-        email: normalizedEmail,
-        name: name?.trim() || normalizedEmail.split("@")[0],
-        role: "coach",
-      })
+
+      setCurrentUser(accountWithoutPassword)
       setRoleState("coach")
+      return { success: true }
     },
-    [athletes]
+    [accounts, athletes]
+  )
+
+  const createAccount = useCallback(
+    ({ email, role: accountRole, password, name }: CreateAccountInput): AuthResult => {
+      const normalizedEmail = email.trim().toLowerCase()
+      if (!normalizedEmail) {
+        return { success: false, error: "Email is required to create an account." }
+      }
+      if (!password) {
+        return { success: false, error: "Password is required." }
+      }
+
+      const existingAccount = accounts.find(
+        (stored) => stored.email === normalizedEmail && stored.role === accountRole
+      )
+
+      if (existingAccount) {
+        return { success: false, error: "An account with that email already exists." }
+      }
+
+      if (accountRole === "athlete") {
+        const id = Date.now() + Math.floor(Math.random() * 1000)
+        const inferredName = name?.trim() || normalizedEmail.split("@")[0]
+        const newAthlete: Athlete = {
+          id,
+          name: inferredName,
+          email: normalizedEmail,
+          sport: "",
+          level: "",
+          team: "",
+          tags: [],
+          sessions: [],
+          calendar: [],
+          workouts: [],
+          hydrationLogs: [],
+          mealLogs: [],
+        }
+
+        setAthletes((prev) => {
+          const withoutSeed = prev.filter((athlete) => !athlete.isSeedData)
+          return [...withoutSeed, newAthlete]
+        })
+        setActiveAthleteId(id)
+
+        const newAccount: StoredAccount = {
+          email: normalizedEmail,
+          name: inferredName,
+          role: "athlete",
+          password,
+          athleteId: id,
+        }
+
+        setAccounts((prev) => [...prev, newAccount])
+        setCurrentUser({ email: normalizedEmail, name: inferredName, role: "athlete", athleteId: id })
+        setRoleState("athlete")
+        return { success: true }
+      }
+
+      const coachName = name?.trim() || normalizedEmail.split("@")[0]
+      const newAccount: StoredAccount = {
+        email: normalizedEmail,
+        name: coachName,
+        role: "coach",
+        password,
+      }
+
+      setAccounts((prev) => [...prev, newAccount])
+      setCurrentUser({ email: normalizedEmail, name: coachName, role: "coach" })
+      setRoleState("coach")
+      return { success: true }
+    },
+    [accounts]
   )
   
 
@@ -737,6 +846,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       updateAthleteProfile,
       currentUser,
       login,
+      createAccount,
       logout,
     }),
     [
@@ -754,6 +864,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       updateAthleteProfile,
       currentUser,
       login,
+      createAccount,
       logout,
     ]
   )
