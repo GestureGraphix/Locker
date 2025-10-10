@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -66,9 +66,9 @@ const formatTime = (dateString: string) => {
 }
 
 export default function Training() {
-  const { role, primaryAthlete, scheduleSession, toggleSessionCompletion } = useRole()
+  const { role, primaryAthlete, scheduleSession, toggleSessionCompletion, currentUser } = useRole()
   const sessions = primaryAthlete?.sessions ?? []
-  const [prs, setPRs] = useState(mockPRs)
+  const [prs, setPRs] = useState(currentUser ? [] : mockPRs)
   const [isAddSessionOpen, setIsAddSessionOpen] = useState(false)
   const [isAddPROpen, setIsAddPROpen] = useState(false)
   const [newSession, setNewSession] = useState({
@@ -86,6 +86,14 @@ export default function Training() {
     date: new Date().toISOString().split('T')[0],
     intensity: "medium"
   })
+
+  useEffect(() => {
+    if (currentUser) {
+      setPRs([])
+    } else {
+      setPRs(mockPRs)
+    }
+  }, [currentUser])
 
   const handleAddSession = () => {
     if (!primaryAthlete) return

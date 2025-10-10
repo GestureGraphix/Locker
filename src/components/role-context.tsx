@@ -86,6 +86,16 @@ type Athlete = {
   hydrationLogs: HydrationLog[]
   mealLogs: MealLog[]
   coachEmail?: string
+  position?: string
+  heightCm?: number
+  weightKg?: number
+  allergies?: string[]
+  phone?: string
+  location?: string
+  university?: string
+  graduationYear?: string
+  notes?: string
+  isSeedData?: boolean
 }
 
 type ScheduleSessionInput = {
@@ -110,6 +120,28 @@ type AddAthleteInput = {
   team?: string
   tags?: string[]
 }
+
+type UpdateAthleteInput = Partial<
+  Pick<
+    Athlete,
+    |
+      "name"
+    | "email"
+    | "sport"
+    | "level"
+    | "team"
+    | "tags"
+    | "position"
+    | "heightCm"
+    | "weightKg"
+    | "allergies"
+    | "phone"
+    | "location"
+    | "university"
+    | "graduationYear"
+    | "notes"
+  >
+>
 
 type UserAccount = {
   email: string
@@ -140,6 +172,7 @@ type RoleContextValue = {
   currentUser: UserAccount | null
   login: (input: LoginInput) => void
   logout: () => void
+  updateAthleteProfile: (athleteId: number, updates: UpdateAthleteInput) => void
 }
 
 const RoleContext = createContext<RoleContextValue | undefined>(undefined)
@@ -275,6 +308,15 @@ const initialAthletes: Athlete[] = [
     hydrationLogs: initialHydrationLogs,
     mealLogs: initialMealLogs,
     coachEmail: "coach.rivera@locker.app",
+    position: "Sprint Specialist",
+    heightCm: 175,
+    weightKg: 70,
+    allergies: ["Peanuts", "Shellfish"],
+    phone: "+1 (555) 123-4567",
+    location: "San Francisco, CA",
+    university: "University of California",
+    graduationYear: "2025",
+    isSeedData: true,
   },
 ]
 
@@ -545,6 +587,49 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     []
   )
 
+  const updateAthleteProfile = useCallback(
+    (athleteId: number, updates: UpdateAthleteInput) => {
+      let updated: Athlete | null = null
+      setAthletes((prev) =>
+        prev.map((athlete) => {
+          if (athlete.id !== athleteId) return athlete
+
+          const normalizedTags = updates.tags ? normalizeTags(updates.tags) : athlete.tags
+          const normalizedAllergies = updates.allergies
+            ? updates.allergies
+                .map((item) => item.trim())
+                .filter((item) => item.length > 0)
+            : athlete.allergies ?? []
+          const normalizedEmail = updates.email?.trim().toLowerCase() || athlete.email
+
+          updated = {
+            ...athlete,
+            ...updates,
+            email: normalizedEmail,
+            tags: normalizedTags,
+            allergies: normalizedAllergies,
+          }
+
+          return updated
+        })
+      )
+
+      if (updated) {
+        setCurrentUser((prev) => {
+          if (prev?.role === "athlete" && prev.athleteId === athleteId) {
+            return {
+              ...prev,
+              name: updated!.name,
+              email: updated!.email,
+            }
+          }
+          return prev
+        })
+      }
+    },
+    []
+  )
+
   const login = useCallback(
     ({ email, role: loginRole, name }: LoginInput) => {
       const normalizedEmail = email.trim().toLowerCase()
@@ -553,9 +638,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       if (loginRole === "athlete") {
         let selectedAthlete: Athlete | null = null
         setAthletes((prev) => {
-          const existingIndex = prev.findIndex((athlete) => athlete.email.toLowerCase() === normalizedEmail)
+          const withoutSeed = prev.filter((athlete) => !athlete.isSeedData)
+          const existingIndex = withoutSeed.findIndex(
+            (athlete) => athlete.email.toLowerCase() === normalizedEmail
+          )
           if (existingIndex !== -1) {
-            const next = [...prev]
+            const next = [...withoutSeed]
             const existing = next[existingIndex]
             const updatedAthlete = {
               ...existing,
@@ -572,9 +660,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             id,
             name: inferredName,
             email: normalizedEmail,
-            sport: "Unknown Sport",
-            level: "Development",
-            team: "Independent",
+            sport: "",
+            level: "",
+            team: "",
             tags: [],
             sessions: [],
             calendar: [],
@@ -583,7 +671,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             mealLogs: [],
           }
           selectedAthlete = newAthlete
-          return [...prev, newAthlete]
+          return [...withoutSeed, newAthlete]
         })
         setActiveAthleteId(selectedAthlete?.id ?? null)
         setCurrentUser({
@@ -608,6 +696,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     setCurrentUser(null)
+    setActiveAthleteId(null)
+    setRoleState("athlete")
   }, [])
 
   useEffect(() => {
@@ -637,6 +727,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       assignSessionToTag,
       updateHydrationLogs,
       updateMealLogs,
+      updateAthleteProfile,
       currentUser,
       login,
       logout,
@@ -653,6 +744,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       assignSessionToTag,
       updateHydrationLogs,
       updateMealLogs,
+      updateAthleteProfile,
       currentUser,
       login,
       logout,
