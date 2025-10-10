@@ -26,8 +26,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const coachName = "Coaching Staff"
-
 type AssignExerciseForm = {
   title: string
   type: string
@@ -127,6 +125,7 @@ function CoachAthleteCard({
   sessions,
   calendar,
   workouts,
+  assignedByName,
 }: {
   athleteId: number
   name: string
@@ -138,6 +137,7 @@ function CoachAthleteCard({
   sessions: ReturnType<typeof useRole>["athletes"][number]["sessions"]
   calendar: ReturnType<typeof useRole>["athletes"][number]["calendar"]
   workouts: ReturnType<typeof useRole>["athletes"][number]["workouts"]
+  assignedByName: string
 }) {
   const { scheduleSession } = useRole()
   const [open, setOpen] = useState(false)
@@ -175,7 +175,7 @@ function CoachAthleteCard({
       },
       {
         focus: form.focus || form.title,
-        assignedBy: coachName,
+        assignedBy: assignedByName,
       }
     )
 
@@ -396,13 +396,15 @@ function CoachAthleteCard({
 }
 
 export function CoachDashboard() {
-  const { athletes, addAthlete, assignSessionToTag } = useRole()
+  const { athletes, addAthlete, assignSessionToTag, currentUser } = useRole()
   const [isAddAthleteOpen, setIsAddAthleteOpen] = useState(false)
   const [addAthleteForm, setAddAthleteForm] = useState(initialAthleteForm)
   const [addAthleteError, setAddAthleteError] = useState<string | null>(null)
   const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false)
   const [bulkAssignForm, setBulkAssignForm] = useState(initialBulkForm)
   const [bulkAssignError, setBulkAssignError] = useState<string | null>(null)
+
+  const coachDisplayName = currentUser?.name ?? "Coaching Staff"
 
   const allSessions = useMemo(() => athletes.flatMap((athlete) => athlete.sessions), [athletes])
   const totalSessions = allSessions.length
@@ -498,7 +500,7 @@ export function CoachDashboard() {
       },
       {
         focus: bulkAssignForm.focus || bulkAssignForm.title,
-        assignedBy: coachName,
+        assignedBy: coachDisplayName,
       }
     )
 
@@ -860,6 +862,7 @@ export function CoachDashboard() {
               sessions={athlete.sessions}
               calendar={athlete.calendar}
               workouts={athlete.workouts}
+              assignedByName={coachDisplayName}
             />
           ))}
         </div>

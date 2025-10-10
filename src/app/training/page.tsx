@@ -66,8 +66,7 @@ const formatTime = (dateString: string) => {
 }
 
 export default function Training() {
-  const { role, athletes, scheduleSession, toggleSessionCompletion } = useRole()
-  const primaryAthlete = athletes[0]
+  const { role, primaryAthlete, scheduleSession, toggleSessionCompletion } = useRole()
   const sessions = primaryAthlete?.sessions ?? []
   const [prs, setPRs] = useState(mockPRs)
   const [isAddSessionOpen, setIsAddSessionOpen] = useState(false)
