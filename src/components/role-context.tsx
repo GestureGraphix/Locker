@@ -338,9 +338,12 @@ const initialAthletes: Athlete[] = [
 export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [role, setRoleState] = useState<Role>("athlete")
   const [athletes, setAthletes] = useState<Athlete[]>(initialAthletes)
-  const [activeAthleteId, setActiveAthleteId] = useState<number | null>(initialAthletes[0]?.id ?? null)
+  const [activeAthleteId, setActiveAthleteId] = useState<number | null>(
+    initialAthletes[0]?.id ?? null
+  )
   const [accounts, setAccounts] = useState<StoredAccount[]>([])
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null)
+  const [isHydrated, setIsHydrated] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -394,11 +397,13 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Failed to load Locker state", error)
+    } finally {
+      setIsHydrated(true)
     }
   }, [])
 
   useEffect(() => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined" || !isHydrated) return
     const payload = JSON.stringify({
       role,
       athletes,
@@ -407,7 +412,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       accounts,
     })
     window.localStorage.setItem(STORAGE_KEY, payload)
-  }, [role, athletes, activeAthleteId, currentUser, accounts])
+  }, [role, athletes, activeAthleteId, currentUser, accounts, isHydrated])
 
   const setRole = useCallback((nextRole: Role) => {
     setRoleState(nextRole)
