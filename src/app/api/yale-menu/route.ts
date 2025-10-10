@@ -1,73 +1,320 @@
-// src/app/api/yale-menu/route.ts
 import { NextRequest, NextResponse } from "next/server"
 
-/** Use the SAME host as your working curl */
 const NUTRISLICE_BASE_URL = "https://yaledining.api.nutrislice.com/menu/api"
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
-/** JE page slug (works with the weeks/menu-type path) */
 const SCHOOL_SLUG = "jonathan-edwards-college"
+const LOCATION_ID = "57753"
 
-/** --- Response types for the weeks/menu-type endpoint --- */
+/* ---------------- Types ---------------- */
 type WeeksFood = {
-  id?: number
+  id?: number // food id
   name?: string
   description?: string | null
-  nutrition?: unknown
-  nutrition_facts?: unknown
-  nutritionFacts?: unknown
-  nutrients?: unknown
-  attributes?: Record<string, unknown> | null
 }
-
 type WeeksMenuItem = {
+  id?: number // menu-item id (needed for order-settings)
   food?: WeeksFood | null
-  station?: { name?: string } | null
 }
+type WeeksDay = { date?: string; menu_items?: WeeksMenuItem[] }
+type WeeksResponse = { days?: WeeksDay[] }
 
-type WeeksDay = {
-  date?: string
-  menu_items?: WeeksMenuItem[]
-}
-
-type WeeksResponse = {
-  days?: WeeksDay[]
-}
-
-/** --- Your outward API types (lightweight) --- */
 type NutritionFact = {
   name: string
   amount?: number
   unit?: string
-  percentDailyValue?: number
   display?: string
 }
-
 type MenuItem = {
+  id: number               // prefer food id if present
+  menuItemId?: number      // menu-item id used for order-settings
   name: string
   description?: string
-  calories?: number
+  calories: number
+  proteinG: number
+  sodiumMg: number
+  fatG: number
+  carbsG: number
+  servingSize: string | undefined
   nutritionFacts: NutritionFact[]
 }
+type MenuMeal = { mealType: string; items: MenuItem[] }
 
-type MenuMeal = {
-  mealType: string
-  items: MenuItem[]
-}
-
-type MenuLocation = {
-  location: string
-  meals: MenuMeal[]
-}
-
-/** Supported meal keys */
+/* ---------------- Utils ---------------- */
 const TARGET_MEAL_KEYS = new Set(["lunch", "dinner"])
-
 const normalizeMealName = (m: string) =>
   m.trim().replace(/[-_]/g, " ").replace(/\s+/g, " ").replace(/(^|\s)([a-z])/g, (s) => s.toUpperCase())
 
-/** Minimal fallback so your route never 500s */
+const nutritionValueToNumber = (value: unknown): number | undefined => {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+    const parsed = Number.parseFloat(trimmed.replace(/[^0-9.\-]+/g, ""))
+    if (!Number.isNaN(parsed)) return parsed
+  }
+  return undefined
+}
+
+/* -------------- Fetch helper -------------- */
+async function safeFetchJSON<T = unknown>(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {}
+): Promise<T | null> {
+  const { timeoutMs = 8000, ...opts } = init
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, { ...opts, signal: ctrl.signal })
+    if (!res.ok) return null
+    return (await res.json()) as T
+  } catch {
+    return null
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+/* ---------------- Nutrislice calls ---------------- */
+async function fetchWeeksMenuByMeal(school: string, meal: string, date: string): Promise<WeeksResponse | null> {
+  const [y, m, d] = date.split("-")
+  const url = `${NUTRISLICE_BASE_URL}/weeks/school/${encodeURIComponent(
+    school
+  )}/menu-type/${encodeURIComponent(meal.toLowerCase())}/${y}/${m}/${d}/?format=json`
+
+  return await safeFetchJSON<WeeksResponse>(url, {
+    headers: {
+      "User-Agent": USER_AGENT,
+      Accept: "application/json",
+      Origin: "https://yaledining.nutrislice.com",
+      Referer: "https://yaledining.nutrislice.com/"
+    },
+    cache: "no-store",
+    timeoutMs: 9000
+  })
+}
+
+async function fetchOrderSettings(
+  menuItemId: number,
+  date: string
+): Promise<{
+  calories: number
+  proteinG: number
+  sodiumMg: number
+  fatG: number
+  carbsG: number
+  servingSize: string | undefined
+  facts: NutritionFact[]
+}> {
+  const url = `${NUTRISLICE_BASE_URL}/menu-items/${menuItemId}/order-settings/?location-id=${encodeURIComponent(
+    LOCATION_ID
+  )}&menu-date=${encodeURIComponent(date)}`
+
+  const json = await safeFetchJSON<Record<string, unknown>>(url, {
+    headers: {
+      "User-Agent": USER_AGENT,
+      Accept: "application/json",
+      Origin: "https://yaledining.nutrislice.com",
+      Referer: "https://yaledining.nutrislice.com/"
+    },
+    cache: "no-store",
+    timeoutMs: 9000
+  })
+  if (!json) return { calories: 0, proteinG: 0, sodiumMg: 0, fatG: 0, carbsG: 0, servingSize: undefined, facts: [] }
+
+  const tax = (json["tax_nutrition_info"] || {}) as Record<string, unknown>
+  const raw = (json["raw_nutrition_info"] || {}) as Record<string, unknown>
+
+  const calories =
+    nutritionValueToNumber(tax["calories"]) ??
+    nutritionValueToNumber(raw["calories"]) ??
+    0
+
+  const proteinG =
+    nutritionValueToNumber(tax["g_protein"]) ??
+    nutritionValueToNumber(raw["g_protein"]) ??
+    0
+
+  const sodiumMg =
+    nutritionValueToNumber(tax["mg_sodium"]) ??
+    nutritionValueToNumber(raw["mg_sodium"]) ??
+    0
+
+  const fatG =
+    nutritionValueToNumber(tax["g_fat"]) ??
+    nutritionValueToNumber(raw["g_fat"]) ??
+    0
+
+  const carbsG =
+    nutritionValueToNumber(tax["g_carbs"]) ??
+    nutritionValueToNumber(raw["g_carbs"]) ??
+    0
+
+  const portionSize = json["portion_size"]
+  const portionUnit = json["portion_size_unit"]
+  const servingSize =
+    (typeof portionSize === "number" || typeof portionSize === "string") && typeof portionUnit === "string"
+      ? `${portionSize} ${portionUnit}`.trim()
+      : undefined
+
+  const facts: NutritionFact[] = [
+    { name: "Calories", amount: calories, display: `${calories}` },
+    { name: "Protein", unit: "g", amount: proteinG, display: `${proteinG} g` },
+    { name: "Sodium", unit: "mg", amount: sodiumMg, display: `${sodiumMg} mg` },
+    { name: "Fat", unit: "g", amount: fatG, display: `${fatG} g` },
+    { name: "Carbs", unit: "g", amount: carbsG, display: `${carbsG} g` }
+  ]
+
+  return { calories, proteinG, sodiumMg, fatG, carbsG, servingSize, facts }
+}
+
+/* ---------------- Item metadata (name/desc) ---------------- */
+type ItemMeta = { id: number; name?: string; description?: string | null }
+const itemMetaCache = new Map<number, ItemMeta>() // per-invocation cache
+
+async function fetchItemMetaFromMenuItem(id: number): Promise<ItemMeta | null> {
+  const url = `${NUTRISLICE_BASE_URL}/menu-items/${id}/?format=json`
+  const json = await safeFetchJSON<Record<string, unknown>>(url, {
+    headers: {
+      "User-Agent": USER_AGENT,
+      Accept: "application/json",
+      Origin: "https://yaledining.nutrislice.com",
+      Referer: "https://yaledining.nutrislice.com/"
+    },
+    cache: "no-store",
+    timeoutMs: 9000
+  })
+  if (!json) return null
+  const name = typeof json["name"] === "string" ? json["name"].trim() : undefined
+  const description = typeof json["description"] === "string" ? json["description"].trim() : undefined
+  return { id, name, description: description ?? null }
+}
+
+async function fetchItemMetaFromFood(id: number): Promise<ItemMeta | null> {
+  const url = `${NUTRISLICE_BASE_URL}/foods/${id}/?format=json`
+  const json = await safeFetchJSON<Record<string, unknown>>(url, {
+    headers: {
+      "User-Agent": USER_AGENT,
+      Accept: "application/json",
+      Origin: "https://yaledining.nutrislice.com",
+      Referer: "https://yaledining.nutrislice.com/"
+    },
+    cache: "no-store",
+    timeoutMs: 9000
+  })
+  if (!json) return null
+  const name = typeof json["name"] === "string" ? json["name"].trim() : undefined
+  const description = typeof json["description"] === "string" ? json["description"].trim() : undefined
+  return { id, name, description: description ?? null }
+}
+
+async function resolveItemMeta(
+  menuItemId?: number,
+  foodId?: number,
+  fallback?: { name?: string; description?: string | null }
+) {
+  const key = menuItemId ?? foodId
+  if (key && itemMetaCache.has(key)) return itemMetaCache.get(key)!
+
+  if (fallback?.name || fallback?.description) {
+    const meta = { id: key ?? -1, name: fallback.name, description: fallback.description ?? null }
+    if (key) itemMetaCache.set(key, meta)
+    return meta
+  }
+  if (menuItemId) {
+    const m = await fetchItemMetaFromMenuItem(menuItemId)
+    if (m?.name) {
+      itemMetaCache.set(menuItemId, m)
+      return m
+    }
+  }
+  if (foodId) {
+    const f = await fetchItemMetaFromFood(foodId)
+    if (f) {
+      itemMetaCache.set(foodId, f)
+      return f
+    }
+  }
+  const fallbackMeta = { id: key ?? -1, name: undefined, description: null }
+  if (key) itemMetaCache.set(key, fallbackMeta)
+  return fallbackMeta
+}
+
+/* ---------------- Build meals ---------------- */
+async function buildMealsFromWeeks(day: WeeksDay, date: string): Promise<MenuMeal[]> {
+  const menuItems = Array.isArray(day.menu_items) ? day.menu_items : []
+
+  const settled = await Promise.allSettled(
+    menuItems.map(async (mi) => {
+      const food = mi?.food
+      const foodId = food?.id
+      const menuItemId = mi?.id
+      if (!foodId && !menuItemId) return null
+
+      const meta = await resolveItemMeta(menuItemId, foodId, {
+        name: food?.name ?? undefined,
+        description: food?.description ?? null
+      })
+      const name = (meta.name ?? "").trim()
+      const description = (typeof meta.description === "string" ? meta.description.trim() : "") || undefined
+
+      // Skip nameless/placeholder items to avoid empty cards
+      if (!name || name.toLowerCase() === "null") return null
+
+      // default enrich shape
+      let enrich: {
+        calories: number
+        proteinG: number
+        sodiumMg: number
+        fatG: number
+        carbsG: number
+        servingSize: string | undefined
+        facts: NutritionFact[]
+      } = {
+        calories: 0,
+        proteinG: 0,
+        sodiumMg: 0,
+        fatG: 0,
+        carbsG: 0,
+        servingSize: undefined,
+        facts: []
+      }
+
+      // MUST use menu-item id for order-settings
+      if (menuItemId) {
+        enrich = await fetchOrderSettings(menuItemId, date)
+      } else if (foodId) {
+        // last-resort fallback (some deployments accept foodId)
+        enrich = await fetchOrderSettings(foodId, date)
+      }
+
+      return {
+        id: foodId ?? menuItemId!,
+        menuItemId,
+        name,
+        description,
+        calories: enrich.calories,
+        proteinG: enrich.proteinG,
+        sodiumMg: enrich.sodiumMg,
+        fatG: enrich.fatG,
+        carbsG: enrich.carbsG,
+        servingSize: enrich.servingSize,
+        nutritionFacts: enrich.facts
+      } as MenuItem
+    })
+  )
+
+  const items: MenuItem[] = []
+  for (const s of settled) if (s.status === "fulfilled" && s.value) items.push(s.value)
+
+  return [
+    { mealType: "Lunch", items },
+    { mealType: "Dinner", items }
+  ]
+}
+
+/* ---------------- Fallback ---------------- */
 const buildFallbackResponse = (date: string, error: string) =>
   NextResponse.json({
     date,
@@ -84,355 +331,7 @@ const buildFallbackResponse = (date: string, error: string) =>
     error
   })
 
-const nutritionValueToNumber = (value: unknown): number | undefined => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim()
-    if (!trimmed) return undefined
-    const parsed = Number.parseFloat(trimmed.replace(/[^0-9.\-]+/g, ""))
-    if (!Number.isNaN(parsed)) {
-      return parsed
-    }
-  }
-  return undefined
-}
-
-const normalizeFactName = (name: string): string =>
-  name
-    .trim()
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .replace(/(^|\s)([a-z])/g, (match) => match.toUpperCase())
-
-const mergeNutritionFacts = (existing: NutritionFact[], incoming: NutritionFact[]): NutritionFact[] => {
-  if (!incoming.length) return existing
-  if (!existing.length) return incoming
-  const map = new Map<string, NutritionFact>()
-
-  const upsert = (fact: NutritionFact) => {
-    const normalizedName = normalizeFactName(fact.name)
-    const key = normalizedName.toLowerCase()
-    const current = map.get(key)
-    if (!current) {
-      map.set(key, { ...fact, name: normalizedName })
-      return
-    }
-
-    if (!current.display && fact.display) current.display = fact.display
-    if (current.amount == null && fact.amount != null) current.amount = fact.amount
-    if (!current.unit && fact.unit) current.unit = fact.unit
-    if (current.percentDailyValue == null && fact.percentDailyValue != null) {
-      current.percentDailyValue = fact.percentDailyValue
-    }
-  }
-
-  existing.forEach(upsert)
-  incoming.forEach(upsert)
-
-  return Array.from(map.values())
-}
-
-const parseNutritionEntry = (entry: unknown, fallbackName?: string): NutritionFact | null => {
-  if (!entry) return null
-
-  if (typeof entry === "string" || typeof entry === "number") {
-    const display = String(entry).trim()
-    if (!display) return null
-    const amount = nutritionValueToNumber(entry)
-    const name = fallbackName?.trim()
-    if (!name) return null
-    return {
-      name: normalizeFactName(name),
-      display,
-      amount
-    }
-  }
-
-  if (typeof entry !== "object") return null
-
-  const record = entry as Record<string, unknown>
-
-  const rawName = record.name ?? record.label ?? record.title ?? fallbackName
-  const nameCandidate =
-    typeof rawName === "string" && rawName.trim().length > 0 ? rawName.trim() : fallbackName?.trim()
-  if (!nameCandidate) return null
-  const name = normalizeFactName(nameCandidate)
-
-  const unitCandidates = [record.unit, record.units, record.uom, record.measureUnit, record.measure]
-  const displayCandidates = [
-    record.display,
-    record.display_value,
-    record.displayValue,
-    record.text,
-    record.value,
-    record.amount,
-    record.quantity,
-    record.measure
-  ]
-  const amountCandidates = [
-    record.amount,
-    record.value,
-    record.quantity,
-    record.number,
-    record.mass,
-    record.grams,
-    record.milligrams
-  ]
-  const percentCandidates = [
-    record.percentDailyValue,
-    record.percent_dv,
-    record.percentDV,
-    record.dailyValuePercent,
-    record.daily_value_percent,
-    record.percent,
-    record.pct,
-    record.dv
-  ]
-
-  let unit: string | undefined
-  for (const candidate of unitCandidates) {
-    if (typeof candidate === "string" && candidate.trim()) {
-      unit = candidate.trim()
-      break
-    }
-  }
-
-  let amount: number | undefined
-  for (const candidate of amountCandidates) {
-    amount = nutritionValueToNumber(candidate)
-    if (amount != null) break
-  }
-
-  let display: string | undefined
-  for (const candidate of displayCandidates) {
-    if (typeof candidate === "string" && candidate.trim()) {
-      display = candidate.trim()
-      break
-    }
-  }
-
-  if (!display && amount != null) {
-    display = unit ? `${amount} ${unit}`.trim() : `${amount}`
-  }
-
-  let percentDailyValue: number | undefined
-  for (const candidate of percentCandidates) {
-    percentDailyValue = nutritionValueToNumber(candidate)
-    if (percentDailyValue != null) break
-  }
-
-  if (!display && amount == null) return null
-
-  return {
-    name,
-    amount,
-    unit,
-    percentDailyValue,
-    display
-  }
-}
-
-const extractNutritionFacts = (food: WeeksFood | null | undefined): NutritionFact[] => {
-  if (!food) return []
-
-  const seen = new Map<string, NutritionFact>()
-
-  const upsert = (fact: NutritionFact | null) => {
-    if (!fact) return
-    const normalizedName = normalizeFactName(fact.name)
-    const key = normalizedName.toLowerCase()
-    if (!key) return
-    const existing = seen.get(key)
-    if (!existing) {
-      seen.set(key, { ...fact, name: normalizedName })
-      return
-    }
-
-    if (!existing.display && fact.display) existing.display = fact.display
-    if (existing.amount == null && fact.amount != null) existing.amount = fact.amount
-    if (!existing.unit && fact.unit) existing.unit = fact.unit
-    if (existing.percentDailyValue == null && fact.percentDailyValue != null) {
-      existing.percentDailyValue = fact.percentDailyValue
-    }
-  }
-
-  const processSource = (source: unknown, fallbackName?: string) => {
-    if (!source) return
-
-    if (Array.isArray(source)) {
-      source.forEach((entry) => processSource(entry, fallbackName))
-      return
-    }
-
-    if (typeof source === "string" || typeof source === "number") {
-      upsert(parseNutritionEntry(source, fallbackName))
-      return
-    }
-
-    if (typeof source !== "object") return
-
-    const record = source as Record<string, unknown>
-
-    const directFact = parseNutritionEntry(record, fallbackName)
-    if (directFact) {
-      upsert(directFact)
-    }
-
-    for (const [key, value] of Object.entries(record)) {
-      if (key === "name" || key === "label" || key === "title") continue
-      const label =
-        typeof value === "object" && value && typeof (value as Record<string, unknown>).name === "string"
-          ? ((value as Record<string, unknown>).name as string)
-          : key
-      processSource(value, label)
-    }
-  }
-
-  const potentialSources = [
-    (food as Record<string, unknown>).nutrition,
-    (food as Record<string, unknown>).nutrition_facts,
-    (food as Record<string, unknown>).nutritionFacts,
-    (food as Record<string, unknown>).nutrients,
-    (food as Record<string, unknown>).nutrient_list,
-    (food as Record<string, unknown>).nutrientInfo,
-    (food as Record<string, unknown>).nutrition_info,
-    (food as Record<string, unknown>).analysis,
-    (food as Record<string, unknown>).full_nutrition,
-    (food as Record<string, unknown>).additional_nutrition,
-    (food as Record<string, unknown>).attributes &&
-      typeof (food as Record<string, unknown>).attributes === "object"
-      ? ((food as Record<string, unknown>).attributes as Record<string, unknown>).nutrition
-      : undefined,
-    (food as Record<string, unknown>).attributes &&
-      typeof (food as Record<string, unknown>).attributes === "object"
-      ? ((food as Record<string, unknown>).attributes as Record<string, unknown>).nutrients
-      : undefined
-  ]
-
-  for (const source of potentialSources) {
-    processSource(source)
-  }
-
-  return Array.from(seen.values())
-}
-
-const extractCalories = (food: WeeksFood | null | undefined, facts: NutritionFact[]): number | undefined => {
-  const calorieCandidates: unknown[] = []
-
-  if (food && typeof food === "object") {
-    const record = food as Record<string, unknown>
-    calorieCandidates.push(record.calories, record.calorie, record.kcal)
-
-    const directNutrition = record.nutrition as Record<string, unknown> | undefined
-    if (directNutrition && typeof directNutrition === "object") {
-      calorieCandidates.push(
-        (directNutrition as Record<string, unknown>).calories,
-        (directNutrition as Record<string, unknown>).calorie,
-        (directNutrition as Record<string, unknown>).kcal
-      )
-    }
-
-    const attributes = record.attributes as Record<string, unknown> | undefined
-    if (attributes && typeof attributes === "object") {
-      calorieCandidates.push(attributes.calories, attributes.calorie, attributes.kcal)
-      const attrNutrition = attributes.nutrition as Record<string, unknown> | undefined
-      if (attrNutrition && typeof attrNutrition === "object") {
-        calorieCandidates.push(
-          attrNutrition.calories,
-          attrNutrition.calorie,
-          attrNutrition.kcal
-        )
-      }
-    }
-  }
-
-  for (const candidate of calorieCandidates) {
-    const parsed = nutritionValueToNumber(candidate)
-    if (parsed != null) return parsed
-  }
-
-  for (const fact of facts) {
-    if (fact.name.toLowerCase().includes("calorie")) {
-      if (fact.amount != null) return fact.amount
-      const parsed = nutritionValueToNumber(fact.display)
-      if (parsed != null) return parsed
-    }
-  }
-
-  return undefined
-}
-
-/** Fetch the SAME URL shape as your working curl */
-async function fetchWeeksMenuByMeal(school: string, meal: string, date: string): Promise<WeeksResponse> {
-  const [y, m, d] = date.split("-")
-  const url = `${NUTRISLICE_BASE_URL}/weeks/school/${encodeURIComponent(
-    school
-  )}/menu-type/${encodeURIComponent(meal.toLowerCase())}/${y}/${m}/${d}/?format=json`
-
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": USER_AGENT,
-      Accept: "application/json",
-      Origin: "https://yaledining.nutrislice.com",
-      Referer: "https://yaledining.nutrislice.com/",
-      "Accept-Language": "en-US,en;q=0.9"
-    },
-    cache: "no-store"
-  })
-  if (!res.ok) throw new Error(`weeks menu failed ${res.status}`)
-  const json = (await res.json()) as unknown
-  return (typeof json === "object" && json !== null ? (json as WeeksResponse) : {}) as WeeksResponse
-}
-
-/** Convert the weeks/day payload to your MenuMeal[] (skip null separators, de-dupe by name) */
-function buildMealsFromWeeks(day: WeeksDay): MenuMeal[] {
-  const items: MenuItem[] = []
-
-  for (const mi of day.menu_items ?? []) {
-    const food = mi?.food
-    const name = food?.name
-    if (!name) continue // skip the null rows you saw in jq
-    const description = food?.description?.trim() || undefined
-    const nutritionFacts = extractNutritionFacts(food)
-    const calories = extractCalories(food, nutritionFacts)
-
-    items.push({
-      name: String(name).trim(),
-      description,
-      calories,
-      nutritionFacts
-    })
-  }
-
-  const deduped = dedupeByName(items)
-  // The weeks/menu-type endpoint is scoped to a single meal,
-  // but to keep the outward shape stable, return both buckets.
-  return [
-    { mealType: "Lunch", items: deduped },
-    { mealType: "Dinner", items: deduped }
-  ]
-}
-
-function dedupeByName(items: MenuItem[]): MenuItem[] {
-  const map = new Map<string, MenuItem>()
-  for (const it of items) {
-    const key = it.name
-    const existing = map.get(key)
-    if (!existing) {
-      map.set(key, { ...it, nutritionFacts: [...it.nutritionFacts] })
-      continue
-    }
-
-    if (!existing.description && it.description) existing.description = it.description
-    if (existing.calories == null && it.calories != null) existing.calories = it.calories
-    existing.nutritionFacts = mergeNutritionFacts(existing.nutritionFacts, it.nutritionFacts)
-  }
-  return Array.from(map.values())
-}
-
-/** GET /api/yale-menu?date=YYYY-MM-DD&meal=dinner|lunch */
+/* ---------------- Route ---------------- */
 export async function GET(request: NextRequest) {
   const url = new URL(request.url)
   const date = url.searchParams.get("date") ?? new Date().toISOString().slice(0, 10)
@@ -441,28 +340,24 @@ export async function GET(request: NextRequest) {
 
   try {
     const weeks = await fetchWeeksMenuByMeal(SCHOOL_SLUG, meal, date)
+    if (!weeks) return buildFallbackResponse(date, "weeks menu failed or returned non-JSON")
+
     const day: WeeksDay | undefined = weeks?.days?.find((d) => d?.date === date)
     if (!day) return buildFallbackResponse(date, `No menu found for ${SCHOOL_SLUG} ${meal} on ${date}`)
 
-    const meals = buildMealsFromWeeks(day)
+    const meals = await buildMealsFromWeeks(day, date)
     const picked =
       meals.find((m) => m.mealType.toLowerCase() === normalizeMealName(meal).toLowerCase()) ??
       meals.find((m) => m.mealType.toLowerCase() === "dinner") ??
       meals[0]
 
-    const payload: { date: string; source: "live"; menu: MenuLocation[] } = {
+    return NextResponse.json({
       date,
-      source: "live",
-      menu: [
-        {
-          location: "Jonathan Edwards College",
-          meals: [picked]
-        }
-      ]
-    }
-    return NextResponse.json(payload)
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+      source: "live" as const,
+      menu: [{ location: "Jonathan Edwards College", meals: [picked] }]
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
     return buildFallbackResponse(date, msg)
   }
 }
