@@ -2,101 +2,22 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 
-type Role = "athlete" | "coach"
-
-export type NutritionFact = {
-  name: string
-  amount?: number
-  unit?: string
-  percentDailyValue?: number
-  display?: string
-}
-
-export type HydrationLog = {
-  id: number
-  date: string
-  ounces: number
-  source: string
-  time: string
-}
-
-export type MealLog = {
-  id: number
-  dateTime: string
-  mealType: string
-  calories: number
-  proteinG: number
-  notes: string
-  completed: boolean
-  nutritionFacts: NutritionFact[]
-}
-
-type Session = {
-  id: number
-  type: string
-  title: string
-  startAt: string
-  endAt: string
-  intensity: string
-  notes?: string
-  completed: boolean
-  assignedBy?: string
-  focus?: string
-}
-
-type CalendarEvent = {
-  id: number
-  title: string
-  date: string
-  timeRange: string
-  type: string
-  focus?: string
-}
-
-type WorkoutPlan = {
-  id: number
-  title: string
-  focus: string
-  dueDate: string
-  status: "Scheduled" | "Completed"
-  intensity: string
-  assignedBy?: string
-}
-
-const normalizeTag = (tag: string) => tag.trim().toLowerCase()
-
-const normalizeTags = (tags: string[] = []) => {
-  const normalized = tags
-    .map(normalizeTag)
-    .filter((tag) => tag.length > 0)
-  return Array.from(new Set(normalized))
-}
-
-type Athlete = {
-  id: number
-  name: string
-  email: string
-  sport: string
-  level: string
-  team: string
-  tags: string[]
-  sessions: Session[]
-  calendar: CalendarEvent[]
-  workouts: WorkoutPlan[]
-  hydrationLogs: HydrationLog[]
-  mealLogs: MealLog[]
-  coachEmail?: string
-  position?: string
-  heightCm?: number
-  weightKg?: number
-  allergies?: string[]
-  phone?: string
-  location?: string
-  university?: string
-  graduationYear?: string
-  notes?: string
-  isSeedData?: boolean
-}
+import type {
+  Athlete,
+  HydrationLog,
+  MealLog,
+  Role,
+  StoredAccount,
+  UserAccount,
+} from "@/lib/role-types"
+export type { MealLog, NutritionFact } from "@/lib/role-types"
+import { initialAthletes } from "@/lib/initial-data"
+import {
+  normalizeAccounts,
+  normalizeAthletes,
+  normalizeTag,
+  normalizeTags,
+} from "@/lib/state-normalizer"
 
 type ScheduleSessionInput = {
   type: string
@@ -143,16 +64,6 @@ type UpdateAthleteInput = Partial<
   >
 >
 
-type StoredAccount = {
-  email: string
-  name: string
-  role: Role
-  password: string
-  athleteId?: number
-}
-
-type UserAccount = Omit<StoredAccount, "password">
-
 type LoginInput = {
   email: string
   role: Role
@@ -193,6 +104,7 @@ type RoleContextValue = {
 const RoleContext = createContext<RoleContextValue | undefined>(undefined)
 
 const STORAGE_KEY = "locker-app-state-v1"
+const SERVER_STATE_ENDPOINT = "/api/state"
 
 const formatTimeRange = (startIso: string, endIso: string) => {
   const start = new Date(startIso)
@@ -225,116 +137,6 @@ const sortByDate = <T,>(items: T[], accessor: (item: T) => string) => {
   })
 }
 
-const initialHydrationLogs: HydrationLog[] = [
-  { id: 1, date: "2024-01-15", ounces: 8, source: "cup", time: "08:00" },
-  { id: 2, date: "2024-01-15", ounces: 12, source: "bottle", time: "10:30" },
-  { id: 3, date: "2024-01-15", ounces: 8, source: "cup", time: "12:00" },
-  { id: 4, date: "2024-01-15", ounces: 17, source: "shake", time: "14:00" },
-  { id: 5, date: "2024-01-15", ounces: 8, source: "cup", time: "16:30" },
-]
-
-const initialMealLogs: MealLog[] = [
-  {
-    id: 1,
-    dateTime: "2024-01-15T08:00:00Z",
-    mealType: "breakfast",
-    calories: 450,
-    proteinG: 25,
-    notes: "Oatmeal with berries and protein powder",
-    completed: true,
-    nutritionFacts: [],
-  },
-  {
-    id: 2,
-    dateTime: "2024-01-15T12:30:00Z",
-    mealType: "lunch",
-    calories: 650,
-    proteinG: 40,
-    notes: "Grilled chicken salad",
-    completed: true,
-    nutritionFacts: [],
-  },
-  {
-    id: 3,
-    dateTime: "2024-01-15T18:00:00Z",
-    mealType: "dinner",
-    calories: 0,
-    proteinG: 0,
-    notes: "Planned: Salmon with quinoa",
-    completed: false,
-    nutritionFacts: [],
-  },
-  {
-    id: 4,
-    dateTime: "2024-01-15T15:00:00Z",
-    mealType: "snack",
-    calories: 200,
-    proteinG: 15,
-    notes: "Greek yogurt with nuts",
-    completed: true,
-    nutritionFacts: [],
-  },
-]
-
-const initialAthletes: Athlete[] = [
-  {
-    id: 1,
-    name: "Alex Johnson",
-    email: "alex.johnson@locker.app",
-    sport: "Track & Field",
-    level: "Elite",
-    team: "Sprints",
-    tags: ["track", "sprints"],
-    sessions: [
-      {
-        id: 1,
-        type: "practice",
-        title: "Morning Practice",
-        startAt: "2024-01-15T06:00:00Z",
-        endAt: "2024-01-15T08:00:00Z",
-        intensity: "high",
-        notes: "Focus on technique",
-        completed: true,
-        assignedBy: "Coach Rivera",
-        focus: "Acceleration Drills",
-      },
-    ],
-    calendar: [
-      {
-        id: 1,
-        title: "Morning Practice",
-        date: "2024-01-15",
-        timeRange: "6:00 AM - 8:00 AM",
-        type: "practice",
-        focus: "Acceleration Drills",
-      },
-    ],
-    workouts: [
-      {
-        id: 1,
-        title: "Acceleration Drills",
-        focus: "Speed Mechanics",
-        dueDate: "2024-01-15",
-        status: "Completed",
-        intensity: "high",
-        assignedBy: "Coach Rivera",
-      },
-    ],
-    hydrationLogs: initialHydrationLogs,
-    mealLogs: initialMealLogs,
-    coachEmail: "coach.rivera@locker.app",
-    position: "Sprint Specialist",
-    heightCm: 175,
-    weightKg: 70,
-    allergies: ["Peanuts", "Shellfish"],
-    phone: "+1 (555) 123-4567",
-    location: "San Francisco, CA",
-    university: "University of California",
-    graduationYear: "2025",
-    isSeedData: true,
-  },
-]
-
 export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [role, setRoleState] = useState<Role>("athlete")
   const [athletes, setAthletes] = useState<Athlete[]>(initialAthletes)
@@ -359,21 +161,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (parsed.role) setRoleState(parsed.role)
-      if (Array.isArray(parsed.athletes) && parsed.athletes.length > 0) {
-        const normalized: Athlete[] = parsed.athletes.map((athlete: Athlete) => ({
-          ...athlete,
-          tags: Array.isArray(athlete.tags) ? normalizeTags(athlete.tags) : [],
-          sessions: Array.isArray(athlete.sessions) ? athlete.sessions : [],
-          calendar: Array.isArray(athlete.calendar) ? athlete.calendar : [],
-          workouts: Array.isArray(athlete.workouts) ? athlete.workouts : [],
-          hydrationLogs: Array.isArray((athlete as Partial<Athlete>).hydrationLogs)
-            ? (athlete as Partial<Athlete>).hydrationLogs!
-            : [],
-          mealLogs: Array.isArray((athlete as Partial<Athlete>).mealLogs)
-            ? (athlete as Partial<Athlete>).mealLogs!
-            : [],
-        }))
-        setAthletes(normalized)
+      const normalizedAthletes = normalizeAthletes(parsed.athletes)
+      if (normalizedAthletes.length > 0) {
+        setAthletes(normalizedAthletes)
       }
       if (typeof parsed.activeAthleteId === "number" || parsed.activeAthleteId === null) {
         setActiveAthleteId(parsed.activeAthleteId ?? null)
@@ -381,18 +171,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       if (parsed.currentUser) {
         setCurrentUser(parsed.currentUser)
       }
-      if (Array.isArray(parsed.accounts)) {
-        const normalizedAccounts = parsed.accounts
-          .filter((account): account is StoredAccount =>
-            typeof account?.email === "string" &&
-            typeof account?.password === "string" &&
-            (account?.role === "athlete" || account?.role === "coach")
-          )
-          .map((account) => ({
-            ...account,
-            email: account.email.trim().toLowerCase(),
-            name: account.name?.trim() || account.email.trim().toLowerCase(),
-          }))
+      const normalizedAccounts = normalizeAccounts(parsed.accounts)
+      if (normalizedAccounts.length > 0) {
         setAccounts(normalizedAccounts)
       }
     } catch (error) {
@@ -414,9 +194,101 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(STORAGE_KEY, payload)
   }, [role, athletes, activeAthleteId, currentUser, accounts, isHydrated])
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !isHydrated) return
+    let cancelled = false
+
+    const fetchServerState = async () => {
+      try {
+        const response = await fetch(SERVER_STATE_ENDPOINT, { cache: "no-store" })
+        if (!response.ok) return
+        const payload = (await response.json()) as {
+          accounts?: unknown
+          athletes?: unknown
+        }
+        if (cancelled) return
+
+        const serverAccounts = normalizeAccounts(payload.accounts)
+        if (serverAccounts.length > 0) {
+          setAccounts((prev) => {
+            if (prev.length === 0) return serverAccounts
+            const merged = new Map<string, StoredAccount>()
+            for (const account of prev) {
+              merged.set(`${account.email}:${account.role}`, account)
+            }
+            for (const account of serverAccounts) {
+              merged.set(`${account.email}:${account.role}`, account)
+            }
+            return Array.from(merged.values())
+          })
+        }
+
+        const serverAthletes = normalizeAthletes(payload.athletes)
+        if (serverAthletes.length > 0) {
+          let mergedIdSet: Set<number> | null = null
+          let fallbackId: number | null = serverAthletes[0]?.id ?? null
+          setAthletes((prev) => {
+            const serverIds = new Set(serverAthletes.map((athlete) => athlete.id))
+            const extras = prev.filter((athlete) => !serverIds.has(athlete.id))
+            const merged = [...serverAthletes, ...extras]
+            mergedIdSet = new Set(merged.map((athlete) => athlete.id))
+            if (fallbackId == null && merged.length > 0) {
+              fallbackId = merged[0].id
+            }
+            return merged
+          })
+
+          if (mergedIdSet) {
+            const resolvedFallback = fallbackId
+            setActiveAthleteId((prevId) => {
+              if (prevId != null && mergedIdSet!.has(prevId)) {
+                return prevId
+              }
+              if (resolvedFallback != null) return resolvedFallback
+              return prevId ?? null
+            })
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load server Locker state", error)
+      }
+    }
+
+    void fetchServerState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isHydrated])
+
   const setRole = useCallback((nextRole: Role) => {
     setRoleState(nextRole)
   }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isHydrated) return
+    const controller = new AbortController()
+
+    const syncState = async () => {
+      try {
+        await fetch(SERVER_STATE_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accounts, athletes }),
+          signal: controller.signal,
+        })
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return
+        console.error("Failed to sync Locker state", error)
+      }
+    }
+
+    void syncState()
+
+    return () => {
+      controller.abort()
+    }
+  }, [accounts, athletes, isHydrated])
 
   const applySessionToAthlete = useCallback(
     (
