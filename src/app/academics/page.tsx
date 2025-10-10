@@ -1,12 +1,13 @@
 "use client"
 
-import { ChangeEvent, useState } from "react"
+import { ChangeEvent, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useRole } from "@/components/role-context"
 import {
   BookOpen,
   Plus,
@@ -266,8 +267,14 @@ const formatDate = (dateString: string) => {
 }
 
 export default function Academics() {
-  const [courses, setCourses] = useState(mockCourses)
-  const [academicItems, setAcademicItems] = useState<AcademicItem[]>(mockAcademicItems)
+  const { currentUser } = useRole()
+  const storageKey = useMemo(
+    () => (currentUser ? `locker-academics-${currentUser.email}` : null),
+    [currentUser]
+  )
+
+  const [courses, setCourses] = useState<Course[]>(() => (currentUser ? [] : mockCourses))
+  const [academicItems, setAcademicItems] = useState<AcademicItem[]>(() => (currentUser ? [] : mockAcademicItems))
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -278,6 +285,46 @@ export default function Academics() {
     dueAt: "",
     notes: ""
   })
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!currentUser) {
+      setCourses(mockCourses)
+      setAcademicItems(mockAcademicItems)
+      return
+    }
+
+    if (!storageKey) return
+
+    try {
+      const stored = window.localStorage.getItem(storageKey)
+      if (!stored) {
+        setCourses([])
+        setAcademicItems([])
+        return
+      }
+
+      const parsed = JSON.parse(stored) as {
+        courses?: Course[]
+        academicItems?: AcademicItem[]
+      }
+
+      setCourses(Array.isArray(parsed.courses) ? parsed.courses : [])
+      setAcademicItems(Array.isArray(parsed.academicItems) ? parsed.academicItems : [])
+    } catch (error) {
+      console.error("Failed to load academics data", error)
+      setCourses([])
+      setAcademicItems([])
+    }
+  }, [currentUser, storageKey])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!currentUser || !storageKey) return
+
+    const payload = JSON.stringify({ courses, academicItems })
+    window.localStorage.setItem(storageKey, payload)
+  }, [courses, academicItems, currentUser, storageKey])
 
   const handleAddItem = () => {
     if (newItem.courseId && newItem.title && newItem.dueAt) {

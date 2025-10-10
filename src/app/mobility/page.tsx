@@ -1,107 +1,99 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Activity, 
-  Plus, 
-  Play, 
-  Clock,
-  Target,
-  BookOpen,
-  Zap,
-  TrendingUp
-} from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Activity, Plus, Play, Clock, TrendingUp } from "lucide-react"
+import { useRole } from "@/components/role-context"
 
-// Mock data
 const mockExercises = [
-  { 
-    id: 1, 
-    group: "back", 
-    name: "Cat-Cow Stretch", 
-    youtubeUrl: "https://youtube.com/watch?v=example1", 
+  {
+    id: 1,
+    group: "back",
+    name: "Cat-Cow Stretch",
+    youtubeUrl: "https://youtube.com/watch?v=example1",
     prescription: "10 reps, hold 5 seconds each",
-    thumbnail: "🧘‍♀️"
+    thumbnail: "🧘‍♀️",
   },
-  { 
-    id: 2, 
-    group: "hips", 
-    name: "Hip Flexor Stretch", 
-    youtubeUrl: "https://youtube.com/watch?v=example2", 
+  {
+    id: 2,
+    group: "hips",
+    name: "Hip Flexor Stretch",
+    youtubeUrl: "https://youtube.com/watch?v=example2",
     prescription: "Hold 30 seconds each side",
-    thumbnail: "🤸‍♂️"
+    thumbnail: "🤸‍♂️",
   },
-  { 
-    id: 3, 
-    group: "hamstrings", 
-    name: "Forward Fold", 
-    youtubeUrl: "https://youtube.com/watch?v=example3", 
+  {
+    id: 3,
+    group: "hamstrings",
+    name: "Forward Fold",
+    youtubeUrl: "https://youtube.com/watch?v=example3",
     prescription: "Hold 45 seconds, 3 sets",
-    thumbnail: "🧘‍♂️"
+    thumbnail: "🧘‍♂️",
   },
-  { 
-    id: 4, 
-    group: "quads", 
-    name: "Quad Stretch", 
-    youtubeUrl: "https://youtube.com/watch?v=example4", 
+  {
+    id: 4,
+    group: "quads",
+    name: "Quad Stretch",
+    youtubeUrl: "https://youtube.com/watch?v=example4",
     prescription: "Hold 30 seconds each leg",
-    thumbnail: "🏃‍♂️"
+    thumbnail: "🏃‍♂️",
   },
-  { 
-    id: 5, 
-    group: "ankles", 
-    name: "Ankle Circles", 
-    youtubeUrl: "https://youtube.com/watch?v=example5", 
+  {
+    id: 5,
+    group: "ankles",
+    name: "Ankle Circles",
+    youtubeUrl: "https://youtube.com/watch?v=example5",
     prescription: "10 circles each direction",
-    thumbnail: "🦶"
+    thumbnail: "🦶",
   },
-  { 
-    id: 6, 
-    group: "back", 
-    name: "Thoracic Extension", 
-    youtubeUrl: "https://youtube.com/watch?v=example6", 
+  {
+    id: 6,
+    group: "back",
+    name: "Thoracic Extension",
+    youtubeUrl: "https://youtube.com/watch?v=example6",
     prescription: "15 reps, 2 sets",
-    thumbnail: "🧘‍♀️"
+    thumbnail: "🧘‍♀️",
   }
 ]
 
 const mockMobilityLogs = [
-  { 
-    id: 1, 
-    exerciseId: 1, 
-    exerciseName: "Cat-Cow Stretch", 
-    date: "2024-01-15", 
-    durationMin: 5, 
-    notes: "Felt tight in lower back"
+  {
+    id: 1,
+    exerciseId: 1,
+    exerciseName: "Cat-Cow Stretch",
+    date: "2024-01-15",
+    durationMin: 5,
+    notes: "Felt tight in lower back",
   },
-  { 
-    id: 2, 
-    exerciseId: 2, 
-    exerciseName: "Hip Flexor Stretch", 
-    date: "2024-01-15", 
-    durationMin: 8, 
-    notes: "Right side tighter than left"
+  {
+    id: 2,
+    exerciseId: 2,
+    exerciseName: "Hip Flexor Stretch",
+    date: "2024-01-15",
+    durationMin: 8,
+    notes: "Right side tighter than left",
   },
-  { 
-    id: 3, 
-    exerciseId: 3, 
-    exerciseName: "Forward Fold", 
-    date: "2024-01-14", 
-    durationMin: 10, 
-    notes: "Good flexibility today"
+  {
+    id: 3,
+    exerciseId: 3,
+    exerciseName: "Forward Fold",
+    date: "2024-01-14",
+    durationMin: 10,
+    notes: "Good flexibility today",
   },
-  { 
-    id: 4, 
-    exerciseId: 4, 
-    exerciseName: "Quad Stretch", 
-    date: "2024-01-14", 
-    durationMin: 6, 
-    notes: "Post-workout stretch"
+  {
+    id: 4,
+    exerciseId: 4,
+    exerciseName: "Quad Stretch",
+    date: "2024-01-14",
+    durationMin: 6,
+    notes: "Post-workout stretch",
   }
 ]
 
@@ -126,28 +118,74 @@ const exerciseGroups = [
 ]
 
 export default function Mobility() {
-  const [exercises, setExercises] = useState(mockExercises)
-  const [mobilityLogs, setMobilityLogs] = useState(mockMobilityLogs)
+  const { currentUser } = useRole()
+  const storageKey = useMemo(
+    () => (currentUser ? `locker-mobility-${currentUser.email}` : null),
+    [currentUser]
+  )
+
+  const [exercises, setExercises] = useState(() => (currentUser ? [] : mockExercises))
+  const [mobilityLogs, setMobilityLogs] = useState(() => (currentUser ? [] : mockMobilityLogs))
   const [isAddExerciseOpen, setIsAddExerciseOpen] = useState(false)
   const [isLogExerciseOpen, setIsLogExerciseOpen] = useState(false)
   const [newExercise, setNewExercise] = useState({
     group: "back",
     name: "",
     youtubeUrl: "",
-    prescription: ""
+    prescription: "",
   })
   const [newLog, setNewLog] = useState({
     exerciseId: "",
     durationMin: "",
-    notes: ""
+    notes: "",
   })
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!currentUser) {
+      setExercises(mockExercises)
+      setMobilityLogs(mockMobilityLogs)
+      return
+    }
+
+    if (!storageKey) return
+
+    try {
+      const stored = window.localStorage.getItem(storageKey)
+      if (!stored) {
+        setExercises([])
+        setMobilityLogs([])
+        return
+      }
+
+      const parsed = JSON.parse(stored) as {
+        exercises?: typeof mockExercises
+        mobilityLogs?: typeof mockMobilityLogs
+      }
+
+      setExercises(Array.isArray(parsed.exercises) ? parsed.exercises : [])
+      setMobilityLogs(Array.isArray(parsed.mobilityLogs) ? parsed.mobilityLogs : [])
+    } catch (error) {
+      console.error("Failed to load mobility data", error)
+      setExercises([])
+      setMobilityLogs([])
+    }
+  }, [currentUser, storageKey])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!currentUser || !storageKey) return
+
+    const payload = JSON.stringify({ exercises, mobilityLogs })
+    window.localStorage.setItem(storageKey, payload)
+  }, [currentUser, storageKey, exercises, mobilityLogs])
 
   const handleAddExercise = () => {
     if (newExercise.name && newExercise.prescription) {
       const exercise = {
         id: exercises.length + 1,
         ...newExercise,
-        thumbnail: getGroupIcon(newExercise.group)
+        thumbnail: getGroupIcon(newExercise.group),
       }
       setExercises(prev => [...prev, exercise])
       setNewExercise({ group: "back", name: "", youtubeUrl: "", prescription: "" })
@@ -164,7 +202,7 @@ export default function Mobility() {
         exerciseName: exercise?.name || "",
         date: new Date().toISOString().split('T')[0],
         durationMin: parseInt(newLog.durationMin),
-        notes: newLog.notes
+        notes: newLog.notes,
       }
       setMobilityLogs(prev => [...prev, log])
       setNewLog({ exerciseId: "", durationMin: "", notes: "" })
@@ -172,41 +210,24 @@ export default function Mobility() {
     }
   }
 
-  const openLogDialog = (exercise: typeof exercises[0]) => {
+  const openLogDialog = (exercise: (typeof exercises)[number]) => {
     setNewLog(prev => ({ ...prev, exerciseId: exercise.id.toString() }))
     setIsLogExerciseOpen(true)
   }
 
   const exercisesByGroup = exerciseGroups.map(group => ({
     ...group,
-    exercises: exercises.filter(exercise => exercise.group === group.name)
+    exercises: exercises.filter(exercise => exercise.group === group.name),
   }))
 
-  const totalMinutesThisWeek = mobilityLogs.reduce((sum, log) => {
-    const logDate = new Date(log.date)
-    const weekAgo = new Date()
-    weekAgo.setDate(weekAgo.getDate() - 7)
-    return logDate >= weekAgo ? sum + log.durationMin : sum
-  }, 0)
-
-  const uniqueExercisesThisWeek = new Set(
-    mobilityLogs
-      .filter(log => {
-        const logDate = new Date(log.date)
-        const weekAgo = new Date()
-        weekAgo.setDate(weekAgo.getDate() - 7)
-        return logDate >= weekAgo
-      })
-      .map(log => log.exerciseId)
-  ).size
+  const totalMinutes = mobilityLogs.reduce((sum, log) => sum + (log.durationMin || 0), 0)
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Mobility</h1>
-          <p className="text-muted-foreground">Exercise library and movement tracking</p>
+          <p className="text-muted-foreground">Build your custom mobility routines and log recovery work</p>
         </div>
         <div className="flex gap-2">
           <Dialog open={isAddExerciseOpen} onOpenChange={setIsAddExerciseOpen}>
@@ -218,83 +239,84 @@ export default function Mobility() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Add Exercise</DialogTitle>
+                <DialogTitle>Create Mobility Exercise</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium">Body Area</label>
-                  <select 
+                  <label className="text-sm font-medium">Muscle Group</label>
+                  <select
                     className="w-full p-2 border rounded-md"
                     value={newExercise.group}
                     onChange={(e) => setNewExercise(prev => ({ ...prev, group: e.target.value }))}
                   >
                     {exerciseGroups.map(group => (
                       <option key={group.name} value={group.name}>
-                        {group.icon} {group.label}
+                        {group.label}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Exercise Name</label>
-                  <Input 
+                  <Input
                     value={newExercise.name}
                     onChange={(e) => setNewExercise(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g., Cat-Cow Stretch"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">YouTube URL (optional)</label>
-                  <Input 
-                    value={newExercise.youtubeUrl}
-                    onChange={(e) => setNewExercise(prev => ({ ...prev, youtubeUrl: e.target.value }))}
-                    placeholder="https://youtube.com/watch?v=..."
+                    placeholder="90/90 Hip Stretch"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Prescription</label>
-                  <Input 
+                  <Input
                     value={newExercise.prescription}
                     onChange={(e) => setNewExercise(prev => ({ ...prev, prescription: e.target.value }))}
-                    placeholder="e.g., 10 reps, hold 5 seconds each"
+                    placeholder="Hold 30 seconds each side"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">YouTube Link</label>
+                  <Input
+                    value={newExercise.youtubeUrl}
+                    onChange={(e) => setNewExercise(prev => ({ ...prev, youtubeUrl: e.target.value }))}
+                    placeholder="https://youtube.com/..."
                   />
                 </div>
                 <Button onClick={handleAddExercise} className="w-full">
-                  Add Exercise
+                  Save Exercise
                 </Button>
               </div>
             </DialogContent>
           </Dialog>
+
           <Dialog open={isLogExerciseOpen} onOpenChange={setIsLogExerciseOpen}>
             <DialogTrigger asChild>
               <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Log Exercise
+                <Activity className="h-4 w-4 mr-2" />
+                Log Session
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Log Exercise Session</DialogTitle>
+                <DialogTitle>Log Mobility Session</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium">Exercise</label>
-                  <select 
+                  <select
                     className="w-full p-2 border rounded-md"
                     value={newLog.exerciseId}
                     onChange={(e) => setNewLog(prev => ({ ...prev, exerciseId: e.target.value }))}
                   >
-                    <option value="">Select an exercise</option>
+                    <option value="">Select exercise</option>
                     {exercises.map(exercise => (
                       <option key={exercise.id} value={exercise.id}>
-                        {exercise.name} ({exercise.group})
+                        {exercise.name}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Duration (minutes)</label>
-                  <Input 
+                  <Input
                     type="number"
                     value={newLog.durationMin}
                     onChange={(e) => setNewLog(prev => ({ ...prev, durationMin: e.target.value }))}
@@ -302,15 +324,15 @@ export default function Mobility() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Notes (optional)</label>
-                  <Input 
+                  <label className="text-sm font-medium">Notes</label>
+                  <Input
                     value={newLog.notes}
                     onChange={(e) => setNewLog(prev => ({ ...prev, notes: e.target.value }))}
-                    placeholder="How did it feel?"
+                    placeholder="How did the session feel?"
                   />
                 </div>
                 <Button onClick={handleLogExercise} className="w-full">
-                  Log Exercise
+                  Save Log
                 </Button>
               </div>
             </DialogContent>
@@ -318,111 +340,82 @@ export default function Mobility() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Activity className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-sm font-medium">Total Exercises</p>
-                <p className="text-2xl font-bold">{exercises.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Clock className="h-5 w-5 text-[#1c6dd0]" />
-              <div>
-                <p className="text-sm font-medium">This Week</p>
-                <p className="text-2xl font-bold">{totalMinutesThisWeek}m</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Target className="h-5 w-5 text-[#0f4d92]" />
-              <div>
-                <p className="text-sm font-medium">Exercises Done</p>
-                <p className="text-2xl font-bold">{uniqueExercisesThisWeek}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <TrendingUp className="h-5 w-5 text-[#123d73]" />
-              <div>
-                <p className="text-sm font-medium">Avg Session</p>
-                <p className="text-2xl font-bold">8m</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Content */}
       <Tabs defaultValue="library" className="space-y-4">
         <TabsList>
           <TabsTrigger value="library">Exercise Library</TabsTrigger>
-          <TabsTrigger value="logs">Activity Log</TabsTrigger>
+          <TabsTrigger value="logs">Training Logs</TabsTrigger>
+          <TabsTrigger value="insights">Insights</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="library" className="space-y-6">
-          {exercisesByGroup.map(group => (
-            group.exercises.length > 0 && (
-              <div key={group.name}>
-                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                  <span className="text-2xl">{group.icon}</span>
-                  {group.label}
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {group.exercises.map(exercise => (
-                    <Card key={exercise.id}>
-                      <CardHeader className="pb-2">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-lg">{exercise.name}</CardTitle>
-                          <span className="text-2xl">{exercise.thumbnail}</span>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-sm text-muted-foreground mb-3">{exercise.prescription}</p>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
+        <TabsContent value="library" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {exercisesByGroup.map(group => (
+              <Card key={group.name}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                      <span className="text-2xl">{group.icon}</span>
+                      {group.label}
+                    </CardTitle>
+                    <Badge variant="secondary">{group.exercises.length} drills</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {group.exercises.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No exercises yet. Add one to get started.</p>
+                  ) : (
+                    group.exercises.map(exercise => (
+                      <div
+                        key={exercise.id}
+                        className="border rounded-lg p-3 bg-gradient-to-br from-white to-[#f5f7fb]"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">{exercise.thumbnail || getGroupIcon(group.name)}</span>
+                            <div>
+                              <h3 className="font-semibold text-[#0f2f5b]">{exercise.name}</h3>
+                              <p className="text-xs text-muted-foreground">{exercise.prescription}</p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => openLogDialog(exercise)}
-                            className="flex-1"
+                            className="text-primary"
                           >
-                            <Play className="h-4 w-4 mr-2" />
-                            Log Session
+                            <Play className="h-4 w-4 mr-1" /> Log
                           </Button>
-                          {exercise.youtubeUrl && (
-                            <Button size="sm" variant="outline" asChild>
-                              <a href={exercise.youtubeUrl} target="_blank" rel="noopener noreferrer">
-                                <BookOpen className="h-4 w-4" />
-                              </a>
-                            </Button>
-                          )}
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            )
-          ))}
+                        {exercise.youtubeUrl && (
+                          <a
+                            href={exercise.youtubeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-[#1c6dd0] hover:underline"
+                          >
+                            Watch demo
+                          </a>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
 
-        <TabsContent value="logs" className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold mb-4">Recent Activity</h2>
-            <Card>
-              <CardContent className="p-0">
+        <TabsContent value="logs">
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Mobility Sessions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {mobilityLogs.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Start logging your mobility work to build a recovery streak.
+                </p>
+              ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -436,45 +429,53 @@ export default function Mobility() {
                     {mobilityLogs.map(log => (
                       <TableRow key={log.id}>
                         <TableCell className="font-medium">{log.exerciseName}</TableCell>
-                        <TableCell>{new Date(log.date).toLocaleDateString()}</TableCell>
-                        <TableCell>{log.durationMin} minutes</TableCell>
-                        <TableCell className="max-w-xs truncate">{log.notes}</TableCell>
+                        <TableCell>{log.date}</TableCell>
+                        <TableCell>{log.durationMin} min</TableCell>
+                        <TableCell>{log.notes || "—"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="insights">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="bg-gradient-to-br from-[#0f4d92] to-[#123d73] text-white">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-white">
+                  <TrendingUp className="h-5 w-5" /> Weekly Volume
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-4xl font-bold">{totalMinutes} min</p>
+                <p className="text-sm text-blue-100">Total time logged this week</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-primary" /> Suggested Focus
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Keep your body moving by building routines around the muscle groups that feel the tightest.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {exerciseGroups.map(group => (
+                    <span key={group.name} className="px-3 py-1 rounded-full bg-[#eef5ff] text-[#0f2f5b] text-sm">
+                      {group.icon} {group.label}
+                    </span>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
       </Tabs>
-
-      {/* Quick Actions */}
-      <Card className="border-accent/20 bg-accent/5">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-accent-foreground">
-            <Zap className="h-5 w-5" />
-            Quick Actions
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button variant="outline" className="h-20 flex-col gap-2">
-              <span className="text-2xl">🧘‍♀️</span>
-              <span>Morning Routine</span>
-            </Button>
-            <Button variant="outline" className="h-20 flex-col gap-2">
-              <span className="text-2xl">🏃‍♂️</span>
-              <span>Pre-Workout</span>
-            </Button>
-            <Button variant="outline" className="h-20 flex-col gap-2">
-              <span className="text-2xl">🛌</span>
-              <span>Evening Wind-down</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
-

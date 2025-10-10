@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useRole } from "@/components/role-context"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,75 +22,230 @@ import {
   Settings,
   Mail,
   Phone,
-  MapPin
+  MapPin,
+  CheckCircle2,
 } from "lucide-react"
 
-// Mock data
-const mockProfile = {
-  name: "Alex Johnson",
-  email: "alex.johnson@university.edu",
-  sport: "Track & Field",
-  position: "Sprint Specialist",
-  heightCm: 175,
-  weightKg: 70,
-  allergies: ["Peanuts", "Shellfish"],
-  phone: "+1 (555) 123-4567",
-  location: "San Francisco, CA",
-  university: "University of California",
-  graduationYear: "2025"
+const formatHeight = (cm?: number | null) => {
+  if (!cm || Number.isNaN(cm)) return "Add your height"
+  const feet = Math.floor(cm / 30.48)
+  const inches = Math.round((cm % 30.48) / 2.54)
+  return `${feet}'${inches}"`
 }
 
-const mockStats = {
-  checkInsCompleted: 28,
-  sessionsThisMonth: 45,
-  hydrationAverage: 78,
-  academicItemsCompleted: 23,
-  prsThisMonth: 4,
-  mobilityMinutesThisWeek: 120
+const formatWeight = (kg?: number | null) => {
+  if (!kg || Number.isNaN(kg)) return "Add your weight"
+  const lbs = Math.round(kg * 2.205)
+  return `${lbs} lbs`
 }
 
-const mockHistory = {
-  weeklyCheckIns: [
-    { week: "Week 1", mental: 4.2, physical: 3.8 },
-    { week: "Week 2", mental: 4.5, physical: 4.1 },
-    { week: "Week 3", mental: 4.0, physical: 3.9 },
-    { week: "Week 4", mental: 4.3, physical: 4.2 }
-  ],
-  monthlyStats: [
-    { month: "Dec 2023", sessions: 42, hydration: 75, academics: 18 },
-    { month: "Jan 2024", sessions: 45, hydration: 78, academics: 23 }
-  ]
+const formatDate = (value: string) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value || "TBD"
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
 }
+
+const formatTimeRange = (start?: string, end?: string) => {
+  if (!start || !end) return ""
+  const startDate = new Date(start)
+  const endDate = new Date(end)
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return ""
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  })
+  return `${formatter.format(startDate)} - ${formatter.format(endDate)}`
+}
+
+type EditableProfile = {
+  name: string
+  sport: string
+  position: string
+  level: string
+  team: string
+  heightCm: string
+  weightKg: string
+  allergies: string
+  email: string
+  phone: string
+  location: string
+  university: string
+  graduationYear: string
+}
+
+const toEditableProfile = (
+  athlete: ReturnType<typeof useRole>["primaryAthlete"],
+  email: string | undefined
+): EditableProfile => ({
+  name: athlete?.name ?? "",
+  sport: athlete?.sport ?? "",
+  position: athlete?.position ?? "",
+  level: athlete?.level ?? "",
+  team: athlete?.team ?? "",
+  heightCm: athlete?.heightCm != null ? String(athlete.heightCm) : "",
+  weightKg: athlete?.weightKg != null ? String(athlete.weightKg) : "",
+  allergies: (athlete?.allergies ?? []).join(", "),
+  email: email ?? athlete?.email ?? "",
+  phone: athlete?.phone ?? "",
+  location: athlete?.location ?? "",
+  university: athlete?.university ?? "",
+  graduationYear: athlete?.graduationYear ?? "",
+})
 
 export default function Account() {
+  const { currentUser, primaryAthlete, updateAthleteProfile } = useRole()
   const [isEditing, setIsEditing] = useState(false)
-  const [profile, setProfile] = useState(mockProfile)
-  const [editedProfile, setEditedProfile] = useState(mockProfile)
+  const [editedProfile, setEditedProfile] = useState<EditableProfile>(() =>
+    toEditableProfile(primaryAthlete, currentUser?.email)
+  )
+
+  useEffect(() => {
+    setEditedProfile(toEditableProfile(primaryAthlete, currentUser?.email))
+    setIsEditing(false)
+  }, [primaryAthlete, currentUser?.email])
 
   const handleSave = () => {
-    setProfile(editedProfile)
+    if (!primaryAthlete) return
+
+    updateAthleteProfile(primaryAthlete.id, {
+      name: editedProfile.name.trim() || primaryAthlete.name,
+      sport: editedProfile.sport.trim(),
+      position: editedProfile.position.trim() || undefined,
+      level: editedProfile.level.trim(),
+      team: editedProfile.team.trim(),
+      heightCm: editedProfile.heightCm ? Number(editedProfile.heightCm) : undefined,
+      weightKg: editedProfile.weightKg ? Number(editedProfile.weightKg) : undefined,
+      allergies: editedProfile.allergies
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0),
+      email: editedProfile.email.trim().toLowerCase(),
+      phone: editedProfile.phone.trim() || undefined,
+      location: editedProfile.location.trim() || undefined,
+      university: editedProfile.university.trim() || undefined,
+      graduationYear: editedProfile.graduationYear.trim() || undefined,
+    })
+
     setIsEditing(false)
   }
 
   const handleCancel = () => {
-    setEditedProfile(profile)
+    setEditedProfile(toEditableProfile(primaryAthlete, currentUser?.email))
     setIsEditing(false)
   }
 
-  const formatHeight = (cm: number) => {
-    const feet = Math.floor(cm / 30.48)
-    const inches = Math.round((cm % 30.48) / 2.54)
-    return `${feet}'${inches}"`
+  const stats = useMemo(() => {
+    if (!primaryAthlete) {
+      return {
+        checkInsCompleted: 0,
+        sessionsThisMonth: 0,
+        hydrationAverage: 0,
+        academicItemsCompleted: 0,
+        prsThisMonth: 0,
+        mobilityMinutesThisWeek: 0,
+      }
+    }
+
+    const now = new Date()
+    const sessions = primaryAthlete.sessions ?? []
+    const completedSessions = sessions.filter((session) => session.completed)
+    const sessionsThisMonth = sessions.filter((session) => {
+      const date = new Date(session.startAt)
+      if (Number.isNaN(date.getTime())) return false
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+    })
+
+    const workouts = primaryAthlete.workouts ?? []
+    const prsThisMonth = workouts.filter((workout) => {
+      if (workout.status !== "Completed") return false
+      const date = new Date(workout.dueDate)
+      if (Number.isNaN(date.getTime())) return false
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+    })
+
+    const hydrationLogs = primaryAthlete.hydrationLogs ?? []
+    const hydrationAverage = hydrationLogs.length
+      ? Math.round(
+          hydrationLogs.reduce((total, log) => total + (log.ounces ?? 0), 0) / hydrationLogs.length
+        )
+      : 0
+
+    const mobilityMinutesThisWeek = 0
+
+    return {
+      checkInsCompleted: completedSessions.length,
+      sessionsThisMonth: sessionsThisMonth.length,
+      hydrationAverage,
+      academicItemsCompleted: 0,
+      prsThisMonth: prsThisMonth.length,
+      mobilityMinutesThisWeek,
+    }
+  }, [primaryAthlete])
+
+  const recentSessions = useMemo(() => {
+    if (!primaryAthlete) return []
+    return [...(primaryAthlete.sessions ?? [])]
+      .sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime())
+      .slice(0, 5)
+  }, [primaryAthlete])
+
+  const recentHydration = useMemo(() => {
+    if (!primaryAthlete) return []
+    return [...(primaryAthlete.hydrationLogs ?? [])]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 5)
+  }, [primaryAthlete])
+
+  const recentMeals = useMemo(() => {
+    if (!primaryAthlete) return []
+    return [...(primaryAthlete.mealLogs ?? [])]
+      .sort((a, b) => new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime())
+      .slice(0, 5)
+  }, [primaryAthlete])
+
+  if (!currentUser) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold text-foreground">Account</h1>
+        <p className="text-muted-foreground">Sign in to create your athlete profile and track your progress.</p>
+      </div>
+    )
   }
 
-  const formatWeight = (kg: number) => {
-    const lbs = Math.round(kg * 2.205)
-    return `${lbs} lbs`
+  if (currentUser.role === "coach") {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold text-foreground">Account</h1>
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <p className="text-muted-foreground">
+              Coach accounts are focused on athlete management. Switch to an athlete profile to customize personal
+              information.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
+
+  if (!primaryAthlete) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold text-foreground">Account</h1>
+        <p className="text-muted-foreground">Loading your athlete profile...</p>
+      </div>
+    )
+  }
+
+  const profile = primaryAthlete
+  const allergies = profile.allergies ?? []
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Account</h1>
@@ -116,46 +272,52 @@ export default function Account() {
         </div>
       </div>
 
-      {/* Profile Card */}
       <Card>
         <CardContent className="p-6">
           <div className="flex items-start space-x-6">
             <Avatar className="h-24 w-24">
               <AvatarImage src="/placeholder-avatar.jpg" />
               <AvatarFallback className="text-2xl">
-                {profile.name.split(' ').map(n => n[0]).join('')}
+                {profile.name ? profile.name.split(" ").map((n) => n[0]).join("") : "A"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 space-y-4">
               <div>
-                <h2 className="text-2xl font-bold">{profile.name}</h2>
-                <p className="text-muted-foreground">{profile.sport} • {profile.position}</p>
-                <p className="text-sm text-muted-foreground">{profile.university}</p>
+                <h2 className="text-2xl font-bold">{profile.name || "Add your name"}</h2>
+                <p className="text-muted-foreground">
+                  {[profile.sport, profile.position].filter(Boolean).join(" • ") || "Add your sport"}
+                </p>
+                {profile.university && <p className="text-sm text-muted-foreground">{profile.university}</p>}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center space-x-2">
                   <Mail className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{profile.email}</span>
+                  <span className="text-sm">{currentUser.email}</span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{profile.phone}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{profile.location}</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">Class of {profile.graduationYear}</span>
-                </div>
+                {profile.phone && (
+                  <div className="flex items-center space-x-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{profile.phone}</span>
+                  </div>
+                )}
+                {profile.location && (
+                  <div className="flex items-center space-x-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{profile.location}</span>
+                  </div>
+                )}
+                {profile.graduationYear && (
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">Class of {profile.graduationYear}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Main Content */}
       <Tabs defaultValue="profile" className="space-y-4">
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
@@ -166,7 +328,6 @@ export default function Account() {
 
         <TabsContent value="profile" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Personal Info */}
             <Card>
               <CardHeader>
                 <CardTitle>Personal Information</CardTitle>
@@ -175,44 +336,72 @@ export default function Account() {
                 <div>
                   <label className="text-sm font-medium">Name</label>
                   {isEditing ? (
-                    <Input 
+                    <Input
                       value={editedProfile.name}
-                      onChange={(e) => setEditedProfile(prev => ({ ...prev, name: e.target.value }))}
+                      onChange={(e) => setEditedProfile((prev) => ({ ...prev, name: e.target.value }))}
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">{profile.name}</p>
+                    <p className="text-sm text-muted-foreground">{profile.name || "Add your name"}</p>
                   )}
                 </div>
                 <div>
                   <label className="text-sm font-medium">Sport</label>
                   {isEditing ? (
-                    <Input 
+                    <Input
                       value={editedProfile.sport}
-                      onChange={(e) => setEditedProfile(prev => ({ ...prev, sport: e.target.value }))}
+                      onChange={(e) => setEditedProfile((prev) => ({ ...prev, sport: e.target.value }))}
+                      placeholder="Track & Field"
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">{profile.sport}</p>
+                    <p className="text-sm text-muted-foreground">{profile.sport || "Add your sport"}</p>
                   )}
                 </div>
                 <div>
                   <label className="text-sm font-medium">Position</label>
                   {isEditing ? (
-                    <Input 
+                    <Input
                       value={editedProfile.position}
-                      onChange={(e) => setEditedProfile(prev => ({ ...prev, position: e.target.value }))}
+                      onChange={(e) => setEditedProfile((prev) => ({ ...prev, position: e.target.value }))}
+                      placeholder="Sprint Specialist"
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">{profile.position}</p>
+                    <p className="text-sm text-muted-foreground">{profile.position || "Add your position"}</p>
                   )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Level</label>
+                    {isEditing ? (
+                      <Input
+                        value={editedProfile.level}
+                        onChange={(e) => setEditedProfile((prev) => ({ ...prev, level: e.target.value }))}
+                        placeholder="Collegiate"
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">{profile.level || "Add your level"}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Team</label>
+                    {isEditing ? (
+                      <Input
+                        value={editedProfile.team}
+                        onChange={(e) => setEditedProfile((prev) => ({ ...prev, team: e.target.value }))}
+                        placeholder="Sprints"
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">{profile.team || "Add your team"}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium">Height</label>
                     {isEditing ? (
-                      <Input 
+                      <Input
                         type="number"
                         value={editedProfile.heightCm}
-                        onChange={(e) => setEditedProfile(prev => ({ ...prev, heightCm: parseInt(e.target.value) }))}
+                        onChange={(e) => setEditedProfile((prev) => ({ ...prev, heightCm: e.target.value }))}
                         placeholder="175"
                       />
                     ) : (
@@ -222,10 +411,10 @@ export default function Account() {
                   <div>
                     <label className="text-sm font-medium">Weight</label>
                     {isEditing ? (
-                      <Input 
+                      <Input
                         type="number"
                         value={editedProfile.weightKg}
-                        onChange={(e) => setEditedProfile(prev => ({ ...prev, weightKg: parseInt(e.target.value) }))}
+                        onChange={(e) => setEditedProfile((prev) => ({ ...prev, weightKg: e.target.value }))}
                         placeholder="70"
                       />
                     ) : (
@@ -235,18 +424,27 @@ export default function Account() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Allergies</label>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {profile.allergies.map((allergy, index) => (
-                      <Badge key={index} variant="outline" className="bg-[#eef5ff] text-[#0f2f5b] border-[#c7d7ee]">
-                        {allergy}
-                      </Badge>
-                    ))}
-                  </div>
+                  {isEditing ? (
+                    <Input
+                      value={editedProfile.allergies}
+                      onChange={(e) => setEditedProfile((prev) => ({ ...prev, allergies: e.target.value }))}
+                      placeholder="Peanuts, Shellfish"
+                    />
+                  ) : allergies.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {allergies.map((allergy, index) => (
+                        <Badge key={index} variant="outline" className="bg-[#eef5ff] text-[#0f2f5b] border-[#c7d7ee]">
+                          {allergy}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Add any allergies you want your staff to know.</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Contact Info */}
             <Card>
               <CardHeader>
                 <CardTitle>Contact Information</CardTitle>
@@ -255,58 +453,62 @@ export default function Account() {
                 <div>
                   <label className="text-sm font-medium">Email</label>
                   {isEditing ? (
-                    <Input 
+                    <Input
                       type="email"
                       value={editedProfile.email}
-                      onChange={(e) => setEditedProfile(prev => ({ ...prev, email: e.target.value }))}
+                      onChange={(e) => setEditedProfile((prev) => ({ ...prev, email: e.target.value }))}
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">{profile.email}</p>
+                    <p className="text-sm text-muted-foreground">{currentUser.email}</p>
                   )}
                 </div>
                 <div>
                   <label className="text-sm font-medium">Phone</label>
                   {isEditing ? (
-                    <Input 
+                    <Input
                       value={editedProfile.phone}
-                      onChange={(e) => setEditedProfile(prev => ({ ...prev, phone: e.target.value }))}
+                      onChange={(e) => setEditedProfile((prev) => ({ ...prev, phone: e.target.value }))}
+                      placeholder="+1 (555) 123-4567"
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">{profile.phone}</p>
+                    <p className="text-sm text-muted-foreground">{profile.phone || "Add a phone number"}</p>
                   )}
                 </div>
                 <div>
                   <label className="text-sm font-medium">Location</label>
                   {isEditing ? (
-                    <Input 
+                    <Input
                       value={editedProfile.location}
-                      onChange={(e) => setEditedProfile(prev => ({ ...prev, location: e.target.value }))}
+                      onChange={(e) => setEditedProfile((prev) => ({ ...prev, location: e.target.value }))}
+                      placeholder="City, State"
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">{profile.location}</p>
+                    <p className="text-sm text-muted-foreground">{profile.location || "Add your location"}</p>
                   )}
                 </div>
                 <div>
                   <label className="text-sm font-medium">University</label>
                   {isEditing ? (
-                    <Input 
+                    <Input
                       value={editedProfile.university}
-                      onChange={(e) => setEditedProfile(prev => ({ ...prev, university: e.target.value }))}
+                      onChange={(e) => setEditedProfile((prev) => ({ ...prev, university: e.target.value }))}
+                      placeholder="University name"
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">{profile.university}</p>
+                    <p className="text-sm text-muted-foreground">{profile.university || "Add your university"}</p>
                   )}
                 </div>
                 <div>
                   <label className="text-sm font-medium">Graduation Year</label>
                   {isEditing ? (
-                    <Input 
+                    <Input
                       type="number"
                       value={editedProfile.graduationYear}
-                      onChange={(e) => setEditedProfile(prev => ({ ...prev, graduationYear: e.target.value }))}
+                      onChange={(e) => setEditedProfile((prev) => ({ ...prev, graduationYear: e.target.value }))}
+                      placeholder="2026"
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">{profile.graduationYear}</p>
+                    <p className="text-sm text-muted-foreground">{profile.graduationYear || "Add your graduation year"}</p>
                   )}
                 </div>
               </CardContent>
@@ -320,66 +522,60 @@ export default function Account() {
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
                   <Target className="h-5 w-5 text-primary" />
-                  <div>
-                    <p className="text-sm font-medium">Check-ins Completed</p>
-                    <p className="text-2xl font-bold">{mockStats.checkInsCompleted}</p>
-                  </div>
+                  <p className="text-sm font-medium">Check-ins Completed</p>
                 </div>
+                <p className="text-2xl font-bold mt-2">{stats.checkInsCompleted}</p>
+                <p className="text-xs text-muted-foreground">Completed training sessions</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Dumbbell className="h-5 w-5 text-[#0f4d92]" />
-                  <div>
-                    <p className="text-sm font-medium">Sessions This Month</p>
-                    <p className="text-2xl font-bold">{mockStats.sessionsThisMonth}</p>
-                  </div>
+                  <Activity className="h-5 w-5 text-primary" />
+                  <p className="text-sm font-medium">Sessions This Month</p>
                 </div>
+                <p className="text-2xl font-bold mt-2">{stats.sessionsThisMonth}</p>
+                <p className="text-xs text-muted-foreground">Scheduled sessions in the current month</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Droplets className="h-5 w-5 text-[#1c6dd0]" />
-                  <div>
-                    <p className="text-sm font-medium">Hydration Average</p>
-                    <p className="text-2xl font-bold">{mockStats.hydrationAverage}%</p>
-                  </div>
+                  <Droplets className="h-5 w-5 text-primary" />
+                  <p className="text-sm font-medium">Avg. Hydration (oz)</p>
                 </div>
+                <p className="text-2xl font-bold mt-2">{stats.hydrationAverage}</p>
+                <p className="text-xs text-muted-foreground">Average intake per log</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <BookOpen className="h-5 w-5 text-[#123d73]" />
-                  <div>
-                    <p className="text-sm font-medium">Academic Items</p>
-                    <p className="text-2xl font-bold">{mockStats.academicItemsCompleted}</p>
-                  </div>
+                  <BookOpen className="h-5 w-5 text-primary" />
+                  <p className="text-sm font-medium">Academic Items Completed</p>
                 </div>
+                <p className="text-2xl font-bold mt-2">{stats.academicItemsCompleted}</p>
+                <p className="text-xs text-muted-foreground">Track assignments from the academics tab</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Award className="h-5 w-5 text-[#0f2f5b]" />
-                  <div>
-                    <p className="text-sm font-medium">PRs This Month</p>
-                    <p className="text-2xl font-bold">{mockStats.prsThisMonth}</p>
-                  </div>
+                  <Award className="h-5 w-5 text-primary" />
+                  <p className="text-sm font-medium">Workouts Completed</p>
                 </div>
+                <p className="text-2xl font-bold mt-2">{stats.prsThisMonth}</p>
+                <p className="text-xs text-muted-foreground">Completed plans this month</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Activity className="h-5 w-5 text-[#1c4f8f]" />
-                  <div>
-                    <p className="text-sm font-medium">Mobility Minutes</p>
-                    <p className="text-2xl font-bold">{mockStats.mobilityMinutesThisWeek}</p>
-                  </div>
+                  <Dumbbell className="h-5 w-5 text-primary" />
+                  <p className="text-sm font-medium">Mobility Minutes</p>
                 </div>
+                <p className="text-2xl font-bold mt-2">{stats.mobilityMinutesThisWeek}</p>
+                <p className="text-xs text-muted-foreground">Log mobility work in the mobility tab</p>
               </CardContent>
             </Card>
           </div>
@@ -387,64 +583,86 @@ export default function Account() {
 
         <TabsContent value="history" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Weekly Check-ins */}
             <Card>
               <CardHeader>
-                <CardTitle>Weekly Check-in Trends</CardTitle>
+                <CardTitle>Recent Sessions</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {mockHistory.weeklyCheckIns.map((week, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
+              <CardContent className="space-y-4">
+                {recentSessions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No sessions logged yet. Schedule one from the training tab.</p>
+                ) : (
+                  recentSessions.map((session) => (
+                    <div key={session.id} className="flex items-start justify-between rounded-lg bg-secondary/40 p-3">
                       <div>
-                        <p className="font-medium">{week.week}</p>
-                        <div className="flex gap-4 text-sm text-muted-foreground">
-                          <span>Mental: {week.mental}/5</span>
-                          <span>Physical: {week.physical}/5</span>
+                        <p className="font-medium">{session.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(session.startAt)} • {formatTimeRange(session.startAt, session.endAt)}
+                        </p>
+                        <div className="flex gap-4 text-xs text-muted-foreground mt-1">
+                          <span className="flex items-center gap-1">
+                            <Activity className="h-3 w-3" /> {session.type}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Target className="h-3 w-3" /> {session.intensity}
+                          </span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">
-                          {(week.mental + week.physical) / 2}/5
-                        </p>
-                        <p className="text-xs text-muted-foreground">Average</p>
-                      </div>
+                      <Badge variant={session.completed ? "default" : "outline"} className="flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> {session.completed ? "Completed" : "Scheduled"}
+                      </Badge>
                     </div>
-                  ))}
-                </div>
+                  ))
+                )}
               </CardContent>
             </Card>
 
-            {/* Monthly Stats */}
             <Card>
               <CardHeader>
-                <CardTitle>Monthly Progress</CardTitle>
+                <CardTitle>Hydration Logs</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {mockHistory.monthlyStats.map((month, index) => (
-                    <div key={index} className="p-4 rounded-lg bg-secondary/50">
-                      <h3 className="font-semibold mb-3">{month.month}</h3>
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <p className="text-2xl font-bold text-[#0f4d92]">{month.sessions}</p>
-                          <p className="text-xs text-muted-foreground">Sessions</p>
-                        </div>
-                        <div>
-                          <p className="text-2xl font-bold text-[#1c6dd0]">{month.hydration}%</p>
-                          <p className="text-xs text-muted-foreground">Hydration</p>
-                        </div>
-                        <div>
-                          <p className="text-2xl font-bold text-[#123d73]">{month.academics}</p>
-                          <p className="text-xs text-muted-foreground">Academic Items</p>
-                        </div>
+              <CardContent className="space-y-4">
+                {recentHydration.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Track your hydration from the fuel tab to see it here.</p>
+                ) : (
+                  recentHydration.map((log) => (
+                    <div key={log.id} className="flex items-center justify-between rounded-lg bg-secondary/40 p-3">
+                      <div>
+                        <p className="font-medium">{log.ounces}oz</p>
+                        <p className="text-xs text-muted-foreground">{formatDate(log.date)}</p>
                       </div>
+                      <Badge variant="outline" className="flex items-center gap-1">
+                        <Droplets className="h-3 w-3" /> {log.source}
+                      </Badge>
                     </div>
-                  ))}
-                </div>
+                  ))
+                )}
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Meal Logs</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {recentMeals.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Add meals from the fuel tab to build your nutrition history.</p>
+              ) : (
+                recentMeals.map((meal) => (
+                  <div key={meal.id} className="flex items-center justify-between rounded-lg bg-secondary/40 p-3">
+                    <div>
+                      <p className="font-medium capitalize">{meal.mealType}</p>
+                      <p className="text-xs text-muted-foreground">{formatDate(meal.dateTime)}</p>
+                    </div>
+                    <div className="text-right text-xs text-muted-foreground">
+                      <p>{meal.calories} kcal</p>
+                      <p>{meal.proteinG}g protein</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="settings" className="space-y-4">
@@ -499,4 +717,3 @@ export default function Account() {
     </div>
   )
 }
-

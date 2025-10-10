@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -113,13 +113,27 @@ export default function DashboardPage() {
   const [mentalState, setMentalState] = useState<number | null>(mockData.checkIn.mental)
   const [physicalState, setPhysicalState] = useState<number | null>(mockData.checkIn.physical)
   const [checkInCompleted, setCheckInCompleted] = useState(mockData.checkIn.completed)
-  const { role, primaryAthlete } = useRole()
+  const { role, primaryAthlete, currentUser } = useRole()
+  const isGuest = !currentUser
+
+  useEffect(() => {
+    if (isGuest) {
+      setMentalState(mockData.checkIn.mental)
+      setPhysicalState(mockData.checkIn.physical)
+      setCheckInCompleted(mockData.checkIn.completed)
+    } else {
+      setMentalState(null)
+      setPhysicalState(null)
+      setCheckInCompleted(false)
+    }
+  }, [isGuest])
   const athleteSessions = primaryAthlete?.sessions ?? []
 
   const today = new Date()
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+  const todayDate = useMemo(() => new Date(startOfToday), [startOfToday])
 
-  const todaysSessions = athleteSessions.filter((session) => isSameDay(session.startAt, today))
+  const todaysSessions = athleteSessions.filter((session) => isSameDay(session.startAt, todayDate))
   const sessionsCompletedToday = todaysSessions.filter((session) => session.completed).length
 
   const upcomingCalendar = useMemo(() => {
@@ -137,6 +151,151 @@ export default function DashboardPage() {
     const workouts = primaryAthlete?.workouts ?? []
     return workouts.slice(0, 5)
   }, [primaryAthlete])
+
+  const hydrationStats = useMemo(() => {
+    if (!primaryAthlete) {
+      const progress =
+        (mockData.todayStats.hydration / mockData.todayStats.hydrationGoal) * 100
+      return {
+        total: mockData.todayStats.hydration,
+        goal: mockData.todayStats.hydrationGoal,
+        progress,
+      }
+    }
+
+    const hydrationGoal = 80
+    const hydrationLogs = primaryAthlete.hydrationLogs ?? []
+    const todaysHydration = hydrationLogs
+      .filter((log) => isSameDay(log.date, todayDate))
+      .reduce((sum, log) => sum + (log.ounces ?? 0), 0)
+
+    return {
+      total: todaysHydration,
+      goal: hydrationGoal,
+      progress: hydrationGoal ? Math.min(100, (todaysHydration / hydrationGoal) * 100) : 0,
+    }
+  }, [primaryAthlete, todayDate])
+
+  const todayStats = useMemo(() => {
+    if (!primaryAthlete) return mockData.todayStats
+    const mealsLoggedToday = (primaryAthlete.mealLogs ?? []).filter((log) =>
+      isSameDay(log.dateTime, todayDate)
+    ).length
+
+    return {
+      hydration: hydrationStats.total,
+      hydrationGoal: hydrationStats.goal,
+      mealsLogged: mealsLoggedToday,
+      sessionsCompleted: sessionsCompletedToday,
+      academicItemsDue: 0,
+      sleepHours: null,
+      stressLevel: null,
+      energyLevel: null,
+    }
+  }, [primaryAthlete, hydrationStats, sessionsCompletedToday, todayDate])
+
+  const upcomingItems = useMemo(() => {
+    if (!primaryAthlete) return mockData.upcomingItems
+    const workouts = (primaryAthlete.workouts ?? []).map((workout) => {
+      const dueLabel = workout.dueDate ? formatDateLabel(workout.dueDate) : "Scheduled"
+      const priority = (workout.intensity ?? "medium").toLowerCase()
+      return {
+        id: workout.id,
+        type: "training",
+        title: workout.title,
+        course: workout.focus ?? workout.title,
+        due: dueLabel,
+        priority,
+        progress: workout.status === "Completed" ? 100 : 0,
+      }
+    })
+    return workouts.slice(0, 4)
+  }, [primaryAthlete])
+
+  const weeklyStatsData = useMemo(() => {
+    if (!primaryAthlete) return mockData.weeklyStats
+    const now = new Date()
+    const startWindow = new Date(now)
+    startWindow.setDate(now.getDate() - 6)
+    startWindow.setHours(0, 0, 0, 0)
+
+    const sessions = primaryAthlete.sessions ?? []
+    const sessionsInWindow = sessions.filter((session) => {
+      const start = new Date(session.startAt)
+      if (Number.isNaN(start.getTime())) return false
+      return start >= startWindow && start <= now
+    })
+
+    const workouts = primaryAthlete.workouts ?? []
+    const prsSet = workouts.filter((workout) => {
+      if (workout.status !== "Completed") return false
+      const dueDate = new Date(workout.dueDate)
+      if (Number.isNaN(dueDate.getTime())) return false
+      return dueDate >= startWindow && dueDate <= now
+    }).length
+
+    const hydrationLogs = primaryAthlete.hydrationLogs ?? []
+    const hydrationTotals = new Map<string, number>()
+    hydrationLogs.forEach((log) => {
+      const date = new Date(log.date)
+      if (Number.isNaN(date.getTime())) return
+      const key = date.toISOString().split("T")[0]
+      hydrationTotals.set(key, (hydrationTotals.get(key) ?? 0) + (log.ounces ?? 0))
+    })
+
+    let hydrationSum = 0
+    let hydrationCount = 0
+    hydrationTotals.forEach((value, key) => {
+      const date = new Date(key)
+      if (date >= startWindow && date <= now) {
+        hydrationSum += value
+        hydrationCount += 1
+      }
+    })
+
+    const hydrationAvg = hydrationCount > 0 ? Math.round(hydrationSum / hydrationCount) : 0
+
+    const mealLogs = primaryAthlete.mealLogs ?? []
+    const totalCalories = mealLogs
+      .filter((meal) => {
+        const date = new Date(meal.dateTime)
+        if (Number.isNaN(date.getTime())) return false
+        return date >= startWindow && date <= now
+      })
+      .reduce((sum, meal) => sum + (meal.calories ?? 0), 0)
+
+    const completedSessions = sessions.filter((session) => session.completed).length
+    const recoveryScore = sessions.length > 0 ? Math.round((completedSessions / sessions.length) * 100) : 0
+
+    return {
+      sessions: sessionsInWindow.length,
+      prsSet,
+      hydrationAvg,
+      assignments: 0,
+      totalCalories,
+      avgHeartRate: 0,
+      recoveryScore,
+    }
+  }, [primaryAthlete])
+
+  const performanceMetrics = useMemo(() => {
+    if (!primaryAthlete) return mockData.performanceMetrics
+    const sessions = primaryAthlete.sessions ?? []
+    const totalSessions = sessions.length
+    const completedSessions = sessions.filter((session) => session.completed).length
+    const completionRate = totalSessions > 0 ? Math.round((completedSessions / totalSessions) * 100) : 0
+    const hydrationScore = Math.round(hydrationStats.progress)
+    const enduranceScore = Math.min(100, Math.round(completionRate * 0.9))
+    const flexibilityScore = Math.min(100, hydrationScore)
+    const mentalScore = Math.min(100, Math.round((completionRate + hydrationScore) / 2))
+
+    return {
+      strength: completionRate,
+      endurance: enduranceScore,
+      flexibility: flexibilityScore,
+      mental: mentalScore,
+    }
+  }, [primaryAthlete, hydrationStats.progress])
 
   const handleCheckIn = () => {
     if (mentalState && physicalState) {
@@ -208,7 +367,7 @@ export default function DashboardPage() {
     }
   }
 
-  const hydrationProgress = (mockData.todayStats.hydration / mockData.todayStats.hydrationGoal) * 100
+  const hydrationProgress = hydrationStats.progress
 
   return (
     <div className="min-h-screen">
@@ -312,8 +471,8 @@ export default function DashboardPage() {
                   <Dumbbell className="h-8 w-8 text-white" />
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">Strength</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{mockData.performanceMetrics.strength}%</p>
-                <Progress value={mockData.performanceMetrics.strength} className="h-2" />
+                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.strength}%</p>
+                <Progress value={performanceMetrics.strength} className="h-2" />
                 <p className="text-xs text-[#1c6dd0] font-semibold mt-2">+5% this week</p>
               </CardContent>
             </Card>
@@ -323,8 +482,8 @@ export default function DashboardPage() {
                   <ActivityIcon className="h-8 w-8 text-white" />
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">Endurance</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{mockData.performanceMetrics.endurance}%</p>
-                <Progress value={mockData.performanceMetrics.endurance} className="h-2" />
+                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.endurance}%</p>
+                <Progress value={performanceMetrics.endurance} className="h-2" />
                 <p className="text-xs text-[#1c6dd0] font-semibold mt-2">+3% this week</p>
               </CardContent>
             </Card>
@@ -334,8 +493,8 @@ export default function DashboardPage() {
                   <Activity className="h-8 w-8 text-white" />
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">Flexibility</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{mockData.performanceMetrics.flexibility}%</p>
-                <Progress value={mockData.performanceMetrics.flexibility} className="h-2" />
+                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.flexibility}%</p>
+                <Progress value={performanceMetrics.flexibility} className="h-2" />
                 <p className="text-xs text-[#123d73] font-semibold mt-2">Needs attention</p>
               </CardContent>
             </Card>
@@ -345,8 +504,8 @@ export default function DashboardPage() {
                   <Brain className="h-8 w-8 text-white" />
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">Mental</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{mockData.performanceMetrics.mental}%</p>
-                <Progress value={mockData.performanceMetrics.mental} className="h-2" />
+                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.mental}%</p>
+                <Progress value={performanceMetrics.mental} className="h-2" />
                 <p className="text-xs text-[#1c6dd0] font-semibold mt-2">Excellent!</p>
               </CardContent>
             </Card>
@@ -414,7 +573,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-gray-600">Hydration</p>
-                      <p className="text-3xl font-bold text-gray-900">{mockData.todayStats.hydration}oz</p>
+                    <p className="text-3xl font-bold text-gray-900">{hydrationStats.total}oz</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -433,7 +592,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-gray-600">Meals Logged</p>
-                    <p className="text-3xl font-bold text-gray-900">{mockData.todayStats.mealsLogged}</p>
+                    <p className="text-3xl font-bold text-gray-900">{todayStats.mealsLogged}</p>
                   </div>
                 </div>
               </CardContent>
@@ -468,7 +627,7 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {mockData.upcomingItems.map((item) => (
+                {upcomingItems.map((item) => (
                   <div key={item.id} className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300">
                     <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center">
@@ -487,7 +646,7 @@ export default function DashboardPage() {
                   </div>
                 ))}
                 <Button variant="outline" className="w-full glass-card border-white/20 hover:bg-white/50">
-                  View All ({mockData.todayStats.academicItemsDue})
+                  View All ({todayStats.academicItemsDue})
                 </Button>
               </CardContent>
             </Card>
@@ -632,7 +791,7 @@ export default function DashboardPage() {
                   <Dumbbell className="h-8 w-8 text-white" />
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">Sessions</p>
-                <p className="text-4xl font-bold text-gray-900 mb-2">{mockData.weeklyStats.sessions}</p>
+                <p className="text-4xl font-bold text-gray-900 mb-2">{weeklyStatsData.sessions}</p>
                 <p className="text-xs text-[#1c6dd0] font-semibold">+2 from last week</p>
               </CardContent>
             </Card>
@@ -642,7 +801,7 @@ export default function DashboardPage() {
                   <Award className="h-8 w-8 text-white" />
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">PRs Set</p>
-                <p className="text-4xl font-bold text-gray-900 mb-2">{mockData.weeklyStats.prsSet}</p>
+                <p className="text-4xl font-bold text-gray-900 mb-2">{weeklyStatsData.prsSet}</p>
                 <p className="text-xs text-[#1c6dd0] font-semibold">New records!</p>
               </CardContent>
             </Card>
@@ -652,7 +811,7 @@ export default function DashboardPage() {
                   <Droplets className="h-8 w-8 text-white" />
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">Hydration Avg</p>
-                <p className="text-4xl font-bold text-gray-900 mb-2">{mockData.weeklyStats.hydrationAvg}%</p>
+                <p className="text-4xl font-bold text-gray-900 mb-2">{weeklyStatsData.hydrationAvg}%</p>
                 <p className="text-xs text-[#1c6dd0] font-semibold">Good consistency</p>
               </CardContent>
             </Card>
@@ -662,7 +821,7 @@ export default function DashboardPage() {
                   <BookOpen className="h-8 w-8 text-white" />
                 </div>
                 <p className="text-sm font-semibold text-gray-600 mb-2">Assignments</p>
-                <p className="text-4xl font-bold text-gray-900 mb-2">{mockData.weeklyStats.assignments}</p>
+                <p className="text-4xl font-bold text-gray-900 mb-2">{weeklyStatsData.assignments}</p>
                 <p className="text-xs text-[#1c6dd0] font-semibold">5 completed</p>
               </CardContent>
             </Card>
@@ -682,8 +841,8 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-8">
               <div className="flex justify-between text-lg">
-                <span className="font-bold text-gray-900">{mockData.todayStats.hydration}oz consumed</span>
-                <span className="text-gray-600">{mockData.todayStats.hydrationGoal}oz goal</span>
+                <span className="font-bold text-gray-900">{hydrationStats.total}oz consumed</span>
+                <span className="text-gray-600">{hydrationStats.goal}oz goal</span>
               </div>
               <Progress value={hydrationProgress} className="w-full h-4" />
               <div className="flex gap-4">
