@@ -9,15 +9,20 @@ import type {
   Role,
   StoredAccount,
   UserAccount,
+  Session,
+  WorkoutPlan
 } from "@/lib/role-types"
 export type { MealLog, NutritionFact } from "@/lib/role-types"
 import { initialAthletes } from "@/lib/initial-data"
+import type { CalendarEvent } from "@/lib/role-types"
 import {
   normalizeAccounts,
   normalizeAthletes,
   normalizeTag,
   normalizeTags,
 } from "@/lib/state-normalizer"
+
+
 
 type ScheduleSessionInput = {
   type: string
