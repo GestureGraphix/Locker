@@ -20,11 +20,88 @@ import {
 } from "@/lib/pose-utils"
 import { ExampleMetricRange, ExerciseExample, exerciseExamples } from "@/data/exercise-examples"
 
-const VISION_BUNDLE_URL =
+const CDN_VISION_BUNDLE_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs"
-const VISION_WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
-const POSE_MODEL_URL =
+const CDN_VISION_WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+const CDN_POSE_MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/lite/pose_landmarker_lite.task"
+
+const LOCAL_VISION_BUNDLE_PATH = "/mediapipe/vision_bundle.mjs"
+const LOCAL_WASM_PATH = "/mediapipe/wasm"
+const LOCAL_MODEL_PATH = "/mediapipe/pose_landmarker_lite.task"
+
+const VISION_MODULE_SOURCES = [LOCAL_VISION_BUNDLE_PATH, CDN_VISION_BUNDLE_URL] as const
+const VISION_WASM_PATHS = [LOCAL_WASM_PATH, CDN_VISION_WASM_URL] as const
+const POSE_MODEL_PATHS = [LOCAL_MODEL_PATH, CDN_POSE_MODEL_URL] as const
+
+const DEFAULT_MODEL_ERROR =
+  "Unable to load the MediaPipe pose model. Check your connection and try again."
+
+const loadVisionModule = async (): Promise<VisionModule> => {
+  let lastError: unknown = null
+
+  for (const source of VISION_MODULE_SOURCES) {
+    try {
+      return (await import(/* webpackIgnore: true */ source)) as VisionModule
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError ?? new Error("Failed to load the MediaPipe vision bundle.")
+}
+
+const resolveVisionFileset = async (visionModule: VisionModule) => {
+  let lastError: unknown = null
+
+  for (const path of VISION_WASM_PATHS) {
+    try {
+      return await visionModule.FilesetResolver.forVisionTasks(path)
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError ?? new Error("Failed to load MediaPipe WASM assets.")
+}
+
+const createPoseLandmarkerInstance = async (
+  visionModule: VisionModule,
+  fileset: unknown,
+): Promise<PoseLandmarkerInstance> => {
+  let lastError: unknown = null
+
+  for (const modelPath of POSE_MODEL_PATHS) {
+    try {
+      return await visionModule.PoseLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: modelPath,
+        },
+        runningMode: "VIDEO",
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.4,
+        minPosePresenceConfidence: 0.4,
+        minTrackingConfidence: 0.5,
+      })
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError ?? new Error("Failed to initialize the MediaPipe pose landmarker.")
+}
+
+const getModelLoadErrorMessage = (error: unknown) => {
+  if (typeof window !== "undefined" && !window.navigator.onLine) {
+    return "You're offline. Reconnect to the internet and try loading the pose model again."
+  }
+
+  if (error instanceof Error && /404|not found|failed to fetch|network/i.test(error.message)) {
+    return "We couldn't download the MediaPipe pose files. Confirm the assets are available (public/mediapipe or CDN) and try again."
+  }
+
+  return DEFAULT_MODEL_ERROR
+}
 
 interface PoseLandmarkerInstance {
   detectForVideo: (
@@ -179,42 +256,47 @@ export function VideoAnalyzer() {
     }
   }, [])
 
-  const loadPoseLandmarker = useCallback(async () => {
-    if (poseLandmarkerRef.current || typeof window === "undefined") return
+  const loadPoseLandmarker = useCallback(
+    async (forceReload = false) => {
+      if (typeof window === "undefined") return false
+      if (isModelLoading) return false
+      if (poseLandmarkerRef.current && !forceReload) return true
 
-    setIsModelLoading(true)
-    setModelError(null)
+      if (forceReload && poseLandmarkerRef.current) {
+        poseLandmarkerRef.current.close()
+        poseLandmarkerRef.current = null
+      }
 
-    try {
-      const visionModule = (await import(
-        /* webpackIgnore: true */ VISION_BUNDLE_URL
-      )) as VisionModule
-      visionModuleRef.current = visionModule
-      const fileset = await visionModule.FilesetResolver.forVisionTasks(VISION_WASM_URL)
-      const landmarker = await visionModule.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: {
-          modelAssetPath: POSE_MODEL_URL,
-        },
-        runningMode: "VIDEO",
-        numPoses: 1,
-        minPoseDetectionConfidence: 0.4,
-        minPosePresenceConfidence: 0.4,
-        minTrackingConfidence: 0.5,
-      })
+      if (forceReload) {
+        visionModuleRef.current = null
+      }
 
-      poseLandmarkerRef.current = landmarker
-    } catch (error) {
-      console.error(error)
-      setModelError(
-        "Unable to load the MediaPipe pose model. Check your connection and try again.",
-      )
-    } finally {
-      setIsModelLoading(false)
-    }
-  }, [])
+      setIsModelLoading(true)
+      setModelError(null)
+
+      try {
+        const visionModule = await loadVisionModule()
+        const fileset = await resolveVisionFileset(visionModule)
+        const landmarker = await createPoseLandmarkerInstance(visionModule, fileset)
+
+        visionModuleRef.current = visionModule
+        poseLandmarkerRef.current = landmarker
+        return true
+      } catch (error) {
+        console.error(error)
+        poseLandmarkerRef.current = null
+        visionModuleRef.current = null
+        setModelError(getModelLoadErrorMessage(error))
+        return false
+      } finally {
+        setIsModelLoading(false)
+      }
+    },
+    [isModelLoading],
+  )
 
   useEffect(() => {
-    loadPoseLandmarker()
+    void loadPoseLandmarker()
     return () => {
       cleanupAnimation()
       if (poseLandmarkerRef.current) {
@@ -327,8 +409,8 @@ export function VideoAnalyzer() {
     const canvas = overlayRef.current
 
     if (!landmarker || !visionModule || !video || !canvas) {
-      setModelError(
-        "Pose model is not ready yet. Wait for the model to finish loading and try again.",
+      setModelError((previous) =>
+        previous ?? "Pose model is not ready yet. Wait for the model to finish loading and try again.",
       )
       return
     }
@@ -411,8 +493,13 @@ export function VideoAnalyzer() {
       return
     }
 
+    let ready = true
     if (!poseLandmarkerRef.current) {
-      await loadPoseLandmarker()
+      ready = await loadPoseLandmarker()
+    }
+
+    if (!ready || !poseLandmarkerRef.current) {
+      return
     }
 
     resetVideo()
@@ -521,7 +608,24 @@ export function VideoAnalyzer() {
             {modelError && (
               <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
                 <AlertCircle className="mt-0.5 h-4 w-4" />
-                <span>{modelError}</span>
+                <div className="space-y-2">
+                  <span className="block">{modelError}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-3 text-xs text-destructive"
+                    onClick={() => void loadPoseLandmarker(true)}
+                    disabled={isModelLoading}
+                  >
+                    {isModelLoading ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Retrying…
+                      </span>
+                    ) : (
+                      "Retry model load"
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
           </div>
