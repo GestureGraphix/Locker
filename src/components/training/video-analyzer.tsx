@@ -39,7 +39,6 @@ const DEFAULT_MODEL_ERROR =
 
 const loadVisionModule = async (): Promise<VisionModule> => {
   let lastError: unknown = null
-
   for (const source of VISION_MODULE_SOURCES) {
     try {
       return (await import(/* webpackIgnore: true */ source)) as VisionModule
@@ -47,13 +46,11 @@ const loadVisionModule = async (): Promise<VisionModule> => {
       lastError = error
     }
   }
-
   throw lastError ?? new Error("Failed to load the MediaPipe vision bundle.")
 }
 
 const resolveVisionFileset = async (visionModule: VisionModule) => {
   let lastError: unknown = null
-
   for (const path of VISION_WASM_PATHS) {
     try {
       return await visionModule.FilesetResolver.forVisionTasks(path)
@@ -61,7 +58,6 @@ const resolveVisionFileset = async (visionModule: VisionModule) => {
       lastError = error
     }
   }
-
   throw lastError ?? new Error("Failed to load MediaPipe WASM assets.")
 }
 
@@ -70,13 +66,10 @@ const createPoseLandmarkerInstance = async (
   fileset: unknown,
 ): Promise<PoseLandmarkerInstance> => {
   let lastError: unknown = null
-
   for (const modelPath of POSE_MODEL_PATHS) {
     try {
       return await visionModule.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: {
-          modelAssetPath: modelPath,
-        },
+        baseOptions: { modelAssetPath: modelPath },
         runningMode: "VIDEO",
         numPoses: 1,
         minPoseDetectionConfidence: 0.4,
@@ -87,7 +80,6 @@ const createPoseLandmarkerInstance = async (
       lastError = error
     }
   }
-
   throw lastError ?? new Error("Failed to initialize the MediaPipe pose landmarker.")
 }
 
@@ -95,11 +87,9 @@ const getModelLoadErrorMessage = (error: unknown) => {
   if (typeof window !== "undefined" && !window.navigator.onLine) {
     return "You're offline. Reconnect to the internet and try loading the pose model again."
   }
-
   if (error instanceof Error && /404|not found|failed to fetch|network/i.test(error.message)) {
     return "We couldn't download the MediaPipe pose files. Confirm the assets are available (public/mediapipe or CDN) and try again."
   }
-
   return DEFAULT_MODEL_ERROR
 }
 
@@ -140,12 +130,8 @@ interface PoseComparison {
   delta: number | null
 }
 
-const formatMetricValue = (metric: ExampleMetricRange, value: number | null) => {
-  if (metric.unit === "ratio") {
-    return formatRatio(value)
-  }
-  return formatDegrees(value)
-}
+const formatMetricValue = (metric: ExampleMetricRange, value: number | null) =>
+  metric.unit === "ratio" ? formatRatio(value) : formatDegrees(value)
 
 const describeDelta = (metric: ExampleMetricRange, delta: number | null) => {
   if (delta === null || delta === 0) return "On target"
@@ -163,10 +149,8 @@ const drawReferenceSkeleton = (
   ctx.lineWidth = 4
   ctx.strokeStyle = "rgba(30, 64, 175, 0.9)"
   ctx.fillStyle = "rgba(59, 130, 246, 0.95)"
-
   const scaleX = canvas.width
   const scaleY = canvas.height
-
   REFERENCE_CONNECTIONS.forEach(([start, end]) => {
     const a = landmarks[start]
     const b = landmarks[end]
@@ -176,11 +160,10 @@ const drawReferenceSkeleton = (
     ctx.lineTo(b.x * scaleX, b.y * scaleY)
     ctx.stroke()
   })
-
-  landmarks.forEach((landmark) => {
-    if (!landmark) return
+  landmarks.forEach((lm) => {
+    if (!lm) return
     ctx.beginPath()
-    ctx.arc(landmark.x * scaleX, landmark.y * scaleY, 5, 0, Math.PI * 2)
+    ctx.arc(lm.x * scaleX, lm.y * scaleY, 5, 0, Math.PI * 2)
     ctx.fill()
   })
 }
@@ -188,30 +171,13 @@ const drawReferenceSkeleton = (
 const usePoseComparisons = (analysis: PoseAnalysis | null, exercise: ExerciseExample | null) =>
   useMemo<PoseComparison[]>(() => {
     if (!analysis || !exercise) return []
-
     return exercise.metrics.map((metric) => {
       const key = metric.key as PoseMetricKey
       const value = analysis[key]
-      if (value === null || typeof value === "undefined") {
-        return { metric, value: null, status: "missing", delta: null }
-      }
-
+      if (value == null) return { metric, value: null, status: "missing", delta: null }
       const within = value >= metric.min && value <= metric.max
-      let delta = 0
-      if (!within) {
-        if (value < metric.min) {
-          delta = value - metric.min
-        } else if (value > metric.max) {
-          delta = value - metric.max
-        }
-      }
-
-      return {
-        metric,
-        value,
-        status: within ? "match" : "deviation",
-        delta: within ? 0 : delta,
-      }
+      const delta = within ? 0 : value < metric.min ? value - metric.min : value - metric.max
+      return { metric, value, status: within ? "match" : "deviation", delta }
     })
   }, [analysis, exercise])
 
@@ -231,9 +197,9 @@ export function VideoAnalyzer() {
 
   const poseLandmarkerRef = useRef<PoseLandmarkerInstance | null>(null)
   const visionModuleRef = useRef<VisionModule | null>(null)
-  const animationFrameRef = useRef<number>()
+  const animationFrameRef = useRef<number | undefined>(undefined)
   const sampleTimestampRef = useRef<number>(0)
-  const exampleAnimationRef = useRef<number>()
+  const exampleAnimationRef = useRef<number | undefined>(undefined)
 
   const selectedExercise = useMemo(
     () => exerciseExamples.find((example) => example.id === selectedExerciseId) ?? null,
