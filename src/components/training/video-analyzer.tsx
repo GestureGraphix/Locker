@@ -32,17 +32,58 @@ const LOCAL_VISION_BUNDLE_PATH = "/mediapipe/vision_bundle.mjs"
 const LOCAL_WASM_PATH = "/mediapipe/wasm"
 const LOCAL_MODEL_PATH = "/mediapipe/pose_landmarker_lite.task"
 
-// 🔁 Prefer CDN first to avoid local 404 spam. Fall back to local if present.
-const VISION_MODULE_SOURCES = [CDN_VISION_BUNDLE_URL, LOCAL_VISION_BUNDLE_PATH] as const
-const VISION_WASM_PATHS = [CDN_VISION_WASM_URL, LOCAL_WASM_PATH] as const
-const POSE_MODEL_PATHS = [CDN_POSE_MODEL_URL, LOCAL_MODEL_PATH] as const
+const assetAvailabilityCache = new Map<string, boolean>()
+
+const isLocalAssetAvailable = async (path: string) => {
+  if (!path.startsWith("/")) return false
+  const cached = assetAvailabilityCache.get(path)
+  if (cached != null) return cached
+  if (typeof window === "undefined") return false
+  try {
+    const response = await fetch(path, { method: "HEAD" })
+    const available = response.ok
+    assetAvailabilityCache.set(path, available)
+    return available
+  } catch {
+    assetAvailabilityCache.set(path, false)
+    return false
+  }
+}
+
+const normalizeBasePath = (path: string) => path.replace(/\/$/, "")
+
+const getVisionModuleSources = async () => {
+  const sources = [CDN_VISION_BUNDLE_URL]
+  if (await isLocalAssetAvailable(LOCAL_VISION_BUNDLE_PATH)) {
+    sources.push(LOCAL_VISION_BUNDLE_PATH)
+  }
+  return sources
+}
+
+const getVisionWasmPaths = async () => {
+  const paths = [CDN_VISION_WASM_URL]
+  const localWasmJsPath = `${normalizeBasePath(LOCAL_WASM_PATH)}/vision_wasm_internal.js`
+  if (await isLocalAssetAvailable(localWasmJsPath)) {
+    paths.push(LOCAL_WASM_PATH)
+  }
+  return paths
+}
+
+const getPoseModelPaths = async () => {
+  const paths = [CDN_POSE_MODEL_URL]
+  if (await isLocalAssetAvailable(LOCAL_MODEL_PATH)) {
+    paths.push(LOCAL_MODEL_PATH)
+  }
+  return paths
+}
 
 const DEFAULT_MODEL_ERROR =
   "Unable to load the MediaPipe pose model. Check your connection and try again."
 
 const loadVisionModule = async (): Promise<VisionModule> => {
   let lastError: unknown = null
-  for (const source of VISION_MODULE_SOURCES) {
+  const sources = await getVisionModuleSources()
+  for (const source of sources) {
     try {
       const mod = (await import(/* webpackIgnore: true */ source)) as VisionModule
       if (typeof window !== "undefined") console.info("[Vision] loaded from:", source)
@@ -56,7 +97,8 @@ const loadVisionModule = async (): Promise<VisionModule> => {
 
 const resolveVisionFileset = async (visionModule: VisionModule) => {
   let lastError: unknown = null
-  for (const path of VISION_WASM_PATHS) {
+  const paths = await getVisionWasmPaths()
+  for (const path of paths) {
     try {
       const fileset = await visionModule.FilesetResolver.forVisionTasks(path)
       if (typeof window !== "undefined") console.info("[Vision WASM] using base:", path)
@@ -73,7 +115,8 @@ const createPoseLandmarkerInstance = async (
   fileset: unknown,
 ): Promise<PoseLandmarkerInstance> => {
   let lastError: unknown = null
-  for (const modelPath of POSE_MODEL_PATHS) {
+  const modelPaths = await getPoseModelPaths()
+  for (const modelPath of modelPaths) {
     try {
       const lm = await visionModule.PoseLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: modelPath },
