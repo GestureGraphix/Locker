@@ -22,17 +22,20 @@ import { ExampleMetricRange, ExerciseExample, exerciseExamples } from "@/data/ex
 
 const CDN_VISION_BUNDLE_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs"
-const CDN_VISION_WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+const CDN_VISION_WASM_URL =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
 const CDN_POSE_MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/lite/pose_landmarker_lite.task"
 
+// Local paths (use only if you actually copied assets into /public/mediapipe/*)
 const LOCAL_VISION_BUNDLE_PATH = "/mediapipe/vision_bundle.mjs"
 const LOCAL_WASM_PATH = "/mediapipe/wasm"
 const LOCAL_MODEL_PATH = "/mediapipe/pose_landmarker_lite.task"
 
-const VISION_MODULE_SOURCES = [LOCAL_VISION_BUNDLE_PATH, CDN_VISION_BUNDLE_URL] as const
-const VISION_WASM_PATHS = [LOCAL_WASM_PATH, CDN_VISION_WASM_URL] as const
-const POSE_MODEL_PATHS = [LOCAL_MODEL_PATH, CDN_POSE_MODEL_URL] as const
+// 🔁 Prefer CDN first to avoid local 404 spam. Fall back to local if present.
+const VISION_MODULE_SOURCES = [CDN_VISION_BUNDLE_URL, LOCAL_VISION_BUNDLE_PATH] as const
+const VISION_WASM_PATHS = [CDN_VISION_WASM_URL, LOCAL_WASM_PATH] as const
+const POSE_MODEL_PATHS = [CDN_POSE_MODEL_URL, LOCAL_MODEL_PATH] as const
 
 const DEFAULT_MODEL_ERROR =
   "Unable to load the MediaPipe pose model. Check your connection and try again."
@@ -41,7 +44,9 @@ const loadVisionModule = async (): Promise<VisionModule> => {
   let lastError: unknown = null
   for (const source of VISION_MODULE_SOURCES) {
     try {
-      return (await import(/* webpackIgnore: true */ source)) as VisionModule
+      const mod = (await import(/* webpackIgnore: true */ source)) as VisionModule
+      if (typeof window !== "undefined") console.info("[Vision] loaded from:", source)
+      return mod
     } catch (error) {
       lastError = error
     }
@@ -53,7 +58,9 @@ const resolveVisionFileset = async (visionModule: VisionModule) => {
   let lastError: unknown = null
   for (const path of VISION_WASM_PATHS) {
     try {
-      return await visionModule.FilesetResolver.forVisionTasks(path)
+      const fileset = await visionModule.FilesetResolver.forVisionTasks(path)
+      if (typeof window !== "undefined") console.info("[Vision WASM] using base:", path)
+      return fileset
     } catch (error) {
       lastError = error
     }
@@ -68,7 +75,7 @@ const createPoseLandmarkerInstance = async (
   let lastError: unknown = null
   for (const modelPath of POSE_MODEL_PATHS) {
     try {
-      return await visionModule.PoseLandmarker.createFromOptions(fileset, {
+      const lm = await visionModule.PoseLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: modelPath },
         runningMode: "VIDEO",
         numPoses: 1,
@@ -76,6 +83,8 @@ const createPoseLandmarkerInstance = async (
         minPosePresenceConfidence: 0.4,
         minTrackingConfidence: 0.5,
       })
+      if (typeof window !== "undefined") console.info("[Pose model] using:", modelPath)
+      return lm
     } catch (error) {
       lastError = error
     }
@@ -209,14 +218,14 @@ export function VideoAnalyzer() {
   const comparisons = usePoseComparisons(analysis, selectedExercise)
   const comparisonScore = useMemo(() => {
     if (!comparisons.length) return null
-    const usable = comparisons.filter((comparison) => comparison.value !== null)
+    const usable = comparisons.filter((c) => c.value !== null)
     if (!usable.length) return null
-    const matches = usable.filter((comparison) => comparison.status === "match").length
+    const matches = usable.filter((c) => c.status === "match").length
     return Math.round((matches / usable.length) * 100)
   }, [comparisons])
 
   const cleanupAnimation = useCallback(() => {
-    if (animationFrameRef.current) {
+    if (animationFrameRef.current !== undefined) {
       cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = undefined
     }
@@ -232,10 +241,7 @@ export function VideoAnalyzer() {
         poseLandmarkerRef.current.close()
         poseLandmarkerRef.current = null
       }
-
-      if (forceReload) {
-        visionModuleRef.current = null
-      }
+      if (forceReload) visionModuleRef.current = null
 
       setIsModelLoading(true)
       setModelError(null)
@@ -269,12 +275,8 @@ export function VideoAnalyzer() {
         poseLandmarkerRef.current.close()
         poseLandmarkerRef.current = null
       }
-      if (uploadedVideoUrl) {
-        URL.revokeObjectURL(uploadedVideoUrl)
-      }
-      if (exampleAnimationRef.current) {
-        window.clearInterval(exampleAnimationRef.current)
-      }
+      if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl)
+      if (exampleAnimationRef.current !== undefined) window.clearInterval(exampleAnimationRef.current)
     }
   }, [cleanupAnimation, loadPoseLandmarker, uploadedVideoUrl])
 
@@ -282,29 +284,24 @@ export function VideoAnalyzer() {
     const video = videoRef.current
     const canvas = overlayRef.current
     if (!video || !canvas) return
-
     const handleMetadata = () => {
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
     }
-
     video.addEventListener("loadedmetadata", handleMetadata)
-    return () => {
-      video.removeEventListener("loadedmetadata", handleMetadata)
-    }
+    return () => video.removeEventListener("loadedmetadata", handleMetadata)
   }, [])
 
   useEffect(() => {
     const canvas = exampleCanvasRef.current
     if (!canvas || !selectedExercise) return
-
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
     canvas.width = 480
     canvas.height = 270
 
-    if (exampleAnimationRef.current) {
+    if (exampleAnimationRef.current !== undefined) {
       window.clearInterval(exampleAnimationRef.current)
     }
 
@@ -312,9 +309,7 @@ export function VideoAnalyzer() {
     const frames = selectedExercise.referenceFrames
     const tick = () => {
       const frame = frames[frameIndex]
-      if (frame) {
-        drawReferenceSkeleton(ctx, canvas, frame)
-      }
+      if (frame) drawReferenceSkeleton(ctx, canvas, frame)
       frameIndex = (frameIndex + 1) % frames.length
     }
 
@@ -322,7 +317,7 @@ export function VideoAnalyzer() {
     exampleAnimationRef.current = window.setInterval(tick, 350)
 
     return () => {
-      if (exampleAnimationRef.current) {
+      if (exampleAnimationRef.current !== undefined) {
         window.clearInterval(exampleAnimationRef.current)
         exampleAnimationRef.current = undefined
       }
@@ -333,18 +328,13 @@ export function VideoAnalyzer() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
-
     if (!file.type.startsWith("video/")) {
       setUploadError("Please select a video file (mp4, mov, webm, etc.).")
       setUploadedVideoUrl(null)
       setAnalysis(null)
       return
     }
-
-    if (uploadedVideoUrl) {
-      URL.revokeObjectURL(uploadedVideoUrl)
-    }
-
+    if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl)
     const url = URL.createObjectURL(file)
     setUploadedVideoUrl(url)
     setUploadError(null)
@@ -375,9 +365,7 @@ export function VideoAnalyzer() {
     const canvas = overlayRef.current
 
     if (!landmarker || !visionModule || !video || !canvas) {
-      setModelError((previous) =>
-        previous ?? "Pose model is not ready yet. Wait for the model to finish loading and try again.",
-      )
+      setModelError((prev) => prev ?? "Pose model is not ready yet. Wait for the model to finish loading and try again.")
       return
     }
 
@@ -425,14 +413,9 @@ export function VideoAnalyzer() {
       animationFrameRef.current = requestAnimationFrame(handleFrame)
     }
 
-    const handleEnded = () => {
-      finalizeAnalysis(accumulator)
-    }
-
+    const handleEnded = () => finalizeAnalysis(accumulator)
     const handlePause = () => {
-      if (!video.ended) {
-        finalizeAnalysis(accumulator)
-      }
+      if (!video.ended) finalizeAnalysis(accumulator)
     }
 
     video.addEventListener("ended", handleEnded, { once: true })
@@ -463,10 +446,7 @@ export function VideoAnalyzer() {
     if (!poseLandmarkerRef.current) {
       ready = await loadPoseLandmarker()
     }
-
-    if (!ready || !poseLandmarkerRef.current) {
-      return
-    }
+    if (!ready || !poseLandmarkerRef.current) return
 
     resetVideo()
     processVideo()
@@ -478,9 +458,7 @@ export function VideoAnalyzer() {
     resetVideo()
     setAnalysis(null)
     setUploadError(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
+    if (fileInputRef.current) fileInputRef.current.value = ""
     if (uploadedVideoUrl) {
       URL.revokeObjectURL(uploadedVideoUrl)
       setUploadedVideoUrl(null)
@@ -498,9 +476,7 @@ export function VideoAnalyzer() {
               against a reference example.
             </CardDescription>
           </div>
-          <Badge variant="outline" className="border-primary/40 text-primary">
-            Experimental
-          </Badge>
+          <Badge variant="outline" className="border-primary/40 text-primary">Experimental</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -510,31 +486,19 @@ export function VideoAnalyzer() {
             <select
               className="w-full rounded-lg border bg-background p-2 text-sm"
               value={selectedExerciseId}
-              onChange={(event) => setSelectedExerciseId(event.target.value)}
+              onChange={(e) => setSelectedExerciseId(e.target.value)}
             >
               {exerciseExamples.map((example) => (
-                <option key={example.id} value={example.id}>
-                  {example.name}
-                </option>
+                <option key={example.id} value={example.id}>{example.name}</option>
               ))}
             </select>
-            {selectedExercise && (
-              <p className="text-xs text-muted-foreground">{selectedExercise.description}</p>
-            )}
+            {selectedExercise && <p className="text-xs text-muted-foreground">{selectedExercise.description}</p>}
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">Upload your session</label>
-            <Input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              onChange={handleFileChange}
-              className="cursor-pointer"
-            />
-            <p className="text-xs text-muted-foreground">
-              Videos are processed on-device in your browser and never leave this session.
-            </p>
+            <Input ref={fileInputRef} type="file" accept="video/*" onChange={handleFileChange} className="cursor-pointer" />
+            <p className="text-xs text-muted-foreground">Videos are processed on-device in your browser and never leave this session.</p>
             {uploadError && (
               <div className="flex items-center gap-2 text-xs text-destructive">
                 <AlertCircle className="h-4 w-4" />
@@ -548,28 +512,10 @@ export function VideoAnalyzer() {
               <Video className="h-4 w-4" /> Reference cues
             </div>
             <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-              {selectedExercise?.cues.map((cue) => (
-                <li key={cue}>{cue}</li>
-              ))}
+              {selectedExercise?.cues.map((cue) => <li key={cue}>{cue}</li>)}
             </ul>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleAnalyze}
-              disabled={isProcessing || isModelLoading}
-              className="gap-2"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Processing
-                </>
-              ) : (
-                <>
-                  <PlayCircle className="h-4 w-4" />
-                  Analyze technique
-                </>
-              )}
+            <Button variant="outline" size="sm" onClick={handleAnalyze} disabled={isProcessing || isModelLoading} className="gap-2">
+              {isProcessing ? (<><Loader2 className="h-4 w-4 animate-spin" />Processing</>) : (<><PlayCircle className="h-4 w-4" />Analyze technique</>)}
             </Button>
             {modelError && (
               <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
@@ -583,13 +529,7 @@ export function VideoAnalyzer() {
                     onClick={() => void loadPoseLandmarker(true)}
                     disabled={isModelLoading}
                   >
-                    {isModelLoading ? (
-                      <span className="flex items-center gap-2">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Retrying…
-                      </span>
-                    ) : (
-                      "Retry model load"
-                    )}
+                    {isModelLoading ? (<span className="flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Retrying…</span>) : ("Retry model load")}
                   </Button>
                 </div>
               </div>
@@ -609,20 +549,12 @@ export function VideoAnalyzer() {
                   Technique score: {comparisonScore}% within target
                 </Badge>
               )}
-              {analysis?.frameCount && (
-                <span className="text-xs text-muted-foreground">
-                  {analysis.frameCount} frames analyzed
-                </span>
-              )}
+              {analysis?.frameCount && <span className="text-xs text-muted-foreground">{analysis.frameCount} frames analyzed</span>}
               {uploadedVideoUrl && !isProcessing && (
-                <Button variant="ghost" size="sm" onClick={handleAnalyze} className="h-7 px-3 text-xs">
-                  Re-run analysis
-                </Button>
+                <Button variant="ghost" size="sm" onClick={handleAnalyze} className="h-7 px-3 text-xs">Re-run analysis</Button>
               )}
               {uploadedVideoUrl && (
-                <Button variant="ghost" size="sm" onClick={handleReset} className="h-7 px-3 text-xs">
-                  Reset
-                </Button>
+                <Button variant="ghost" size="sm" onClick={handleReset} className="h-7 px-3 text-xs">Reset</Button>
               )}
             </div>
           </div>
@@ -653,21 +585,14 @@ export function VideoAnalyzer() {
                       : "border-amber-500 text-amber-500"
 
                   return (
-                    <div
-                      key={comparison.metric.key}
-                      className="rounded-lg border border-border/60 bg-background p-3 text-sm"
-                    >
+                    <div key={comparison.metric.key} className="rounded-lg border border-border/60 bg-background p-3 text-sm">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="font-medium text-foreground">{comparison.metric.label}</p>
                           <p className="text-xs text-muted-foreground">{comparison.metric.description}</p>
                         </div>
                         <Badge variant={badgeVariant} className={badgeClass}>
-                          {comparison.status === "missing"
-                            ? "No data"
-                            : withinRange
-                              ? "On target"
-                              : "Needs attention"}
+                          {comparison.status === "missing" ? "No data" : withinRange ? "On target" : "Needs attention"}
                         </Badge>
                       </div>
                       <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
@@ -680,9 +605,7 @@ export function VideoAnalyzer() {
                         <div className="flex items-center justify-between gap-4">
                           <span>Reference window</span>
                           <span>
-                            {formatMetricValue(comparison.metric, comparison.metric.min)} —
-                            {" "}
-                            {formatMetricValue(comparison.metric, comparison.metric.max)}
+                            {formatMetricValue(comparison.metric, comparison.metric.min)} — {formatMetricValue(comparison.metric, comparison.metric.max)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-4">
