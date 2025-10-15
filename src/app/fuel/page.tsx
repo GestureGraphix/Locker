@@ -392,7 +392,9 @@ export default function Fuel() {
 
   /* -------- Derived totals -------- */
 
-  const todayHydration = hydrationLogs.reduce((sum, log) => sum + log.ounces, 0)
+  const todayDate = new Date().toISOString().split("T")[0]
+  const todaysHydrationLogs = hydrationLogs.filter((log) => log.date === todayDate)
+  const todayHydration = todaysHydrationLogs.reduce((sum, log) => sum + log.ounces, 0)
   const hydrationGoal = 80
   const hydrationPercentage = Math.round((todayHydration / hydrationGoal) * 100)
 
@@ -809,8 +811,10 @@ export default function Fuel() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {hydrationLogs.map((log, index) => {
-                      const runningTotal = hydrationLogs.slice(0, index + 1).reduce((sum, l) => sum + l.ounces, 0)
+                    {todaysHydrationLogs.map((log, index) => {
+                      const runningTotal = todaysHydrationLogs
+                        .slice(0, index + 1)
+                        .reduce((sum, l) => sum + l.ounces, 0)
                       return (
                         <TableRow key={log.id}>
                           <TableCell>{log.time}</TableCell>
