@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRole } from "@/components/role-context"
 import { CoachDashboard } from "@/components/coach-dashboard"
+import { VideoAnalyzer } from "@/components/training/video-analyzer"
 import {
   Dumbbell,
   Plus,
@@ -368,6 +369,8 @@ export default function Training() {
           </CardContent>
         </Card>
       </div>
+
+      <VideoAnalyzer />
 
       {/* Main Content */}
       <Tabs defaultValue="sessions" className="space-y-4">
