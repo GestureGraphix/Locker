@@ -20,137 +20,40 @@ import {
 } from "@/lib/pose-utils"
 import { ExampleMetricRange, ExerciseExample, exerciseExamples } from "@/data/exercise-examples"
 
+/* ------------------------------------------------------------------ */
+/*                             CONFIG                                  */
+/* ------------------------------------------------------------------ */
+
 const CDN_VISION_BUNDLE_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs"
+
 const CDN_VISION_WASM_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
-const CDN_POSE_MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/lite/pose_landmarker_lite.task"
 
-// Local paths (use only if you actually copied assets into /public/mediapipe/*)
+const CDN_POSE_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+
+// Local paths (only if you actually placed files in public/mediapipe/*)
 const LOCAL_VISION_BUNDLE_PATH = "/mediapipe/vision_bundle.mjs"
 const LOCAL_WASM_PATH = "/mediapipe/wasm"
 const LOCAL_MODEL_PATH = "/mediapipe/pose_landmarker_lite.task"
 
-const assetAvailabilityCache = new Map<string, boolean>()
-
-const isLocalAssetAvailable = async (path: string) => {
-  if (!path.startsWith("/")) return false
-  const cached = assetAvailabilityCache.get(path)
-  if (cached != null) return cached
-  if (typeof window === "undefined") return false
-  try {
-    const response = await fetch(path, { method: "HEAD" })
-    const available = response.ok
-    assetAvailabilityCache.set(path, available)
-    return available
-  } catch {
-    assetAvailabilityCache.set(path, false)
-    return false
-  }
-}
-
-const normalizeBasePath = (path: string) => path.replace(/\/$/, "")
-
-const getVisionModuleSources = async () => {
-  const sources = [CDN_VISION_BUNDLE_URL]
-  if (await isLocalAssetAvailable(LOCAL_VISION_BUNDLE_PATH)) {
-    sources.push(LOCAL_VISION_BUNDLE_PATH)
-  }
-  return sources
-}
-
-const getVisionWasmPaths = async () => {
-  const paths = [CDN_VISION_WASM_URL]
-  const localWasmJsPath = `${normalizeBasePath(LOCAL_WASM_PATH)}/vision_wasm_internal.js`
-  if (await isLocalAssetAvailable(localWasmJsPath)) {
-    paths.push(LOCAL_WASM_PATH)
-  }
-  return paths
-}
-
-const getPoseModelPaths = async () => {
-  const paths = [CDN_POSE_MODEL_URL]
-  if (await isLocalAssetAvailable(LOCAL_MODEL_PATH)) {
-    paths.push(LOCAL_MODEL_PATH)
-  }
-  return paths
-}
+// Flip to true ONLY if you copied assets to /public/mediapipe/*
+const ENABLE_LOCAL_MEDIAPIPE = false
 
 const DEFAULT_MODEL_ERROR =
   "Unable to load the MediaPipe pose model. Check your connection and try again."
 
-const loadVisionModule = async (): Promise<VisionModule> => {
-  let lastError: unknown = null
-  const sources = await getVisionModuleSources()
-  for (const source of sources) {
-    try {
-      const mod = (await import(/* webpackIgnore: true */ source)) as VisionModule
-      if (typeof window !== "undefined") console.info("[Vision] loaded from:", source)
-      return mod
-    } catch (error) {
-      lastError = error
-    }
-  }
-  throw lastError ?? new Error("Failed to load the MediaPipe vision bundle.")
-}
-
-const resolveVisionFileset = async (visionModule: VisionModule) => {
-  let lastError: unknown = null
-  const paths = await getVisionWasmPaths()
-  for (const path of paths) {
-    try {
-      const fileset = await visionModule.FilesetResolver.forVisionTasks(path)
-      if (typeof window !== "undefined") console.info("[Vision WASM] using base:", path)
-      return fileset
-    } catch (error) {
-      lastError = error
-    }
-  }
-  throw lastError ?? new Error("Failed to load MediaPipe WASM assets.")
-}
-
-const createPoseLandmarkerInstance = async (
-  visionModule: VisionModule,
-  fileset: unknown,
-): Promise<PoseLandmarkerInstance> => {
-  let lastError: unknown = null
-  const modelPaths = await getPoseModelPaths()
-  for (const modelPath of modelPaths) {
-    try {
-      const lm = await visionModule.PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: modelPath },
-        runningMode: "VIDEO",
-        numPoses: 1,
-        minPoseDetectionConfidence: 0.4,
-        minPosePresenceConfidence: 0.4,
-        minTrackingConfidence: 0.5,
-      })
-      if (typeof window !== "undefined") console.info("[Pose model] using:", modelPath)
-      return lm
-    } catch (error) {
-      lastError = error
-    }
-  }
-  throw lastError ?? new Error("Failed to initialize the MediaPipe pose landmarker.")
-}
-
-const getModelLoadErrorMessage = (error: unknown) => {
-  if (typeof window !== "undefined" && !window.navigator.onLine) {
-    return "You're offline. Reconnect to the internet and try loading the pose model again."
-  }
-  if (error instanceof Error && /404|not found|failed to fetch|network/i.test(error.message)) {
-    return "We couldn't download the MediaPipe pose files. Confirm the assets are available (public/mediapipe or CDN) and try again."
-  }
-  return DEFAULT_MODEL_ERROR
-}
+/* ------------------------------------------------------------------ */
+/*                          TYPES & HELPERS                            */
+/* ------------------------------------------------------------------ */
 
 interface PoseLandmarkerInstance {
   detectForVideo: (
     video: HTMLVideoElement,
     timestamp: number,
   ) => { landmarks?: NormalizedLandmark[][] }
-  close: () => void
+  close: () => void | Promise<void>
 }
 
 interface DrawingUtilsInstance {
@@ -167,7 +70,10 @@ interface VisionModule {
     forVisionTasks: (path: string) => Promise<unknown>
   }
   PoseLandmarker: {
-    createFromOptions: (vision: unknown, options: Record<string, unknown>) => Promise<PoseLandmarkerInstance>
+    createFromOptions: (
+      vision: unknown,
+      options: Record<string, unknown>,
+    ) => Promise<PoseLandmarkerInstance>
     POSE_CONNECTIONS: Array<[number, number]>
   }
   DrawingUtils: new (ctx: CanvasRenderingContext2D) => DrawingUtilsInstance
@@ -181,6 +87,99 @@ interface PoseComparison {
   status: PoseComparisonStatus
   delta: number | null
 }
+
+/** Build list with optional local fallback (only if flag is true). */
+const withOptionalLocal = (primary: string, local?: string) => {
+  const list: string[] = [primary]
+  if (ENABLE_LOCAL_MEDIAPIPE && local) list.push(local)
+  return list
+}
+
+/** Silently close a task (handles sync throw and async reject). */
+// Silently close a task (handles sync throw, async reject, and dev console noise).
+// In dev, skip calling close() entirely to avoid noisy console errors.
+// In production, call close() and swallow sync/async failures.
+function safeClose(instance: unknown) {
+  // Don’t invoke MediaPipe/TFLite close() in dev (prevents Next overlay).
+  if (process.env.NODE_ENV !== "production") return
+
+  const closeFn = (instance as any)?.close
+  if (typeof closeFn !== "function") return
+
+  try {
+    const res = closeFn.call(instance)
+    // absorb Promise rejections if close() returns a Promise
+    const thenable = res as any
+    if (thenable && typeof thenable.then === "function") {
+      void thenable.catch(() => {})
+    }
+  } catch {
+    // swallow sync throws
+  }
+}
+
+
+
+const loadVisionModule = async (): Promise<VisionModule> => {
+  let lastError: unknown = null
+  for (const src of withOptionalLocal(CDN_VISION_BUNDLE_URL, LOCAL_VISION_BUNDLE_PATH)) {
+    try {
+      const mod = (await import(/* webpackIgnore: true */ src)) as VisionModule
+      return mod
+    } catch (e) {
+      lastError = e
+    }
+  }
+  throw lastError ?? new Error("Failed to load the MediaPipe vision bundle.")
+}
+
+const resolveVisionFileset = async (visionModule: VisionModule) => {
+  let lastError: unknown = null
+  for (const base of withOptionalLocal(CDN_VISION_WASM_URL, LOCAL_WASM_PATH)) {
+    try {
+      return await visionModule.FilesetResolver.forVisionTasks(base)
+    } catch (e) {
+      lastError = e
+    }
+  }
+  throw lastError ?? new Error("Failed to load MediaPipe WASM assets.")
+}
+
+const createPoseLandmarkerInstance = async (
+  visionModule: VisionModule,
+  fileset: unknown,
+): Promise<PoseLandmarkerInstance> => {
+  let lastError: unknown = null
+  for (const modelPath of withOptionalLocal(CDN_POSE_MODEL_URL, LOCAL_MODEL_PATH)) {
+    try {
+      return await visionModule.PoseLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: modelPath },
+        runningMode: "VIDEO",
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.4,
+        minPosePresenceConfidence: 0.4,
+        minTrackingConfidence: 0.5,
+      })
+    } catch (e) {
+      lastError = e
+    }
+  }
+  throw lastError ?? new Error("Failed to initialize the MediaPipe pose landmarker.")
+}
+
+const getModelLoadErrorMessage = (error: unknown) => {
+  if (typeof window !== "undefined" && !window.navigator.onLine) {
+    return "You're offline. Reconnect to the internet and try loading the pose model again."
+  }
+  if (error instanceof Error && /404|not found|failed to fetch|network/i.test(error.message)) {
+    return "We couldn't download the MediaPipe pose files. Confirm the assets are available (public/mediapipe or CDN) and try again."
+  }
+  return DEFAULT_MODEL_ERROR
+}
+
+/* ------------------------------------------------------------------ */
+/*                         RENDER HELPERS                              */
+/* ------------------------------------------------------------------ */
 
 const formatMetricValue = (metric: ExampleMetricRange, value: number | null) =>
   metric.unit === "ratio" ? formatRatio(value) : formatDegrees(value)
@@ -233,6 +232,10 @@ const usePoseComparisons = (analysis: PoseAnalysis | null, exercise: ExerciseExa
     })
   }, [analysis, exercise])
 
+/* ------------------------------------------------------------------ */
+/*                           COMPONENT                                 */
+/* ------------------------------------------------------------------ */
+
 export function VideoAnalyzer() {
   const [selectedExerciseId, setSelectedExerciseId] = useState(exerciseExamples[0]?.id ?? "")
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null)
@@ -280,11 +283,11 @@ export function VideoAnalyzer() {
       if (isModelLoading) return false
       if (poseLandmarkerRef.current && !forceReload) return true
 
-      if (forceReload && poseLandmarkerRef.current) {
-        poseLandmarkerRef.current.close()
+      if (forceReload) {
+        safeClose(poseLandmarkerRef.current)
         poseLandmarkerRef.current = null
+        visionModuleRef.current = null
       }
-      if (forceReload) visionModuleRef.current = null
 
       setIsModelLoading(true)
       setModelError(null)
@@ -298,10 +301,10 @@ export function VideoAnalyzer() {
         poseLandmarkerRef.current = landmarker
         return true
       } catch (error) {
-        console.error(error)
+        // Avoid console.error here to keep overlay quiet
+        setModelError(getModelLoadErrorMessage(error))
         poseLandmarkerRef.current = null
         visionModuleRef.current = null
-        setModelError(getModelLoadErrorMessage(error))
         return false
       } finally {
         setIsModelLoading(false)
@@ -314,10 +317,8 @@ export function VideoAnalyzer() {
     void loadPoseLandmarker()
     return () => {
       cleanupAnimation()
-      if (poseLandmarkerRef.current) {
-        poseLandmarkerRef.current.close()
-        poseLandmarkerRef.current = null
-      }
+      safeClose(poseLandmarkerRef.current)
+      poseLandmarkerRef.current = null
       if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl)
       if (exampleAnimationRef.current !== undefined) window.clearInterval(exampleAnimationRef.current)
     }
@@ -344,9 +345,7 @@ export function VideoAnalyzer() {
     canvas.width = 480
     canvas.height = 270
 
-    if (exampleAnimationRef.current !== undefined) {
-      window.clearInterval(exampleAnimationRef.current)
-    }
+    if (exampleAnimationRef.current !== undefined) window.clearInterval(exampleAnimationRef.current)
 
     let frameIndex = 0
     const frames = selectedExercise.referenceFrames
@@ -385,9 +384,10 @@ export function VideoAnalyzer() {
   }
 
   const resetVideo = useCallback(() => {
-    if (videoRef.current) {
-      videoRef.current.pause()
-      videoRef.current.currentTime = 0
+    const video = videoRef.current
+    if (video) {
+      video.pause()
+      video.currentTime = 0
     }
     cleanupAnimation()
   }, [cleanupAnimation])
@@ -442,14 +442,8 @@ export function VideoAnalyzer() {
 
       if (result.landmarks && result.landmarks.length > 0) {
         const pose = result.landmarks[0]
-        drawingUtils.drawConnectors(pose, visionModule.PoseLandmarker.POSE_CONNECTIONS, {
-          lineWidth: 3,
-          color: "rgba(79, 70, 229, 0.85)",
-        })
-        drawingUtils.drawLandmarks(pose, {
-          radius: 4,
-          fillColor: "rgba(59, 130, 246, 0.9)",
-        })
+        drawingUtils.drawConnectors(pose, visionModule.PoseLandmarker.POSE_CONNECTIONS, { lineWidth: 3 })
+        drawingUtils.drawLandmarks(pose, { radius: 4 })
         accumulatePoseMetrics(accumulator, pose)
       }
 
@@ -458,7 +452,7 @@ export function VideoAnalyzer() {
 
     const handleEnded = () => finalizeAnalysis(accumulator)
     const handlePause = () => {
-      if (!video.ended) finalizeAnalysis(accumulator)
+      if (video && !video.ended) finalizeAnalysis(accumulator)
     }
 
     video.addEventListener("ended", handleEnded, { once: true })
@@ -468,8 +462,7 @@ export function VideoAnalyzer() {
       try {
         await video.play()
         animationFrameRef.current = requestAnimationFrame(handleFrame)
-      } catch (error) {
-        console.error(error)
+      } catch {
         setModelError("Unable to start video playback. Try a different file format.")
         finalizeAnalysis(accumulator)
       }
@@ -557,8 +550,24 @@ export function VideoAnalyzer() {
             <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
               {selectedExercise?.cues.map((cue) => <li key={cue}>{cue}</li>)}
             </ul>
-            <Button variant="outline" size="sm" onClick={handleAnalyze} disabled={isProcessing || isModelLoading} className="gap-2">
-              {isProcessing ? (<><Loader2 className="h-4 w-4 animate-spin" />Processing</>) : (<><PlayCircle className="h-4 w-4" />Analyze technique</>)}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAnalyze}
+              disabled={isProcessing || isModelLoading}
+              className="gap-2"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Processing
+                </>
+              ) : (
+                <>
+                  <PlayCircle className="h-4 w-4" />
+                  Analyze technique
+                </>
+              )}
             </Button>
             {modelError && (
               <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
@@ -572,7 +581,13 @@ export function VideoAnalyzer() {
                     onClick={() => void loadPoseLandmarker(true)}
                     disabled={isModelLoading}
                   >
-                    {isModelLoading ? (<span className="flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" />Retrying…</span>) : ("Retry model load")}
+                    {isModelLoading ? (
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Retrying…
+                      </span>
+                    ) : (
+                      "Retry model load"
+                    )}
                   </Button>
                 </div>
               </div>
@@ -592,12 +607,20 @@ export function VideoAnalyzer() {
                   Technique score: {comparisonScore}% within target
                 </Badge>
               )}
-              {analysis?.frameCount && <span className="text-xs text-muted-foreground">{analysis.frameCount} frames analyzed</span>}
+              {analysis?.frameCount && (
+                <span className="text-xs text-muted-foreground">
+                  {analysis.frameCount} frames analyzed
+                </span>
+              )}
               {uploadedVideoUrl && !isProcessing && (
-                <Button variant="ghost" size="sm" onClick={handleAnalyze} className="h-7 px-3 text-xs">Re-run analysis</Button>
+                <Button variant="ghost" size="sm" onClick={handleAnalyze} className="h-7 px-3 text-xs">
+                  Re-run analysis
+                </Button>
               )}
               {uploadedVideoUrl && (
-                <Button variant="ghost" size="sm" onClick={handleReset} className="h-7 px-3 text-xs">Reset</Button>
+                <Button variant="ghost" size="sm" onClick={handleReset} className="h-7 px-3 text-xs">
+                  Reset
+                </Button>
               )}
             </div>
           </div>
@@ -628,14 +651,21 @@ export function VideoAnalyzer() {
                       : "border-amber-500 text-amber-500"
 
                   return (
-                    <div key={comparison.metric.key} className="rounded-lg border border-border/60 bg-background p-3 text-sm">
+                    <div
+                      key={comparison.metric.key}
+                      className="rounded-lg border border-border/60 bg-background p-3 text-sm"
+                    >
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="font-medium text-foreground">{comparison.metric.label}</p>
                           <p className="text-xs text-muted-foreground">{comparison.metric.description}</p>
                         </div>
                         <Badge variant={badgeVariant} className={badgeClass}>
-                          {comparison.status === "missing" ? "No data" : withinRange ? "On target" : "Needs attention"}
+                          {comparison.status === "missing"
+                            ? "No data"
+                            : withinRange
+                              ? "On target"
+                              : "Needs attention"}
                         </Badge>
                       </div>
                       <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
@@ -648,7 +678,8 @@ export function VideoAnalyzer() {
                         <div className="flex items-center justify-between gap-4">
                           <span>Reference window</span>
                           <span>
-                            {formatMetricValue(comparison.metric, comparison.metric.min)} — {formatMetricValue(comparison.metric, comparison.metric.max)}
+                            {formatMetricValue(comparison.metric, comparison.metric.min)} —{" "}
+                            {formatMetricValue(comparison.metric, comparison.metric.max)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-4">
