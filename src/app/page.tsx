@@ -31,6 +31,17 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+type CheckInDiaryEntry = {
+  date: string
+  createdAt: string
+  mentalState: number
+  physicalState: number
+  mentalNotes: string
+  physicalNotes: string
+}
+
+const diaryStorageKey = "locker.checkInDiary"
+
 // Enhanced mock data with more sophisticated metrics
 const mockData = {
   checkIn: {
@@ -109,10 +120,37 @@ const formatDateLabel = (value: string) => {
   })
 }
 
+const formatDiaryEntryDate = (value: string) => {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+const isDiaryEntry = (value: unknown): value is CheckInDiaryEntry => {
+  if (!value || typeof value !== "object") return false
+  const entry = value as Partial<CheckInDiaryEntry>
+  return (
+    typeof entry.date === "string" &&
+    typeof entry.createdAt === "string" &&
+    typeof entry.mentalState === "number" &&
+    typeof entry.physicalState === "number" &&
+    typeof entry.mentalNotes === "string" &&
+    typeof entry.physicalNotes === "string"
+  )
+}
+
 export default function DashboardPage() {
   const [mentalState, setMentalState] = useState<number | null>(mockData.checkIn.mental)
   const [physicalState, setPhysicalState] = useState<number | null>(mockData.checkIn.physical)
   const [checkInCompleted, setCheckInCompleted] = useState(mockData.checkIn.completed)
+  const [mentalNotes, setMentalNotes] = useState("")
+  const [physicalNotes, setPhysicalNotes] = useState("")
+  const [diaryEntries, setDiaryEntries] = useState<CheckInDiaryEntry[]>([])
   const { role, primaryAthlete, currentUser } = useRole()
   const isGuest = !currentUser
 
@@ -121,13 +159,56 @@ export default function DashboardPage() {
       setMentalState(mockData.checkIn.mental)
       setPhysicalState(mockData.checkIn.physical)
       setCheckInCompleted(mockData.checkIn.completed)
+      setMentalNotes("")
+      setPhysicalNotes("")
     } else {
-      setMentalState(null)
-      setPhysicalState(null)
       setCheckInCompleted(false)
     }
   }, [isGuest])
   const athleteSessions = primaryAthlete?.sessions ?? []
+
+  useEffect(() => {
+    if (typeof window === "undefined" || isGuest) return
+    const stored = window.localStorage.getItem(diaryStorageKey)
+    if (!stored) return
+    try {
+      const parsed = JSON.parse(stored)
+      const entries = (Array.isArray(parsed) ? parsed : []).filter(isDiaryEntry)
+      entries.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+      setDiaryEntries(entries)
+    } catch (error) {
+      console.error("Failed to load diary entries", error)
+    }
+  }, [isGuest])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || isGuest) return
+    window.localStorage.setItem(diaryStorageKey, JSON.stringify(diaryEntries))
+  }, [diaryEntries, isGuest])
+
+  useEffect(() => {
+    if (isGuest) return
+    const todayKey = new Date().toISOString().slice(0, 10)
+    const todaysEntry = diaryEntries.find((entry) => entry.date === todayKey)
+
+    if (todaysEntry) {
+      setMentalState(todaysEntry.mentalState)
+      setPhysicalState(todaysEntry.physicalState)
+      setMentalNotes(todaysEntry.mentalNotes)
+      setPhysicalNotes(todaysEntry.physicalNotes)
+      setCheckInCompleted(true)
+    } else {
+      setMentalState(null)
+      setPhysicalState(null)
+      setMentalNotes("")
+      setPhysicalNotes("")
+      setCheckInCompleted(false)
+    }
+  }, [diaryEntries, isGuest])
+
+  const recentDiaryEntries = useMemo(() => diaryEntries.slice(0, 5), [diaryEntries])
 
   const today = new Date()
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
@@ -298,10 +379,31 @@ export default function DashboardPage() {
   }, [primaryAthlete, hydrationStats.progress])
 
   const handleCheckIn = () => {
-    if (mentalState && physicalState) {
-      setCheckInCompleted(true)
-      console.log("Daily Check-in completed:", { mentalState, physicalState })
+    if (mentalState === null || physicalState === null) {
+      return
     }
+
+    const now = new Date()
+    const todayKey = now.toISOString().slice(0, 10)
+    const newEntry: CheckInDiaryEntry = {
+      date: todayKey,
+      createdAt: now.toISOString(),
+      mentalState,
+      physicalState,
+      mentalNotes: mentalNotes.trim(),
+      physicalNotes: physicalNotes.trim(),
+    }
+
+    setDiaryEntries((prev) => {
+      const filtered = prev.filter((entry) => entry.date !== todayKey)
+      const updated = [newEntry, ...filtered]
+      updated.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+      return updated
+    })
+
+    setCheckInCompleted(true)
   }
 
   if (role === "coach") {
@@ -434,15 +536,44 @@ export default function DashboardPage() {
                 onChange={setPhysicalState}
               />
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-600">Mental Notes</p>
+                  <span className="text-xs text-gray-400">Optional</span>
+                </div>
+                <textarea
+                  value={mentalNotes}
+                  onChange={(event) => setMentalNotes(event.target.value)}
+                  placeholder="Celebrate wins, note stressors, or reflect on your mindset."
+                  className="w-full min-h-[120px] rounded-2xl border border-white/30 bg-white/60 px-4 py-3 text-sm text-gray-700 shadow-inner backdrop-blur-sm transition focus:border-[#1c6dd0] focus:outline-none focus:ring-2 focus:ring-[#1c6dd0]/50"
+                />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-600">Physical Notes</p>
+                  <span className="text-xs text-gray-400">Optional</span>
+                </div>
+                <textarea
+                  value={physicalNotes}
+                  onChange={(event) => setPhysicalNotes(event.target.value)}
+                  placeholder="Log soreness, recovery cues, or anything your body is telling you."
+                  className="w-full min-h-[120px] rounded-2xl border border-white/30 bg-white/60 px-4 py-3 text-sm text-gray-700 shadow-inner backdrop-blur-sm transition focus:border-[#1c6dd0] focus:outline-none focus:ring-2 focus:ring-[#1c6dd0]/50"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500">
+              Entries are saved to this device each time you complete your check-in.
+            </p>
             <Button
               onClick={handleCheckIn}
-              disabled={checkInCompleted || !mentalState || !physicalState}
+              disabled={mentalState === null || physicalState === null}
               className="w-full h-14 text-lg font-bold gradient-primary hover:shadow-glow text-white border-0 rounded-2xl transition-all duration-300 hover:scale-105"
             >
               {checkInCompleted ? (
                 <>
                   <CheckCircle2 className="h-6 w-6 mr-3" />
-                  Check-in Complete! 🎉
+                  Update Check-in
                 </>
               ) : (
                 <>
@@ -451,6 +582,55 @@ export default function DashboardPage() {
                 </>
               )}
             </Button>
+            {recentDiaryEntries.length > 0 && (
+              <div className="pt-6 border-t border-white/40">
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">
+                  Recent check-in notes
+                </h4>
+                <div className="space-y-4 max-h-64 overflow-y-auto pr-1">
+                  {recentDiaryEntries.map((entry) => (
+                    <div
+                      key={entry.createdAt}
+                      className="glass-card border border-white/30 rounded-2xl p-4 space-y-3 shadow-sm"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+                        <span className="font-semibold text-gray-800">
+                          {formatDiaryEntryDate(entry.date)}
+                        </span>
+                        <span className="text-xs uppercase tracking-wide text-[#1c6dd0] font-semibold">
+                          🧠 {entry.mentalState} · 💪 {entry.physicalState}
+                        </span>
+                      </div>
+                      {entry.mentalNotes && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                            Mental
+                          </p>
+                          <p className="text-sm text-gray-700 whitespace-pre-line">
+                            {entry.mentalNotes}
+                          </p>
+                        </div>
+                      )}
+                      {entry.physicalNotes && (
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                            Physical
+                          </p>
+                          <p className="text-sm text-gray-700 whitespace-pre-line">
+                            {entry.physicalNotes}
+                          </p>
+                        </div>
+                      )}
+                      {!entry.mentalNotes && !entry.physicalNotes && (
+                        <p className="text-xs text-gray-500">
+                          No diary notes added for this check-in.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
