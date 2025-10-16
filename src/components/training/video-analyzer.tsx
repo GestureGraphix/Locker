@@ -103,15 +103,17 @@ function safeClose(instance: unknown) {
   // Don’t invoke MediaPipe/TFLite close() in dev (prevents Next overlay).
   if (process.env.NODE_ENV !== "production") return
 
-  const closeFn = (instance as any)?.close
+  // Narrow type to include optional close() signature
+  type Closable = { close?: () => unknown }
+
+  const closeFn = (instance as Closable).close
   if (typeof closeFn !== "function") return
 
   try {
     const res = closeFn.call(instance)
     // absorb Promise rejections if close() returns a Promise
-    const thenable = res as any
-    if (thenable && typeof thenable.then === "function") {
-      void thenable.catch(() => {})
+    if (res && typeof (res as Promise<unknown>).then === "function") {
+      void (res as Promise<unknown>).catch(() => {})
     }
   } catch {
     // swallow sync throws
