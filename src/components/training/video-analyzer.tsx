@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AlertCircle, Loader2, PlayCircle, Video } from "lucide-react"
@@ -95,30 +95,26 @@ const withOptionalLocal = (primary: string, local?: string) => {
   return list
 }
 
-/** Silently close a task (handles sync throw and async reject). */
-// Silently close a task (handles sync throw, async reject, and dev console noise).
-// In dev, skip calling close() entirely to avoid noisy console errors.
-// In production, call close() and swallow sync/async failures.
+/** Silently close a task (handles sync throw, async reject, and dev console noise). */
 function safeClose(instance: unknown) {
   // Don’t invoke MediaPipe/TFLite close() in dev (prevents Next overlay).
   if (process.env.NODE_ENV !== "production") return
 
-  const closeFn = (instance as any)?.close
+  const maybe = instance as { close?: () => unknown } | null | undefined
+  const closeFn = maybe?.close
   if (typeof closeFn !== "function") return
 
   try {
-    const res = closeFn.call(instance)
+    const res = closeFn.call(instance as object)
     // absorb Promise rejections if close() returns a Promise
-    const thenable = res as any
+    const thenable = res as { then?: unknown } | undefined
     if (thenable && typeof thenable.then === "function") {
-      void thenable.catch(() => {})
+      void (res as Promise<unknown>).catch(() => {})
     }
   } catch {
     // swallow sync throws
   }
 }
-
-
 
 const loadVisionModule = async (): Promise<VisionModule> => {
   let lastError: unknown = null
