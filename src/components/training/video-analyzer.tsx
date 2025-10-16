@@ -53,6 +53,7 @@ interface PoseLandmarkerInstance {
     video: HTMLVideoElement,
     timestamp: number,
   ) => { landmarks?: NormalizedLandmark[][] }
+  // Some builds return void, others Promise<void>. Support both.
   close: () => void | Promise<void>
 }
 
@@ -88,43 +89,89 @@ interface PoseComparison {
   delta: number | null
 }
 
-/** Build list with optional local fallback (only if flag is true). */
-const withOptionalLocal = (primary: string, local?: string) => {
-  const list: string[] = [primary]
-  if (ENABLE_LOCAL_MEDIAPIPE && local) list.push(local)
-  return list
-}
+const assetAvailabilityCache = new Map<string, boolean>()
 
-/** Silently close a task (handles sync throw and async reject). */
-// Silently close a task (handles sync throw, async reject, and dev console noise).
-// In dev, skip calling close() entirely to avoid noisy console errors.
-// In production, call close() and swallow sync/async failures.
-function safeClose(instance: unknown) {
-  // Don’t invoke MediaPipe/TFLite close() in dev (prevents Next overlay).
-  if (process.env.NODE_ENV !== "production") return
-
-  const closeFn = (instance as any)?.close
-  if (typeof closeFn !== "function") return
-
+const isLocalAssetAvailable = async (path: string) => {
+  if (!ENABLE_LOCAL_MEDIAPIPE) return false
+  if (!path.startsWith("/")) return false
+  const cached = assetAvailabilityCache.get(path)
+  if (cached != null) return cached
+  if (typeof window === "undefined") return false
   try {
-    const res = closeFn.call(instance)
-    // absorb Promise rejections if close() returns a Promise
-    const thenable = res as any
-    if (thenable && typeof thenable.then === "function") {
-      void thenable.catch(() => {})
-    }
+    const response = await fetch(path, { method: "HEAD" })
+    const available = response.ok
+    assetAvailabilityCache.set(path, available)
+    return available
   } catch {
-    // swallow sync throws
+    assetAvailabilityCache.set(path, false)
+    return false
   }
 }
 
+const normalizeBasePath = (p: string) => p.replace(/\/$/, "")
 
+const getVisionModuleSources = async (): Promise<string[]> => {
+  const list: string[] = [CDN_VISION_BUNDLE_URL]
+  if (await isLocalAssetAvailable(LOCAL_VISION_BUNDLE_PATH)) {
+    list.push(LOCAL_VISION_BUNDLE_PATH)
+  }
+  return list
+}
+
+const getVisionWasmPaths = async (): Promise<string[]> => {
+  const list: string[] = [CDN_VISION_WASM_URL]
+  const localWasmJs = `${normalizeBasePath(LOCAL_WASM_PATH)}/vision_wasm_internal.js`
+  if (await isLocalAssetAvailable(localWasmJs)) {
+    list.push(LOCAL_WASM_PATH)
+  }
+  return list
+}
+
+const getPoseModelPaths = async (): Promise<string[]> => {
+  const list: string[] = [CDN_POSE_MODEL_URL]
+  if (await isLocalAssetAvailable(LOCAL_MODEL_PATH)) {
+    list.push(LOCAL_MODEL_PATH)
+  }
+  return list
+}
+
+// Type guards (no `any`)
+function hasFunction<T extends object, K extends PropertyKey>(
+  obj: T | null | undefined,
+  key: K,
+): obj is T & Record<K, (...args: never[]) => unknown> {
+  return !!obj && typeof (obj as Record<K, unknown>)[key] === "function"
+}
+function isThenable(x: unknown): x is PromiseLike<unknown> {
+  return !!x && typeof (x as PromiseLike<unknown>).then === "function"
+}
+
+// Normalize (void | Promise<void>) and swallow errors in production
+type MaybeCloseable = { close?: () => void | Promise<void> } | object | null | undefined
+function safeClose(instance: MaybeCloseable): void {
+  // In dev we skip calling close to avoid noisy overlays
+  if (process.env.NODE_ENV !== "production") return
+  if (!hasFunction(instance as object | null, "close")) return
+  try {
+    const result = (instance as { close: () => void | Promise<void> }).close()
+    if (isThenable(result)) {
+      void result.catch(() => {
+        /* swallow */
+      })
+    }
+  } catch {
+    /* swallow */
+  }
+}
 
 const loadVisionModule = async (): Promise<VisionModule> => {
   let lastError: unknown = null
-  for (const src of withOptionalLocal(CDN_VISION_BUNDLE_URL, LOCAL_VISION_BUNDLE_PATH)) {
+  const sources = await getVisionModuleSources()
+  for (const src of sources) {
     try {
-      const mod = (await import(/* webpackIgnore: true */ src)) as VisionModule
+      // Import returns `unknown`; cast to our interface type
+      const mod = (await import(/* webpackIgnore: true */ src)) as unknown as VisionModule
+      if (typeof window !== "undefined") console.info("[Vision] loaded from:", src)
       return mod
     } catch (e) {
       lastError = e
@@ -135,9 +182,12 @@ const loadVisionModule = async (): Promise<VisionModule> => {
 
 const resolveVisionFileset = async (visionModule: VisionModule) => {
   let lastError: unknown = null
-  for (const base of withOptionalLocal(CDN_VISION_WASM_URL, LOCAL_WASM_PATH)) {
+  const paths = await getVisionWasmPaths()
+  for (const base of paths) {
     try {
-      return await visionModule.FilesetResolver.forVisionTasks(base)
+      const fileset = await visionModule.FilesetResolver.forVisionTasks(base)
+      if (typeof window !== "undefined") console.info("[Vision WASM] using base:", base)
+      return fileset
     } catch (e) {
       lastError = e
     }
@@ -150,9 +200,10 @@ const createPoseLandmarkerInstance = async (
   fileset: unknown,
 ): Promise<PoseLandmarkerInstance> => {
   let lastError: unknown = null
-  for (const modelPath of withOptionalLocal(CDN_POSE_MODEL_URL, LOCAL_MODEL_PATH)) {
+  const models = await getPoseModelPaths()
+  for (const modelPath of models) {
     try {
-      return await visionModule.PoseLandmarker.createFromOptions(fileset, {
+      const lm = await visionModule.PoseLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: modelPath },
         runningMode: "VIDEO",
         numPoses: 1,
@@ -160,6 +211,8 @@ const createPoseLandmarkerInstance = async (
         minPosePresenceConfidence: 0.4,
         minTrackingConfidence: 0.5,
       })
+      if (typeof window !== "undefined") console.info("[Pose model] using:", modelPath)
+      return lm
     } catch (e) {
       lastError = e
     }
@@ -301,10 +354,10 @@ export function VideoAnalyzer() {
         poseLandmarkerRef.current = landmarker
         return true
       } catch (error) {
-        // Avoid console.error here to keep overlay quiet
-        setModelError(getModelLoadErrorMessage(error))
+        console.error(error)
         poseLandmarkerRef.current = null
         visionModuleRef.current = null
+        setModelError(getModelLoadErrorMessage(error))
         return false
       } finally {
         setIsModelLoading(false)
@@ -345,7 +398,9 @@ export function VideoAnalyzer() {
     canvas.width = 480
     canvas.height = 270
 
-    if (exampleAnimationRef.current !== undefined) window.clearInterval(exampleAnimationRef.current)
+    if (exampleAnimationRef.current !== undefined) {
+      window.clearInterval(exampleAnimationRef.current)
+    }
 
     let frameIndex = 0
     const frames = selectedExercise.referenceFrames
@@ -384,10 +439,9 @@ export function VideoAnalyzer() {
   }
 
   const resetVideo = useCallback(() => {
-    const video = videoRef.current
-    if (video) {
-      video.pause()
-      video.currentTime = 0
+    if (videoRef.current) {
+      videoRef.current.pause()
+      ;(videoRef.current as HTMLVideoElement).currentTime = 0
     }
     cleanupAnimation()
   }, [cleanupAnimation])
@@ -442,8 +496,14 @@ export function VideoAnalyzer() {
 
       if (result.landmarks && result.landmarks.length > 0) {
         const pose = result.landmarks[0]
-        drawingUtils.drawConnectors(pose, visionModule.PoseLandmarker.POSE_CONNECTIONS, { lineWidth: 3 })
-        drawingUtils.drawLandmarks(pose, { radius: 4 })
+        drawingUtils.drawConnectors(pose, visionModule.PoseLandmarker.POSE_CONNECTIONS, {
+          lineWidth: 3,
+          color: "rgba(79, 70, 229, 0.85)",
+        })
+        drawingUtils.drawLandmarks(pose, {
+          radius: 4,
+          fillColor: "rgba(59, 130, 246, 0.9)",
+        })
         accumulatePoseMetrics(accumulator, pose)
       }
 
@@ -452,7 +512,7 @@ export function VideoAnalyzer() {
 
     const handleEnded = () => finalizeAnalysis(accumulator)
     const handlePause = () => {
-      if (video && !video.ended) finalizeAnalysis(accumulator)
+      if (!video.ended) finalizeAnalysis(accumulator)
     }
 
     video.addEventListener("ended", handleEnded, { once: true })
@@ -462,7 +522,8 @@ export function VideoAnalyzer() {
       try {
         await video.play()
         animationFrameRef.current = requestAnimationFrame(handleFrame)
-      } catch {
+      } catch (error) {
+        console.error(error)
         setModelError("Unable to start video playback. Try a different file format.")
         finalizeAnalysis(accumulator)
       }
