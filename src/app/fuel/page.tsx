@@ -77,8 +77,34 @@ const getProteinFromItem = (item: MenuItem): number | undefined => {
 }
 
 const formatNutritionFactValue = (fact: NutritionFact): string | null => {
-  if (fact.display && fact.display.trim()) return fact.display.trim()
-  if (fact.amount != null) return `${fact.amount}${fact.unit ? ` ${fact.unit}` : ""}`.trim()
+  const display = typeof fact.display === "string" ? fact.display.trim() : ""
+  const numericValue =
+    toNumber(fact.amount) ??
+    (display ? toNumber(display) : undefined) ??
+    (typeof fact.percentDailyValue === "number" ? fact.percentDailyValue : undefined)
+
+  if (numericValue != null && Number.isFinite(numericValue)) {
+    const rounded = Math.round(numericValue)
+
+    if (display) {
+      const match = display.match(/-?\d+(?:\.\d+)?/)
+      if (match) {
+        return display.replace(match[0], String(rounded))
+      }
+    }
+
+    if (fact.unit) return `${rounded} ${fact.unit}`.trim()
+    if (fact.percentDailyValue != null) return `${rounded}%`
+    return String(rounded)
+  }
+
+  if (display) return display
+
+  if (fact.amount != null) {
+    const rounded = Math.round(Number(fact.amount))
+    return `${rounded}${fact.unit ? ` ${fact.unit}` : ""}`.trim()
+  }
+
   return null
 }
 
