@@ -49,6 +49,12 @@ const formatDate = (value: string) => {
   })
 }
 
+const formatTwoDecimalString = (value: number): string => {
+  if (!Number.isFinite(value)) return "0"
+  const rounded = Math.round(value * 100) / 100
+  return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(2)
+}
+
 const formatTimeRange = (start?: string, end?: string) => {
   if (!start || !end) return ""
   const startDate = new Date(start)
@@ -656,7 +662,7 @@ export default function Account() {
                     </div>
                     <div className="text-right text-xs text-muted-foreground">
                       <p>{meal.calories} kcal</p>
-                      <p>{meal.proteinG}g protein</p>
+                      <p>{formatTwoDecimalString(meal.proteinG)}g protein</p>
                     </div>
                   </div>
                 ))
