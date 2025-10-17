@@ -21,6 +21,7 @@ export type Course = {
   name: string
   code: string
   professor: string
+  schedule?: string
   source?: "manual" | "ics"
 }
 
@@ -29,10 +30,38 @@ export type AcademicsUpdateDetail = {
 }
 
 export const mockCourses: Course[] = [
-  { id: 1, name: "Calculus II", code: "MATH 201", professor: "Dr. Smith", source: "manual" },
-  { id: 2, name: "Physics I", code: "PHYS 101", professor: "Dr. Johnson", source: "manual" },
-  { id: 3, name: "Biomechanics", code: "KIN 301", professor: "Dr. Williams", source: "manual" },
-  { id: 4, name: "Sports Psychology", code: "PSYC 250", professor: "Dr. Brown", source: "manual" }
+  {
+    id: 1,
+    name: "Calculus II",
+    code: "MATH 201",
+    professor: "Dr. Smith",
+    schedule: "Mon/Wed/Fri · 9:00 AM – 10:15 AM",
+    source: "manual"
+  },
+  {
+    id: 2,
+    name: "Physics I",
+    code: "PHYS 101",
+    professor: "Dr. Johnson",
+    schedule: "Tue/Thu · 11:00 AM – 12:15 PM",
+    source: "manual"
+  },
+  {
+    id: 3,
+    name: "Biomechanics",
+    code: "KIN 301",
+    professor: "Dr. Williams",
+    schedule: "Mon · 2:00 PM – 4:00 PM",
+    source: "manual"
+  },
+  {
+    id: 4,
+    name: "Sports Psychology",
+    code: "PSYC 250",
+    professor: "Dr. Brown",
+    schedule: "Wed · 1:00 PM – 2:30 PM",
+    source: "manual"
+  }
 ]
 
 export const mockAcademicItems: AcademicItem[] = [

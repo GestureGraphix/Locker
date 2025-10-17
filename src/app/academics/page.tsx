@@ -95,7 +95,7 @@ const parseIcsContent = (content: string): RawIcsEvent[] => {
 
 const parseCourseDetails = (summary: string) => {
   const cleanSummary = summary.trim()
-  const match = cleanSummary.match(/^([A-Z]{2,4}\s?\d{3}[A-Z]?)/)
+  const match = cleanSummary.match(/^([A-Z]{2,4}\s?\d{3,4}[A-Z]?)/)
 
   if (match?.[1]) {
     const code = match[1].replace(/\s+/, " ")
@@ -143,6 +143,75 @@ const extractProfessorFromEvent = (event: RawIcsEvent) => {
   return "Instructor TBA"
 }
 
+const parseIcsDate = (value?: string) => {
+  if (!value) return null
+  const raw = value.trim()
+  const match = raw.match(
+    /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z|[+-]\d{4})?)?$/
+  )
+
+  if (!match) return null
+
+  const [, year, month, day, hour, minute, second, zone] = match
+  const y = Number(year)
+  const m = Number(month) - 1
+  const d = Number(day)
+
+  if (hour !== undefined && minute !== undefined) {
+    const h = Number(hour)
+    const min = Number(minute)
+    const sec = second ? Number(second) : 0
+
+    if (zone === "Z") {
+      return new Date(Date.UTC(y, m, d, h, min, sec))
+    }
+
+    if (zone && zone !== "Z") {
+      const offsetSign = zone.startsWith("+") ? 1 : -1
+      const offsetHours = Number(zone.slice(1, 3))
+      const offsetMinutes = Number(zone.slice(3, 5))
+      const totalOffsetMinutes = offsetSign * (offsetHours * 60 + offsetMinutes)
+      const utcMs = Date.UTC(y, m, d, h, min, sec) - totalOffsetMinutes * 60 * 1000
+      return new Date(utcMs)
+    }
+
+    return new Date(y, m, d, h, min, sec)
+  }
+
+  if (zone === "Z") {
+    return new Date(Date.UTC(y, m, d))
+  }
+
+  return new Date(y, m, d)
+}
+
+const formatCourseSchedule = (event: RawIcsEvent) => {
+  const start = parseIcsDate(event["DTSTART"])
+  if (!start) return null
+
+  const end = parseIcsDate(event["DTEND"])
+  const weekdayFormatter = new Intl.DateTimeFormat(undefined, { weekday: "short" })
+  const timeFormatter = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  })
+
+  const weekday = weekdayFormatter.format(start)
+  const startTime = timeFormatter.format(start)
+  const endTime = end ? timeFormatter.format(end) : null
+
+  const base = `${weekday} · ${startTime}${endTime ? ` – ${endTime}` : ""}`
+  const locationRaw = event["LOCATION"]
+  if (locationRaw) {
+    const location = decodeIcsText(locationRaw).trim()
+    if (location) {
+      return `${base} @ ${location}`
+    }
+  }
+
+  return base
+}
+
 const mergeIcsCourses = (rawEvents: RawIcsEvent[], existingCourses: Course[]) => {
   const existingKeys = new Set(
     existingCourses.map(course => `${course.code.toLowerCase()}|${course.name.toLowerCase()}`)
@@ -172,6 +241,7 @@ const mergeIcsCourses = (rawEvents: RawIcsEvent[], existingCourses: Course[]) =>
       code,
       name,
       professor: extractProfessorFromEvent(rawEvent),
+      schedule: formatCourseSchedule(rawEvent) ?? undefined,
       source: "ics"
     })
   }
@@ -645,6 +715,9 @@ export default function Academics() {
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-muted-foreground">{course.professor}</p>
+                {course.schedule && (
+                  <p className="text-xs text-muted-foreground mt-1">{course.schedule}</p>
+                )}
                 <div className="mt-2">
                   <Badge variant="outline" className="text-xs">
                     {academicItems.filter(item => item.courseId === course.id).length} items
