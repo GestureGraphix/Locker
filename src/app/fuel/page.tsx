@@ -18,7 +18,7 @@ import {
   GlassWater,
   Zap,
   Target,
-  Clock,
+  CalendarDays,
   Loader2,
   RefreshCcw
 } from "lucide-react"
@@ -76,9 +76,32 @@ const getProteinFromItem = (item: MenuItem): number | undefined => {
   return factValue(p)
 }
 
+const roundToTwo = (value: number): number => Math.round(value * 100) / 100
+
+const formatTwoDecimalString = (value: number): string => {
+  const rounded = roundToTwo(value)
+  return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(2)
+}
+
 const formatNutritionFactValue = (fact: NutritionFact): string | null => {
-  if (fact.display && fact.display.trim()) return fact.display.trim()
-  if (fact.amount != null) return `${fact.amount}${fact.unit ? ` ${fact.unit}` : ""}`.trim()
+  const trimmedDisplay = fact.display?.trim()
+  const amount = toNumber(fact.amount)
+
+  if (amount != null) {
+    const formattedAmount = formatTwoDecimalString(amount)
+    return `${formattedAmount}${fact.unit ? ` ${fact.unit}` : ""}`.trim()
+  }
+
+  if (trimmedDisplay) {
+    const numericDisplay = toNumber(trimmedDisplay)
+    if (numericDisplay != null) {
+      const formattedAmount = formatTwoDecimalString(numericDisplay)
+      const inferredUnit = fact.unit ?? trimmedDisplay.replace(/[0-9.,\s-]+/g, "").trim()
+      return inferredUnit ? `${formattedAmount} ${inferredUnit}`.trim() : formattedAmount
+    }
+    return trimmedDisplay
+  }
+
   return null
 }
 
@@ -111,6 +134,15 @@ const getMealTypeColor = (type: string) => {
   }
 }
 
+const formatMealTypeLabel = (value: string) =>
+  value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : ""
+
+const MEAL_TYPE_OPTIONS = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" }
+]
+
 const getSourceIcon = (source: string) => {
   switch (source) {
     case "cup": return <Coffee className="h-4 w-4" />
@@ -120,9 +152,14 @@ const getSourceIcon = (source: string) => {
   }
 }
 
-const formatTime = (dateString: string) => {
+const formatMealDate = (dateString: string) => {
   const date = new Date(dateString)
-  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+  if (Number.isNaN(date.getTime())) return "Date unavailable"
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  })
 }
 
 const getNextHydrationId = (logs: { id: number }[]): number =>
@@ -166,6 +203,14 @@ export default function Fuel() {
     baseProteinG: undefined as number | undefined,
     isFromMenu: false
   })
+  const mealTypeOptions = useMemo(() => {
+    const baseOptions = MEAL_TYPE_OPTIONS
+    if (!newMeal.mealType) return baseOptions
+    const exists = baseOptions.some((option) => option.value === newMeal.mealType)
+    return exists
+      ? baseOptions
+      : [...baseOptions, { value: newMeal.mealType, label: formatMealTypeLabel(newMeal.mealType) }]
+  }, [newMeal.mealType])
   const [menuDate, setMenuDate] = useState(new Date().toISOString().split("T")[0])
   const [menuData, setMenuData] = useState<MenuLocation[]>([])
   const [menuLoading, setMenuLoading] = useState(false)
@@ -362,7 +407,7 @@ export default function Fuel() {
 
     const baseProtein = newMeal.baseProteinG ?? (newMeal.proteinG ? Number.parseFloat(newMeal.proteinG) : undefined) ?? 0
     const totalCalories = Math.round(baseCalories * portion)
-    const totalProtein = Number((baseProtein * portion).toFixed(1))
+    const totalProtein = roundToTwo(baseProtein * portion)
 
     updateMealLogs(primaryAthlete.id, (prev) => [
       ...prev,
@@ -398,7 +443,7 @@ export default function Fuel() {
 
   const todayMeals = mealLogs.filter((m) => new Date(m.dateTime).toDateString() === new Date().toDateString())
   const totalCalories = todayMeals.reduce((sum, m) => sum + m.calories, 0)
-  const totalProtein = todayMeals.reduce((sum, m) => sum + m.proteinG, 0)
+  const totalProtein = roundToTwo(todayMeals.reduce((sum, m) => sum + m.proteinG, 0))
   const completedMeals = todayMeals.filter((m) => m.completed).length
 
   const parsedPortion = Number.parseFloat(newMeal.portion)
@@ -413,7 +458,7 @@ export default function Fuel() {
       : undefined
   const portionProteinPreview =
     newMeal.isFromMenu && effectiveBaseProtein != null && !Number.isNaN(effectiveBaseProtein)
-      ? Number((effectiveBaseProtein * portionMultiplierPreview).toFixed(1))
+      ? roundToTwo(effectiveBaseProtein * portionMultiplierPreview)
       : undefined
 
   /* ======================== UI ======================== */
@@ -493,16 +538,17 @@ export default function Fuel() {
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium">Meal Type</label>
+                  <label className="text-sm font-medium">Meal Category</label>
                   <select
                     className="w-full p-2 border rounded-md"
                     value={newMeal.mealType}
                     onChange={(e) => setNewMeal((prev) => ({ ...prev, mealType: e.target.value }))}
                   >
-                    <option value="breakfast">Breakfast</option>
-                    <option value="lunch">Lunch</option>
-                    <option value="dinner">Dinner</option>
-                    <option value="snack">Snack</option>
+                    {mealTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -521,7 +567,9 @@ export default function Fuel() {
                       <p className="mt-1 text-xs text-muted-foreground">
                         Per portion
                         {effectiveBaseCalories != null ? ` · ${Math.round(effectiveBaseCalories)} cal` : ""}
-                        {effectiveBaseProtein != null ? ` · ${Number(effectiveBaseProtein.toFixed(1))}g protein` : ""}
+                        {effectiveBaseProtein != null
+                          ? ` · ${formatTwoDecimalString(effectiveBaseProtein)}g protein`
+                          : ""}
                       </p>
                     </div>
                     {(portionCaloriesPreview != null || portionProteinPreview != null) && (
@@ -532,7 +580,9 @@ export default function Fuel() {
                         <p className="text-xs text-muted-foreground">
                           {portionCaloriesPreview != null ? `${portionCaloriesPreview} cal` : null}
                           {portionCaloriesPreview != null && portionProteinPreview != null ? " · " : null}
-                          {portionProteinPreview != null ? `${portionProteinPreview}g protein` : null}
+                          {portionProteinPreview != null
+                            ? `${formatTwoDecimalString(portionProteinPreview)}g protein`
+                            : null}
                         </p>
                       </div>
                     )}
@@ -639,7 +689,7 @@ export default function Fuel() {
               <Zap className="h-5 w-5 text-[#123d73]" />
               <div>
                 <p className="text-sm font-medium">Protein Today</p>
-                <p className="text-2xl font-bold">{totalProtein}g</p>
+                <p className="text-2xl font-bold">{formatTwoDecimalString(totalProtein)}g</p>
               </div>
             </div>
           </CardContent>
@@ -711,11 +761,11 @@ export default function Fuel() {
                           <h3 className="font-semibold capitalize">{meal.mealType}</h3>
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <span className="flex items-center gap-1">
-                              <Clock className="h-4 w-4" />
-                              {formatTime(meal.dateTime)}
+                              <CalendarDays className="h-4 w-4" />
+                              {formatMealDate(meal.dateTime)}
                             </span>
                             <span>{meal.calories} cal</span>
-                            <span>{meal.proteinG}g protein</span>
+                            <span>{formatTwoDecimalString(meal.proteinG)}g protein</span>
                           </div>
                           {meal.notes && <p className="text-sm text-muted-foreground mt-1">{meal.notes}</p>}
                           {meal.nutritionFacts?.length ? (
@@ -759,7 +809,7 @@ export default function Fuel() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Type</TableHead>
-                      <TableHead>Time</TableHead>
+                      <TableHead>Date</TableHead>
                       <TableHead>Calories</TableHead>
                       <TableHead>Protein</TableHead>
                       <TableHead>Notes</TableHead>
@@ -775,9 +825,9 @@ export default function Fuel() {
                             <span className="capitalize">{meal.mealType}</span>
                           </div>
                         </TableCell>
-                        <TableCell>{formatTime(meal.dateTime)}</TableCell>
+                        <TableCell>{formatMealDate(meal.dateTime)}</TableCell>
                         <TableCell>{meal.calories}</TableCell>
-                        <TableCell>{meal.proteinG}g</TableCell>
+                        <TableCell>{formatTwoDecimalString(meal.proteinG)}g</TableCell>
                         <TableCell className="max-w-xs truncate">{meal.notes}</TableCell>
                         <TableCell>
                           <Badge variant={meal.completed ? "default" : "secondary"}>
@@ -995,7 +1045,7 @@ export default function Fuel() {
             {totalProtein < 100 && (
               <div className="p-3 rounded-lg bg-[#e1ecfb] border border-[#b3c7e6]">
                 <p className="text-sm text-[#0f3a78]">
-                  🥩 You’ve consumed {totalProtein}g protein today. Aim for 100–150g for optimal recovery.
+                  🥩 You’ve consumed {formatTwoDecimalString(totalProtein)}g protein today. Aim for 100–150g for optimal recovery.
                 </p>
               </div>
             )}
