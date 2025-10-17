@@ -216,31 +216,29 @@ export default function Fuel() {
       const calories = getCaloriesFromItem(item)
       const protein = getProteinFromItem(item)
 
+      const baseCalories = calories != null && Number.isFinite(calories) ? calories : 0
+      const baseProtein = protein != null && Number.isFinite(protein) ? protein : 0
+
       const notes = `${item.name}${item.description ? ` — ${item.description}` : ""} (${location})`
       const clonedFacts = (Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []).map((f) => ({ ...f }))
 
-      updateMealLogs(primaryAthlete.id, (prev) => {
-        const nextId = getNextMealId(prev)
-        const c = calories != null && Number.isFinite(calories) ? Math.round(calories) : 0
-        const p = protein != null && Number.isFinite(protein) ? Number(protein.toFixed(1)) : 0
-        return [
-          ...prev,
-          {
-            id: nextId,
-            mealType: normalizedType,
-            calories: c,
-            proteinG: p,
-            notes,
-            dateTime: dateTime.toISOString(),
-            nutritionFacts: clonedFacts,
-            completed: true
-          }
-        ]
+      setNewMeal({
+        mealType: normalizedType,
+        calories: "",
+        proteinG: "",
+        notes,
+        dateTime: dateTime.toISOString(),
+        nutritionFacts: clonedFacts,
+        portion: "1",
+        baseCalories,
+        baseProteinG: baseProtein,
+        isFromMenu: true
       })
 
       setActiveTab("meals")
+      setIsAddMealOpen(true)
     },
-    [menuDate, primaryAthlete, updateMealLogs]
+    [menuDate, primaryAthlete]
   )
 
   /* -------- Fetch menu and normalize calories/protein on the way in -------- */
