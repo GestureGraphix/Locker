@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import {
   AcademicItem,
+  AcademicItemType,
   Course,
   ManualItemType,
   mockAcademicItems,
@@ -32,6 +33,23 @@ type NewItem = {
   title: string
   dueAt: string
   notes: string
+}
+
+type EditItemState = {
+  id: number
+  courseId: string
+  courseLabel: string
+  type: AcademicItemType
+  title: string
+  dueAt: string
+  notes: string
+}
+
+type EditCourseState = {
+  id: number
+  code: string
+  name: string
+  professor: string
 }
 
 type RawIcsEvent = Record<string, string>
@@ -183,6 +201,27 @@ const getTypeColor = (type: string) => {
   }
 }
 
+const formatDateForInput = (value: string) => {
+  if (!value) return ""
+  if (value.length >= 16 && value.includes("T")) {
+    return value.slice(0, 16)
+  }
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+
+  return parsed.toISOString().slice(0, 16)
+}
+
+const manualTypeOptions: { value: ManualItemType; label: string }[] = [
+  { value: "assignment", label: "Assignment" },
+  { value: "exam", label: "Exam" },
+  { value: "reading", label: "Reading" },
+  { value: "essay", label: "Essay" }
+]
+
 const formatDate = (dateString: string) => {
   const date = new Date(dateString)
   const now = new Date()
@@ -214,6 +253,8 @@ export default function Academics() {
     dueAt: "",
     notes: ""
   })
+  const [editingItem, setEditingItem] = useState<EditItemState | null>(null)
+  const [editingCourse, setEditingCourse] = useState<EditCourseState | null>(null)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -331,6 +372,84 @@ export default function Academics() {
         item.id === id ? { ...item, completed: !item.completed } : item
       )
     )
+  }
+
+  const startEditingItem = (item: AcademicItem) => {
+    setEditingItem({
+      id: item.id,
+      courseId: item.courseId ? String(item.courseId) : "",
+      courseLabel: item.course,
+      type: item.type,
+      title: item.title,
+      dueAt: formatDateForInput(item.dueAt),
+      notes: item.notes ?? ""
+    })
+  }
+
+  const handleUpdateItem = () => {
+    if (!editingItem) return
+    if (!editingItem.title.trim() || !editingItem.dueAt) {
+      return
+    }
+
+    const selectedCourse = courses.find(course => course.id === Number(editingItem.courseId))
+
+    setAcademicItems(prev =>
+      prev.map(item =>
+        item.id === editingItem.id
+          ? {
+              ...item,
+              courseId: selectedCourse ? selectedCourse.id : undefined,
+              course: selectedCourse ? selectedCourse.code : editingItem.courseLabel,
+              type: editingItem.type,
+              title: editingItem.title,
+              dueAt: editingItem.dueAt,
+              notes: editingItem.notes
+            }
+          : item
+      )
+    )
+
+    setEditingItem(null)
+  }
+
+  const startEditingCourse = (course: Course) => {
+    setEditingCourse({
+      id: course.id,
+      code: course.code,
+      name: course.name,
+      professor: course.professor
+    })
+  }
+
+  const handleUpdateCourse = () => {
+    if (!editingCourse) return
+
+    const code = editingCourse.code.trim()
+    const name = editingCourse.name.trim()
+    const professor = editingCourse.professor.trim()
+
+    if (!code || !name) {
+      return
+    }
+
+    setCourses(prev =>
+      prev.map(course =>
+        course.id === editingCourse.id
+          ? { ...course, code, name, professor }
+          : course
+      )
+    )
+
+    setAcademicItems(prev =>
+      prev.map(item =>
+        item.courseId === editingCourse.id
+          ? { ...item, course: code }
+          : item
+      )
+    )
+
+    setEditingCourse(null)
   }
 
   const upcomingItems = academicItems
@@ -514,8 +633,15 @@ export default function Academics() {
           {courses.map(course => (
             <Card key={course.id}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg">{course.code}</CardTitle>
-                <p className="text-sm text-muted-foreground">{course.name}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-lg whitespace-nowrap">{course.code}</CardTitle>
+                    <p className="text-sm text-muted-foreground">{course.name}</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => startEditingCourse(course)}>
+                    Edit
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-muted-foreground">{course.professor}</p>
@@ -573,13 +699,22 @@ export default function Academics() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => toggleComplete(item.id)}
-                      >
-                        {item.completed ? "Undo" : "Complete"}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startEditingItem(item)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleComplete(item.id)}
+                        >
+                          {item.completed ? "Undo" : "Complete"}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -615,6 +750,167 @@ export default function Academics() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={editingItem !== null} onOpenChange={(open) => !open && setEditingItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Item</DialogTitle>
+          </DialogHeader>
+          {editingItem && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Course</label>
+                <select
+                  className="w-full p-2 border rounded-md"
+                  value={editingItem.courseId}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setEditingItem(prev => {
+                      if (!prev) return prev
+
+                      if (!value) {
+                        return { ...prev, courseId: value, courseLabel: "General" }
+                      }
+
+                      const selected = courses.find(course => course.id === Number(value))
+                      return {
+                        ...prev,
+                        courseId: value,
+                        courseLabel: selected ? selected.code : prev.courseLabel
+                      }
+                    })
+                  }}
+                >
+                  <option value="">General</option>
+                  {courses.map(course => (
+                    <option key={course.id} value={course.id}>
+                      {course.code} - {course.name}
+                    </option>
+                  ))}
+                  {!editingItem.courseId &&
+                    editingItem.courseLabel &&
+                    editingItem.courseLabel !== "General" &&
+                    !courses.find(course => course.code === editingItem.courseLabel) && (
+                    <option value="" disabled>
+                      {editingItem.courseLabel}
+                    </option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Type</label>
+                <select
+                  className="w-full p-2 border rounded-md"
+                  value={editingItem.type}
+                  onChange={(e) =>
+                    setEditingItem(prev =>
+                      prev
+                        ? {
+                            ...prev,
+                            type: (e.target.value as AcademicItemType) || prev.type
+                          }
+                        : prev
+                    )
+                  }
+                >
+                  {manualTypeOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                  {editingItem.type === "calendar" && (
+                    <option value="calendar">Calendar</option>
+                  )}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Title</label>
+                <Input
+                  value={editingItem.title}
+                  onChange={(e) =>
+                    setEditingItem(prev => prev ? { ...prev, title: e.target.value } : prev)
+                  }
+                  placeholder="Enter title"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Due Date</label>
+                <Input
+                  type="datetime-local"
+                  value={editingItem.dueAt}
+                  onChange={(e) =>
+                    setEditingItem(prev => prev ? { ...prev, dueAt: e.target.value } : prev)
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Notes (optional)</label>
+                <Input
+                  value={editingItem.notes}
+                  onChange={(e) =>
+                    setEditingItem(prev => prev ? { ...prev, notes: e.target.value } : prev)
+                  }
+                  placeholder="Additional notes"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setEditingItem(null)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdateItem}>Save Changes</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editingCourse !== null} onOpenChange={(open) => !open && setEditingCourse(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Course</DialogTitle>
+          </DialogHeader>
+          {editingCourse && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Course Code</label>
+                <Input
+                  value={editingCourse.code}
+                  onChange={(e) =>
+                    setEditingCourse(prev => prev ? { ...prev, code: e.target.value } : prev)
+                  }
+                  placeholder="e.g. MATH 2010"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Course Name</label>
+                <Input
+                  value={editingCourse.name}
+                  onChange={(e) =>
+                    setEditingCourse(prev => prev ? { ...prev, name: e.target.value } : prev)
+                  }
+                  placeholder="Enter course name"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Professor</label>
+                <Input
+                  value={editingCourse.professor}
+                  onChange={(e) =>
+                    setEditingCourse(prev => prev ? { ...prev, professor: e.target.value } : prev)
+                  }
+                  placeholder="Enter professor name"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setEditingCourse(null)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdateCourse}>Save Changes</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
