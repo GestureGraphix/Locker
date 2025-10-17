@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect, useMemo, useState } from "react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,20 +17,33 @@ import {
   ChevronRight,
   Target
 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRole } from "./role-context"
 import { LoginDialog } from "./login-dialog"
+import {
+  ACADEMICS_UPDATED_EVENT,
+  AcademicsUpdateDetail,
+  mockAcademicItems
+} from "@/lib/academics"
 
-const athleteNavigation = [
+type NavigationItem = {
+  name: string
+  href: string
+  icon: LucideIcon
+  badge: string | null
+}
+
+const baseAthleteNavigation: NavigationItem[] = [
   { name: "Dashboard", href: "/", icon: House, badge: null },
-  { name: "Academics", href: "/academics", icon: BookOpen, badge: "3" },
+  { name: "Academics", href: "/academics", icon: BookOpen, badge: null },
   { name: "Training", href: "/training", icon: Dumbbell, badge: null },
   { name: "Fuel", href: "/fuel", icon: Apple, badge: null },
   { name: "Mobility", href: "/mobility", icon: Activity, badge: null },
   { name: "Account", href: "/account", icon: User, badge: null },
 ]
 
-const coachNavigation = [
+const baseCoachNavigation: NavigationItem[] = [
   { name: "Coach Dashboard", href: "/", icon: Dumbbell, badge: null },
   { name: "Training Plans", href: "/training", icon: Target, badge: null },
   { name: "Academics", href: "/academics", icon: BookOpen, badge: null },
@@ -40,8 +54,65 @@ const coachNavigation = [
 
 export function Navigation() {
   const pathname = usePathname()
-  const { role, setRole } = useRole()
-  const navigation = role === "coach" ? coachNavigation : athleteNavigation
+  const { role, setRole, currentUser } = useRole()
+  const storageKey = useMemo(
+    () => (currentUser ? `locker-academics-${currentUser.email}` : null),
+    [currentUser]
+  )
+  const [academicCount, setAcademicCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const loadCount = () => {
+      if (!storageKey) {
+        setAcademicCount(mockAcademicItems.length)
+        return
+      }
+
+      try {
+        const stored = window.localStorage.getItem(storageKey)
+        if (!stored) {
+          setAcademicCount(0)
+          return
+        }
+
+        const parsed = JSON.parse(stored) as { academicItems?: unknown }
+        const items = Array.isArray(parsed.academicItems) ? parsed.academicItems : []
+        setAcademicCount(items.length)
+      } catch (error) {
+        console.error("Failed to read academics data", error)
+        setAcademicCount(0)
+      }
+    }
+
+    const handleUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<AcademicsUpdateDetail>
+      if (typeof customEvent.detail?.count === "number") {
+        setAcademicCount(customEvent.detail.count)
+        return
+      }
+
+      loadCount()
+    }
+
+    loadCount()
+
+    window.addEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
+    return () => {
+      window.removeEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
+    }
+  }, [storageKey])
+
+  const badgeValue = academicCount !== null ? academicCount.toString() : null
+  const navigationItems = useMemo(() => {
+    const base = role === "coach" ? baseCoachNavigation : baseAthleteNavigation
+    return base.map(item =>
+      item.href === "/academics"
+        ? { ...item, badge: badgeValue }
+        : item
+    )
+  }, [role, badgeValue])
 
   return (
     <>
@@ -91,7 +162,7 @@ export function Navigation() {
               </Button>
             </div>
             <nav className="space-y-3">
-              {navigation.map((item) => (
+              {navigationItems.map((item) => (
                 <Link
                   key={item.name}
                   href={item.href}
@@ -196,7 +267,7 @@ export function Navigation() {
                     </Button>
                   </div>
                   <nav className="space-y-3">
-                    {navigation.map((item) => (
+                    {navigationItems.map((item) => (
                       <Link
                         key={item.name}
                         href={item.href}

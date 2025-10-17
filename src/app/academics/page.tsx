@@ -17,22 +17,14 @@ import {
   AlertCircle,
   CheckCircle
 } from "lucide-react"
-
-type ManualItemType = "assignment" | "exam" | "reading" | "essay"
-type AcademicItemType = ManualItemType | "calendar"
-
-type AcademicItem = {
-  id: number
-  courseId?: number
-  course: string
-  type: AcademicItemType
-  title: string
-  dueAt: string
-  notes?: string
-  completed: boolean
-  source: "manual" | "ics"
-  externalId?: string
-}
+import {
+  AcademicItem,
+  Course,
+  ManualItemType,
+  mockAcademicItems,
+  mockCourses,
+  ACADEMICS_UPDATED_EVENT
+} from "@/lib/academics"
 
 type NewItem = {
   courseId: string
@@ -43,14 +35,6 @@ type NewItem = {
 }
 
 type RawIcsEvent = Record<string, string>
-
-type Course = {
-  id: number
-  name: string
-  code: string
-  professor: string
-  source?: "manual" | "ics"
-}
 
 const decodeIcsText = (value: string) =>
   value
@@ -177,61 +161,6 @@ const mergeIcsCourses = (rawEvents: RawIcsEvent[], existingCourses: Course[]) =>
   return { courses: [...existingCourses, ...newCourses], added: newCourses.length }
 }
 
-// Mock data
-const mockCourses: Course[] = [
-  { id: 1, name: "Calculus II", code: "MATH 201", professor: "Dr. Smith", source: "manual" },
-  { id: 2, name: "Physics I", code: "PHYS 101", professor: "Dr. Johnson", source: "manual" },
-  { id: 3, name: "Biomechanics", code: "KIN 301", professor: "Dr. Williams", source: "manual" },
-  { id: 4, name: "Sports Psychology", code: "PSYC 250", professor: "Dr. Brown", source: "manual" }
-]
-
-const mockAcademicItems: AcademicItem[] = [
-  {
-    id: 1,
-    courseId: 1,
-    course: "MATH 201",
-    type: "exam",
-    title: "Midterm Exam",
-    dueAt: "2024-01-15T14:00:00Z",
-    notes: "Chapters 1-5, bring calculator",
-    completed: false,
-    source: "manual"
-  },
-  {
-    id: 2,
-    courseId: 2,
-    course: "PHYS 101",
-    type: "assignment",
-    title: "Lab Report #3",
-    dueAt: "2024-01-16T23:59:00Z",
-    notes: "Kinematics experiment",
-    completed: false,
-    source: "manual"
-  },
-  {
-    id: 3,
-    courseId: 3,
-    course: "KIN 301",
-    type: "reading",
-    title: "Chapter 5: Biomechanics",
-    dueAt: "2024-01-19T09:00:00Z",
-    notes: "Focus on joint mechanics",
-    completed: true,
-    source: "manual"
-  },
-  {
-    id: 4,
-    courseId: 4,
-    course: "PSYC 250",
-    type: "essay",
-    title: "Motivation in Sports",
-    dueAt: "2024-01-22T23:59:00Z",
-    notes: "1500 words, APA format",
-    completed: false,
-    source: "manual"
-  }
-]
-
 const getTypeIcon = (type: string) => {
   switch (type) {
     case "exam": return <FileText className="h-4 w-4" />
@@ -320,11 +249,22 @@ export default function Academics() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    if (!currentUser || !storageKey) return
 
-    const payload = JSON.stringify({ courses, academicItems })
-    window.localStorage.setItem(storageKey, payload)
-  }, [courses, academicItems, currentUser, storageKey])
+    if (storageKey) {
+      try {
+        const payload = JSON.stringify({ courses, academicItems })
+        window.localStorage.setItem(storageKey, payload)
+      } catch (error) {
+        console.error("Failed to save academics data", error)
+      }
+    }
+
+    window.dispatchEvent(
+      new CustomEvent(ACADEMICS_UPDATED_EVENT, {
+        detail: { count: academicItems.length }
+      })
+    )
+  }, [courses, academicItems, storageKey])
 
   const handleAddItem = () => {
     if (newItem.courseId && newItem.title && newItem.dueAt) {
