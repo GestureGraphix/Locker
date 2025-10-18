@@ -25,7 +25,6 @@ import {
   Award,
   Sparkles,
   Brain,
-  Battery,
   Activity as ActivityIcon,
   ListChecks
 } from "lucide-react"
@@ -485,16 +484,6 @@ export default function DashboardPage() {
                     Good morning, Alex! 👋
                   </h1>
                   <p className="text-xl text-gray-600 font-medium">Ready to tackle another day?</p>
-                  <div className="flex items-center mt-4 space-x-6">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-[#0f4d92] rounded-full animate-pulse"></div>
-                      <span className="text-sm text-gray-600 font-medium">All systems optimal</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Battery className="h-4 w-4 text-[#1c6dd0]" />
-                      <span className="text-sm text-gray-600 font-medium">87% energy</span>
-                    </div>
-                  </div>
                 </div>
                 <div className="hidden md:block">
                   <div className="w-32 h-32 rounded-full gradient-hero flex items-center justify-center animate-float">
