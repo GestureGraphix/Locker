@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -24,11 +24,14 @@ import {
   Zap,
   Award,
   Sparkles,
-  Brain,
-  Activity as ActivityIcon,
   ListChecks
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import {
+  ACADEMICS_UPDATED_EVENT,
+  AcademicItem,
+  mockAcademicItems
+} from "@/lib/academics"
 
 type CheckInDiaryEntry = {
   date: string
@@ -42,6 +45,16 @@ type CheckInDiaryEntry = {
 const diaryStorageKey = "locker.checkInDiary"
 
 // Enhanced mock data with more sophisticated metrics
+type UpcomingDashboardItem = {
+  id: string
+  type: "academic" | "training" | "fuel"
+  title: string
+  subtitle: string
+  due: string
+  priority: "high" | "medium" | "low"
+  progress: number
+}
+
 const mockData = {
   checkIn: {
     mental: null,
@@ -59,9 +72,33 @@ const mockData = {
     energyLevel: 4
   },
   upcomingItems: [
-    { id: 1, type: "exam", title: "Calculus Midterm", course: "MATH 201", due: "Today 2:00 PM", priority: "high", progress: 85 },
-    { id: 2, type: "assignment", title: "Physics Lab Report", course: "PHYS 101", due: "Tomorrow 11:59 PM", priority: "medium", progress: 60 },
-    { id: 3, type: "reading", title: "Chapter 5: Biomechanics", course: "KIN 301", due: "Friday", priority: "low", progress: 30 }
+    {
+      id: "academic-1",
+      type: "academic",
+      title: "Calculus Midterm",
+      subtitle: "MATH 201 · Exam",
+      due: "Today · 2:00 PM",
+      priority: "high",
+      progress: 85
+    },
+    {
+      id: "academic-2",
+      type: "academic",
+      title: "Physics Lab Report",
+      subtitle: "PHYS 101 · Assignment",
+      due: "Tomorrow · 11:59 PM",
+      priority: "medium",
+      progress: 60
+    },
+    {
+      id: "fuel-1",
+      type: "fuel",
+      title: "Dinner Prep",
+      subtitle: "Plan salmon with quinoa",
+      due: "Tonight",
+      priority: "medium",
+      progress: 30
+    }
   ],
   todaysSessions: [
     { id: 1, type: "practice", title: "Morning Practice", time: "6:00 AM - 8:00 AM", intensity: "high", completed: true, calories: 450, heartRate: 165 },
@@ -75,12 +112,6 @@ const mockData = {
     totalCalories: 3200,
     avgHeartRate: 155,
     recoveryScore: 87
-  },
-  performanceMetrics: {
-    strength: 85,
-    endurance: 78,
-    flexibility: 65,
-    mental: 92
   }
 }
 
@@ -119,6 +150,60 @@ const formatDateLabel = (value: string) => {
   })
 }
 
+const formatDueDescriptor = (value?: string) => {
+  if (!value) return "No date set"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const diffMs = date.getTime() - startOfToday.getTime()
+  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000))
+  const hasTime = value.includes("T")
+  const time = hasTime
+    ? date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    : null
+
+  if (diffDays < 0) {
+    const base = "Overdue"
+    return time ? `${base} · ${time}` : base
+  }
+
+  if (diffDays === 0) {
+    return time ? `Today · ${time}` : "Today"
+  }
+
+  if (diffDays === 1) {
+    return time ? `Tomorrow · ${time}` : "Tomorrow"
+  }
+
+  if (diffDays < 7) {
+    const weekday = date.toLocaleDateString("en-US", { weekday: "short" })
+    return time ? `${weekday} · ${time}` : weekday
+  }
+
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+}
+
+const DAY_IN_MS = 24 * 60 * 60 * 1000
+
+const calculatePriority = (date: Date | null, startOfToday: number): "high" | "medium" | "low" => {
+  if (!date) return "low"
+  const diffDays = Math.floor((date.getTime() - startOfToday) / DAY_IN_MS)
+  if (diffDays <= 0) return "high"
+  if (diffDays <= 2) return "medium"
+  return "low"
+}
+
+const calculateUrgencyProgress = (date: Date | null, startOfToday: number) => {
+  if (!date) return 45
+  const diffDays = Math.floor((date.getTime() - startOfToday) / DAY_IN_MS)
+  if (diffDays <= 0) return 95
+  if (diffDays === 1) return 80
+  if (diffDays <= 3) return 60
+  return 45
+}
+
 const formatDiaryEntryDate = (value: string) => {
   if (!value) return ""
   const date = new Date(value)
@@ -152,6 +237,53 @@ export default function DashboardPage() {
   const [diaryEntries, setDiaryEntries] = useState<CheckInDiaryEntry[]>([])
   const { role, primaryAthlete, currentUser } = useRole()
   const isGuest = !currentUser
+  const storageKey = useMemo(
+    () => (currentUser ? `locker-academics-${currentUser.email}` : null),
+    [currentUser]
+  )
+  const [academicItems, setAcademicItems] = useState<AcademicItem[]>(() =>
+    currentUser ? [] : mockAcademicItems
+  )
+
+  const loadAcademicItems = useCallback(() => {
+    if (typeof window === "undefined") return
+    if (!storageKey) {
+      setAcademicItems(mockAcademicItems)
+      return
+    }
+
+    try {
+      const stored = window.localStorage.getItem(storageKey)
+      if (!stored) {
+        setAcademicItems([])
+        return
+      }
+
+      const parsed = JSON.parse(stored) as { academicItems?: AcademicItem[] }
+      const items = Array.isArray(parsed.academicItems) ? parsed.academicItems : []
+      setAcademicItems(items)
+    } catch (error) {
+      console.error("Failed to load academics data", error)
+      setAcademicItems([])
+    }
+  }, [storageKey])
+
+  useEffect(() => {
+    loadAcademicItems()
+  }, [loadAcademicItems])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handleUpdate = () => {
+      loadAcademicItems()
+    }
+
+    window.addEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
+    return () => {
+      window.removeEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
+    }
+  }, [loadAcademicItems])
 
   useEffect(() => {
     if (isGuest) {
@@ -212,6 +344,22 @@ export default function DashboardPage() {
   const today = new Date()
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
   const todayDate = useMemo(() => new Date(startOfToday), [startOfToday])
+  const endOfTomorrow = useMemo(() => startOfToday + 2 * DAY_IN_MS, [startOfToday])
+
+  const academicItemsDueSoon = useMemo(() => {
+    return academicItems.filter((item) => {
+      if (item.completed) return false
+      if (!item.dueAt) return false
+      const dueDate = new Date(item.dueAt)
+      if (Number.isNaN(dueDate.getTime())) return false
+      return dueDate.getTime() <= endOfTomorrow
+    }).length
+  }, [academicItems, endOfTomorrow])
+
+  const outstandingAcademicCount = useMemo(
+    () => academicItems.filter((item) => !item.completed).length,
+    [academicItems]
+  )
 
   const todaysSessions = athleteSessions.filter((session) => isSameDay(session.startAt, todayDate))
   const sessionsCompletedToday = todaysSessions.filter((session) => session.completed).length
@@ -257,7 +405,12 @@ export default function DashboardPage() {
   }, [primaryAthlete, todayDate])
 
   const todayStats = useMemo(() => {
-    if (!primaryAthlete) return mockData.todayStats
+    if (!primaryAthlete) {
+      return {
+        ...mockData.todayStats,
+        academicItemsDue: academicItemsDueSoon,
+      }
+    }
     const mealsLoggedToday = (primaryAthlete.mealLogs ?? []).filter((log) =>
       isSameDay(log.dateTime, todayDate)
     ).length
@@ -267,30 +420,119 @@ export default function DashboardPage() {
       hydrationGoal: hydrationStats.goal,
       mealsLogged: mealsLoggedToday,
       sessionsCompleted: sessionsCompletedToday,
-      academicItemsDue: 0,
+      academicItemsDue: academicItemsDueSoon,
       sleepHours: null,
       stressLevel: null,
       energyLevel: null,
     }
-  }, [primaryAthlete, hydrationStats, sessionsCompletedToday, todayDate])
+  }, [
+    primaryAthlete,
+    hydrationStats,
+    sessionsCompletedToday,
+    todayDate,
+    academicItemsDueSoon
+  ])
 
   const upcomingItems = useMemo(() => {
     if (!primaryAthlete) return mockData.upcomingItems
-    const workouts = (primaryAthlete.workouts ?? []).map((workout) => {
-      const dueLabel = workout.dueDate ? formatDateLabel(workout.dueDate) : "Scheduled"
-      const priority = (workout.intensity ?? "medium").toLowerCase()
-      return {
-        id: workout.id,
+
+    type UpcomingWithSort = UpcomingDashboardItem & { sortValue: number }
+    const items: UpcomingWithSort[] = []
+
+    academicItems.forEach((item) => {
+      if (item.completed) return
+      const dueDate = item.dueAt ? new Date(item.dueAt) : null
+      const hasValidDate = dueDate && !Number.isNaN(dueDate.getTime())
+      const priority = calculatePriority(hasValidDate ? dueDate : null, startOfToday)
+      const typeLabel = item.type.charAt(0).toUpperCase() + item.type.slice(1)
+      const courseLabel = item.course?.trim() ?? "Academic Item"
+      const subtitle = item.course ? `${courseLabel} · ${typeLabel}` : typeLabel
+      items.push({
+        id: `academic-${item.id}`,
+        type: "academic",
+        title: item.title,
+        subtitle,
+        due: formatDueDescriptor(item.dueAt),
+        priority,
+        progress: calculateUrgencyProgress(hasValidDate ? dueDate : null, startOfToday),
+        sortValue: hasValidDate ? dueDate!.getTime() : startOfToday + DAY_IN_MS,
+      })
+    })
+
+    const workouts = primaryAthlete.workouts ?? []
+    workouts.forEach((workout) => {
+      if (workout.status === "Completed") return
+      const dueDate = workout.dueDate ? new Date(workout.dueDate) : null
+      const hasValidDate = dueDate && !Number.isNaN(dueDate.getTime())
+      const priority = calculatePriority(hasValidDate ? dueDate : null, startOfToday)
+      const subtitleParts = [workout.focus, workout.assignedBy].filter(Boolean)
+      items.push({
+        id: `training-${workout.id}`,
         type: "training",
         title: workout.title,
-        course: workout.focus ?? workout.title,
-        due: dueLabel,
+        subtitle: subtitleParts.join(" · ") || "Training Assignment",
+        due: workout.dueDate ? formatDueDescriptor(workout.dueDate) : "Scheduled",
         priority,
-        progress: workout.status === "Completed" ? 100 : 0,
-      }
+        progress: workout.status === "Completed" ? 100 : 50,
+        sortValue: hasValidDate ? dueDate!.getTime() : startOfToday + 3 * DAY_IN_MS,
+      })
     })
-    return workouts.slice(0, 4)
-  }, [primaryAthlete])
+
+    const mealLogs = primaryAthlete.mealLogs ?? []
+    mealLogs.forEach((log) => {
+      if (log.completed) return
+      const dueDate = log.dateTime ? new Date(log.dateTime) : null
+      const hasValidDate = dueDate && !Number.isNaN(dueDate.getTime())
+      const priority = calculatePriority(hasValidDate ? dueDate : null, startOfToday)
+      const title = log.mealType
+        ? `${log.mealType.charAt(0).toUpperCase()}${log.mealType.slice(1)} Plan`
+        : "Meal Plan"
+      items.push({
+        id: `fuel-meal-${log.id}`,
+        type: "fuel",
+        title,
+        subtitle: log.notes ? log.notes : "Log this meal once completed",
+        due: log.dateTime ? formatDueDescriptor(log.dateTime) : "Today",
+        priority,
+        progress: calculateUrgencyProgress(hasValidDate ? dueDate : null, startOfToday),
+        sortValue: hasValidDate ? dueDate!.getTime() : startOfToday + DAY_IN_MS,
+      })
+    })
+
+    if (hydrationStats.progress < 100) {
+      items.push({
+        id: "fuel-hydration",
+        type: "fuel",
+        title: "Hydration Goal",
+        subtitle: `${Math.max(hydrationStats.goal - hydrationStats.total, 0)}oz remaining today`,
+        due: "Today",
+        priority:
+          hydrationStats.progress < 60 ? "high" : hydrationStats.progress < 85 ? "medium" : "low",
+        progress: Math.round(hydrationStats.progress),
+        sortValue: startOfToday + DAY_IN_MS,
+      })
+    }
+
+    if (items.length === 0) {
+      return mockData.upcomingItems
+    }
+
+    return items
+      .sort((a, b) => a.sortValue - b.sortValue)
+      .slice(0, 4)
+      .map((item) => {
+        const { sortValue, ...rest } = item
+        void sortValue
+        return rest
+      })
+  }, [
+    primaryAthlete,
+    academicItems,
+    hydrationStats.goal,
+    hydrationStats.progress,
+    hydrationStats.total,
+    startOfToday
+  ])
 
   const weeklyStatsData = useMemo(() => {
     if (!primaryAthlete) return mockData.weeklyStats
@@ -351,31 +593,12 @@ export default function DashboardPage() {
       sessions: sessionsInWindow.length,
       prsSet,
       hydrationAvg,
-      assignments: 0,
+      assignments: outstandingAcademicCount,
       totalCalories,
       avgHeartRate: 0,
       recoveryScore,
     }
-  }, [primaryAthlete])
-
-  const performanceMetrics = useMemo(() => {
-    if (!primaryAthlete) return mockData.performanceMetrics
-    const sessions = primaryAthlete.sessions ?? []
-    const totalSessions = sessions.length
-    const completedSessions = sessions.filter((session) => session.completed).length
-    const completionRate = totalSessions > 0 ? Math.round((completedSessions / totalSessions) * 100) : 0
-    const hydrationScore = Math.round(hydrationStats.progress)
-    const enduranceScore = Math.min(100, Math.round(completionRate * 0.9))
-    const flexibilityScore = Math.min(100, hydrationScore)
-    const mentalScore = Math.min(100, Math.round((completionRate + hydrationScore) / 2))
-
-    return {
-      strength: completionRate,
-      endurance: enduranceScore,
-      flexibility: flexibilityScore,
-      mental: mentalScore,
-    }
-  }, [primaryAthlete, hydrationStats.progress])
+  }, [primaryAthlete, outstandingAcademicCount])
 
   const handleCheckIn = () => {
     if (mentalState === null || physicalState === null) {
@@ -469,6 +692,28 @@ export default function DashboardPage() {
   }
 
   const hydrationProgress = hydrationStats.progress
+  const athleteFirstName = primaryAthlete.name?.split(" ")[0] ?? primaryAthlete.name ?? "Athlete"
+  const currentHour = today.getHours()
+  const greetingMessage =
+    currentHour >= 22 || currentHour < 5
+      ? "Good night"
+      : currentHour >= 17
+        ? "Good evening"
+        : currentHour >= 12
+          ? "Good afternoon"
+          : "Good morning"
+
+  const getUpcomingVisuals = (type: UpcomingDashboardItem["type"]) => {
+    switch (type) {
+      case "academic":
+        return { wrapper: "gradient-primary", Icon: BookOpen }
+      case "training":
+        return { wrapper: "gradient-danger", Icon: Dumbbell }
+      case "fuel":
+      default:
+        return { wrapper: "gradient-warning", Icon: Apple }
+    }
+  }
 
   return (
     <div className="min-h-screen">
@@ -481,7 +726,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-4xl font-bold bg-gradient-to-r from-[#0f172a] via-[#0f4d92] to-[#12284b] bg-clip-text text-transparent mb-2">
-                    Good morning, Alex! 👋
+                    {greetingMessage}, {athleteFirstName}! 👋
                   </h1>
                   <p className="text-xl text-gray-600 font-medium">Ready to tackle another day?</p>
                 </div>
@@ -623,64 +868,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Performance Metrics */}
-        <div className="mb-12">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-              Performance Metrics
-            </h2>
-            <Button variant="outline" className="glass-card border-white/20 hover:bg-white/50">
-              View details <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <Dumbbell className="h-8 w-8 text-white" />
-                </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Strength</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.strength}%</p>
-                <Progress value={performanceMetrics.strength} className="h-2" />
-                <p className="text-xs text-[#1c6dd0] font-semibold mt-2">+5% this week</p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-success flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <ActivityIcon className="h-8 w-8 text-white" />
-                </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Endurance</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.endurance}%</p>
-                <Progress value={performanceMetrics.endurance} className="h-2" />
-                <p className="text-xs text-[#1c6dd0] font-semibold mt-2">+3% this week</p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-warning flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <Activity className="h-8 w-8 text-white" />
-                </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Flexibility</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.flexibility}%</p>
-                <Progress value={performanceMetrics.flexibility} className="h-2" />
-                <p className="text-xs text-[#123d73] font-semibold mt-2">Needs attention</p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-secondary flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <Brain className="h-8 w-8 text-white" />
-                </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Mental</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.mental}%</p>
-                <Progress value={performanceMetrics.mental} className="h-2" />
-                <p className="text-xs text-[#1c6dd0] font-semibold mt-2">Excellent!</p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
         {/* What's in your locker? */}
         <div className="mb-12">
           <div className="flex items-center justify-between mb-8">
@@ -780,6 +967,20 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4">
+                  <div className="w-14 h-14 rounded-2xl gradient-primary flex items-center justify-center shadow-glow">
+                    <BookOpen className="h-7 w-7 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-600">Academics Due Soon</p>
+                    <p className="text-3xl font-bold text-gray-900">{todayStats.academicItemsDue}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           <div className="lg:col-span-2 space-y-6">
@@ -796,26 +997,46 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {upcomingItems.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center">
-                        <BookOpen className="h-6 w-6 text-white" />
+                {upcomingItems.length > 0 ? (
+                  upcomingItems.map((item) => {
+                    const { wrapper, Icon } = getUpcomingVisuals(item.type)
+                    const clampedProgress = Math.max(0, Math.min(100, item.progress))
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
+                      >
+                        <div className="flex items-center space-x-4">
+                          <div
+                            className={cn(
+                              "w-12 h-12 rounded-xl flex items-center justify-center shadow-glow",
+                              wrapper
+                            )}
+                          >
+                            <Icon className="h-6 w-6 text-white" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-900">{item.title}</p>
+                            <p className="text-sm text-gray-600">{item.subtitle}</p>
+                            {clampedProgress > 0 && (
+                              <Progress value={clampedProgress} className="w-32 h-2 mt-2" />
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {getPriorityBadge(item.priority)}
+                          <span className="text-sm text-gray-500 font-medium">{item.due}</span>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-bold text-gray-900">{item.title}</p>
-                        <p className="text-sm text-gray-600">{item.course}</p>
-                        <Progress value={item.progress} className="w-32 h-2 mt-2" />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {getPriorityBadge(item.priority)}
-                      <span className="text-sm text-gray-500 font-medium">{item.due}</span>
-                    </div>
+                    )
+                  })
+                ) : (
+                  <div className="p-6 text-center rounded-2xl border border-dashed border-gray-300 bg-white/60 text-sm text-gray-500">
+                    Nothing on your academic or fuel radar right now.
                   </div>
-                ))}
+                )}
                 <Button variant="outline" className="w-full glass-card border-white/20 hover:bg-white/50">
-                  View All ({todayStats.academicItemsDue})
+                  View All ({outstandingAcademicCount})
                 </Button>
               </CardContent>
             </Card>
