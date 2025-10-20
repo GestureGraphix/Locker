@@ -40,7 +40,7 @@ type MenuItem = {
   nutritionFacts: NutritionFact[]
 }
 /* ---------------- Utils ---------------- */
-const TARGET_MEAL_KEYS = new Set(["lunch", "dinner"])
+const TARGET_MEAL_KEYS = new Set(["breakfast", "lunch", "dinner"])
 const normalizeMealName = (m: string) =>
   m.trim().replace(/[-_]/g, " ").replace(/\s+/g, " ").replace(/(^|\s)([a-z])/g, (s) => s.toUpperCase())
 
@@ -48,6 +48,7 @@ const MEAL_SLUG_CONFIG: Record<
   string,
   { label: string; slugs: string[] }
 > = {
+  breakfast: { label: "Breakfast", slugs: ["breakfast"] },
   lunch: { label: "Lunch", slugs: ["lunch"] },
   dinner: { label: "Dinner", slugs: ["dinner", "additional-dinner-offerings"] }
 }
@@ -317,7 +318,7 @@ async function buildMenuItemsFromWeeks(day: WeeksDay, date: string): Promise<Men
 }
 
 /* ---------------- Fallback ---------------- */
-const buildFallbackResponse = (date: string, error: string) =>
+const buildFallbackResponse = (date: string, mealLabel: string, error: string) =>
   NextResponse.json({
     date,
     source: "fallback" as const,
@@ -325,8 +326,7 @@ const buildFallbackResponse = (date: string, error: string) =>
       {
         location: "Jonathan Edwards College",
         meals: [
-          { mealType: "Lunch", items: [] },
-          { mealType: "Dinner", items: [] }
+          { mealType: mealLabel, items: [] }
         ]
       }
     ],
@@ -360,6 +360,7 @@ export async function GET(request: NextRequest) {
     if (!successful) {
       return buildFallbackResponse(
         date,
+        mealConfig.label,
         `No menu found for ${SCHOOL_SLUG} ${meal} on ${date}`
       )
     }
@@ -382,6 +383,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    return buildFallbackResponse(date, msg)
+    return buildFallbackResponse(date, mealConfig.label, msg)
   }
 }
