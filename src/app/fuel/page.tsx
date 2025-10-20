@@ -399,7 +399,7 @@ export default function Fuel() {
       if (distinctSources.size === 0) {
         setMenuSource(null)
       } else if (distinctSources.size === 1) {
-        setMenuSource(distinctSources.values().next().value)
+        setMenuSource(distinctSources.values().next().value ?? null)
       } else {
         setMenuSource("mixed")
       }
