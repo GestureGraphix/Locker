@@ -1,36 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 
-import { initialAthletes } from "@/lib/initial-data"
-import { normalizeAccounts, normalizeAthletes } from "@/lib/state-normalizer"
-import type { Athlete, StoredAccount } from "@/lib/role-types"
-
-type LockerServerState = {
-  accounts: StoredAccount[]
-  athletes: Athlete[]
-}
+import { readLockerState, withLockerState } from "@/lib/server/persistent-store"
+import { normalizeAthletes } from "@/lib/state-normalizer"
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 
-const globalForLocker = globalThis as typeof globalThis & {
-  __LOCKER_SERVER_STATE__?: LockerServerState
-}
-
-const getInitialState = (): LockerServerState => ({
-  accounts: [],
-  athletes: clone(initialAthletes),
-})
-
-const getServerState = (): LockerServerState => {
-  if (!globalForLocker.__LOCKER_SERVER_STATE__) {
-    globalForLocker.__LOCKER_SERVER_STATE__ = getInitialState()
-  }
-  return globalForLocker.__LOCKER_SERVER_STATE__
-}
-
 export async function GET() {
-  const state = getServerState()
+  const state = await readLockerState()
   return NextResponse.json({
-    accounts: clone(state.accounts),
     athletes: clone(state.athletes),
   })
 }
@@ -47,29 +24,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
   }
 
-  const payload = body as { accounts?: unknown; athletes?: unknown }
-  const current = getServerState()
-  const nextState: LockerServerState = {
+  const payload = body as { athletes?: unknown }
+
+  if (!Object.prototype.hasOwnProperty.call(payload, "athletes")) {
+    return NextResponse.json({ success: true })
+  }
+
+  if (!Array.isArray(payload.athletes)) {
+    return NextResponse.json({ error: "Athletes must be an array" }, { status: 400 })
+  }
+
+  const normalizedAthletes = normalizeAthletes(payload.athletes)
+
+  const nextState = await withLockerState((current) => ({
     accounts: current.accounts,
-    athletes: current.athletes,
-  }
+    athletes: normalizedAthletes,
+  }))
 
-  if (Object.prototype.hasOwnProperty.call(payload, "accounts")) {
-    nextState.accounts = Array.isArray(payload.accounts)
-      ? normalizeAccounts(payload.accounts)
-      : current.accounts
-  }
-
-  if (Object.prototype.hasOwnProperty.call(payload, "athletes")) {
-    nextState.athletes = Array.isArray(payload.athletes)
-      ? normalizeAthletes(payload.athletes)
-      : current.athletes
-  }
-
-  globalForLocker.__LOCKER_SERVER_STATE__ = {
-    accounts: clone(nextState.accounts),
-    athletes: clone(nextState.athletes),
-  }
-
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, athletes: clone(nextState.athletes) })
 }

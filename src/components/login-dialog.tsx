@@ -25,6 +25,7 @@ export function LoginDialog() {
   const initialRole: "athlete" | "coach" = currentUser?.role ?? "athlete"
   const [form, setForm] = useState(defaultFormState(initialRole))
   const [mode, setMode] = useState<AuthMode>("signIn")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const displayName = useMemo(() => {
     if (!currentUser) return "Guest"
@@ -55,8 +56,9 @@ export function LoginDialog() {
     }
   }
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (isSubmitting) return
     const email = form.email.trim()
     if (!email) {
       setError("Email is required.")
@@ -68,42 +70,47 @@ export function LoginDialog() {
       return
     }
 
-    if (mode === "createAccount") {
-      if (form.password.length < 8) {
-        setError("Password must be at least 8 characters long.")
-        return
-      }
-      if (form.password !== form.confirmPassword) {
-        setError("Passwords do not match.")
-        return
+    setIsSubmitting(true)
+    try {
+      if (mode === "createAccount") {
+        if (form.password.length < 8) {
+          setError("Password must be at least 8 characters long.")
+          return
+        }
+        if (form.password !== form.confirmPassword) {
+          setError("Passwords do not match.")
+          return
+        }
+
+        const result = await createAccount({
+          role: form.role,
+          email,
+          password: form.password,
+          name: form.name,
+        })
+
+        if (!result.success) {
+          setError(result.error)
+          return
+        }
+      } else {
+        const result = await login({
+          role: form.role,
+          email,
+          password: form.password,
+        })
+
+        if (!result.success) {
+          setError(result.error)
+          return
+        }
       }
 
-      const result = createAccount({
-        role: form.role,
-        email,
-        password: form.password,
-        name: form.name,
-      })
-
-      if (!result.success) {
-        setError(result.error)
-        return
-      }
-    } else {
-      const result = login({
-        role: form.role,
-        email,
-        password: form.password,
-      })
-
-      if (!result.success) {
-        setError(result.error)
-        return
-      }
+      setOpen(false)
+      resetForm()
+    } finally {
+      setIsSubmitting(false)
     }
-
-    setOpen(false)
-    resetForm()
   }
 
   const dialogTitle = mode === "createAccount" ? "Create account" : currentUser ? "Manage account" : "Sign in"
@@ -244,8 +251,14 @@ export function LoginDialog() {
               </div>
             )}
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button type="submit" className="w-full">
-              {mode === "createAccount" ? "Create account" : "Sign in"}
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting
+                ? mode === "createAccount"
+                  ? "Creating account..."
+                  : "Signing in..."
+                : mode === "createAccount"
+                  ? "Create account"
+                  : "Sign in"}
             </Button>
           </form>
         </div>

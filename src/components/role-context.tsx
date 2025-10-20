@@ -7,7 +7,6 @@ import type {
   HydrationLog,
   MealLog,
   Role,
-  StoredAccount,
   UserAccount,
   Session,
   WorkoutPlan
@@ -15,12 +14,7 @@ import type {
 export type { MealLog, NutritionFact } from "@/lib/role-types"
 import { initialAthletes } from "@/lib/initial-data"
 import type { CalendarEvent } from "@/lib/role-types"
-import {
-  normalizeAccounts,
-  normalizeAthletes,
-  normalizeTag,
-  normalizeTags,
-} from "@/lib/state-normalizer"
+import { normalizeAthletes, normalizeTag, normalizeTags } from "@/lib/state-normalizer"
 
 
 
@@ -100,8 +94,8 @@ type RoleContextValue = {
   updateHydrationLogs: (athleteId: number, updater: (logs: HydrationLog[]) => HydrationLog[]) => void
   updateMealLogs: (athleteId: number, updater: (logs: MealLog[]) => MealLog[]) => void
   currentUser: UserAccount | null
-  login: (input: LoginInput) => AuthResult
-  createAccount: (input: CreateAccountInput) => AuthResult
+  login: (input: LoginInput) => Promise<AuthResult>
+  createAccount: (input: CreateAccountInput) => Promise<AuthResult>
   logout: () => void
   updateAthleteProfile: (athleteId: number, updates: UpdateAthleteInput) => void
 }
@@ -110,6 +104,9 @@ const RoleContext = createContext<RoleContextValue | undefined>(undefined)
 
 const STORAGE_KEY = "locker-app-state-v1"
 const SERVER_STATE_ENDPOINT = "/api/state"
+const SESSION_ENDPOINT = "/api/auth/session"
+const LOGIN_ENDPOINT = "/api/auth/login"
+const SIGNUP_ENDPOINT = "/api/auth/signup"
 
 const formatTimeRange = (startIso: string, endIso: string) => {
   const start = new Date(startIso)
@@ -148,9 +145,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [activeAthleteId, setActiveAthleteId] = useState<number | null>(
     initialAthletes[0]?.id ?? null
   )
-  const [accounts, setAccounts] = useState<StoredAccount[]>([])
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null)
+  const [sessionToken, setSessionToken] = useState<string | null>(null)
   const [isHydrated, setIsHydrated] = useState(false)
+  const [serverHydrated, setServerHydrated] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -162,7 +160,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         athletes?: Athlete[]
         activeAthleteId?: number | null
         currentUser?: UserAccount | null
-        accounts?: StoredAccount[]
+        sessionToken?: string | null
       }
 
       if (parsed.role) setRoleState(parsed.role)
@@ -176,9 +174,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       if (parsed.currentUser) {
         setCurrentUser(parsed.currentUser)
       }
-      const normalizedAccounts = normalizeAccounts(parsed.accounts)
-      if (normalizedAccounts.length > 0) {
-        setAccounts(normalizedAccounts)
+      if (typeof parsed.sessionToken === "string") {
+        setSessionToken(parsed.sessionToken)
       }
     } catch (error) {
       console.error("Failed to load Locker state", error)
@@ -194,13 +191,13 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       athletes,
       activeAthleteId,
       currentUser,
-      accounts,
+      sessionToken,
     })
     window.localStorage.setItem(STORAGE_KEY, payload)
-  }, [role, athletes, activeAthleteId, currentUser, accounts, isHydrated])
+  }, [role, athletes, activeAthleteId, currentUser, sessionToken, isHydrated])
 
   useEffect(() => {
-    if (typeof window === "undefined" || !isHydrated) return
+    if (typeof window === "undefined" || !isHydrated || sessionToken) return
     let cancelled = false
 
     const fetchServerState = async () => {
@@ -208,25 +205,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         const response = await fetch(SERVER_STATE_ENDPOINT, { cache: "no-store" })
         if (!response.ok) return
         const payload = (await response.json()) as {
-          accounts?: unknown
           athletes?: unknown
         }
         if (cancelled) return
-
-        const serverAccounts = normalizeAccounts(payload.accounts)
-        if (serverAccounts.length > 0) {
-          setAccounts((prev) => {
-            if (prev.length === 0) return serverAccounts
-            const merged = new Map<string, StoredAccount>()
-            for (const account of prev) {
-              merged.set(`${account.email}:${account.role}`, account)
-            }
-            for (const account of serverAccounts) {
-              merged.set(`${account.email}:${account.role}`, account)
-            }
-            return Array.from(merged.values())
-          })
-        }
 
         const serverAthletes = normalizeAthletes(payload.athletes)
         if (serverAthletes.length > 0) {
@@ -256,6 +237,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error("Failed to load server Locker state", error)
+      } finally {
+        if (!cancelled) {
+          setServerHydrated(true)
+        }
       }
     }
 
@@ -264,14 +249,14 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [isHydrated])
+  }, [isHydrated, sessionToken])
 
   const setRole = useCallback((nextRole: Role) => {
     setRoleState(nextRole)
   }, [])
 
   useEffect(() => {
-    if (typeof window === "undefined" || !isHydrated) return
+    if (typeof window === "undefined" || !isHydrated || !serverHydrated) return
     const controller = new AbortController()
 
     const syncState = async () => {
@@ -279,7 +264,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         await fetch(SERVER_STATE_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accounts, athletes }),
+          body: JSON.stringify({ athletes }),
           signal: controller.signal,
         })
       } catch (error) {
@@ -293,7 +278,74 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     return () => {
       controller.abort()
     }
-  }, [accounts, athletes, isHydrated])
+  }, [athletes, isHydrated, serverHydrated])
+
+  useEffect(() => {
+    if (!isHydrated) return
+    if (!sessionToken) {
+      setServerHydrated(false)
+      return
+    }
+
+    const controller = new AbortController()
+
+    const revalidateSession = async () => {
+      try {
+        const response = await fetch(SESSION_ENDPOINT, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          cache: "no-store",
+          signal: controller.signal,
+        })
+        if (!response.ok) {
+          setSessionToken(null)
+          setCurrentUser(null)
+          return
+        }
+        const payload = (await response.json()) as {
+          user?: UserAccount
+          athletes?: unknown
+        }
+        if (!payload.user) return
+
+        const normalizedAthletes = normalizeAthletes(payload.athletes)
+        setAthletes(normalizedAthletes)
+        setCurrentUser(payload.user)
+        setRoleState(payload.user.role)
+        if (payload.user.role === "athlete" && payload.user.athleteId != null) {
+          setActiveAthleteId(payload.user.athleteId)
+        }
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return
+        console.error("Failed to revalidate session", error)
+      } finally {
+        setServerHydrated(true)
+      }
+    }
+
+    void revalidateSession()
+
+    return () => {
+      controller.abort()
+    }
+  }, [isHydrated, sessionToken])
+
+  const applyAuthenticatedSession = useCallback(
+    ({ token, user, athletes: sessionAthletes }: { token: string; user: UserAccount; athletes: Athlete[] }) => {
+      setSessionToken(token)
+      setCurrentUser(user)
+      setRoleState(user.role)
+      const normalizedAthletes = normalizeAthletes(sessionAthletes)
+      setAthletes(normalizedAthletes)
+      if (user.role === "athlete" && user.athleteId != null) {
+        setActiveAthleteId(user.athleteId)
+      } else if (normalizedAthletes.length > 0) {
+        setActiveAthleteId((prev) => prev ?? normalizedAthletes[0].id)
+      }
+      setServerHydrated(true)
+    },
+    []
+  )
 
   const applySessionToAthlete = useCallback(
     (
@@ -545,82 +597,58 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   )
 
   const login = useCallback(
-    ({ email, role: loginRole, password }: LoginInput): AuthResult => {
+    async ({ email, role: loginRole, password }: LoginInput): Promise<AuthResult> => {
       const normalizedEmail = email.trim().toLowerCase()
       if (!normalizedEmail) {
         return { success: false, error: "Email is required to sign in." }
       }
 
-      const account = accounts.find(
-        (stored) => stored.email === normalizedEmail && stored.role === loginRole
-      )
-
-      if (!account) {
-        return { success: false, error: "No account found for that email." }
+      if (!password) {
+        return { success: false, error: "Password is required." }
       }
 
-      if (account.password !== password) {
-        return { success: false, error: "Incorrect password." }
-      }
+      try {
+        const response = await fetch(LOGIN_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: normalizedEmail, password, role: loginRole }),
+        })
 
-      const { password: _password, ...accountWithoutPassword } = account
-      void _password
-
-      if (loginRole === "athlete") {
-        const athleteId = accountWithoutPassword.athleteId
-        const existingAthlete = athleteId
-          ? athletes.find((athlete) => athlete.id === athleteId)
-          : undefined
-
-        if (!existingAthlete) {
-          const inferredName = accountWithoutPassword.name || normalizedEmail.split("@")[0]
-          const newAthlete: Athlete = {
-            id: athleteId ?? Date.now() + Math.floor(Math.random() * 1000),
-            name: inferredName,
-            email: normalizedEmail,
-            sport: "",
-            level: "",
-            team: "",
-            tags: [],
-            sessions: [],
-            calendar: [],
-            workouts: [],
-            hydrationLogs: [],
-            mealLogs: [],
+        if (!response.ok) {
+          let errorMessage = "Unable to sign in. Please check your credentials."
+          try {
+            const payload = (await response.json()) as { error?: string }
+            if (payload?.error) {
+              errorMessage = payload.error
+            }
+          } catch {
+            // Ignore JSON parse errors
           }
-
-          setAthletes((prev) => {
-            const withoutSeed = prev.filter((athlete) => !athlete.isSeedData)
-            return [...withoutSeed, newAthlete]
-          })
-          setActiveAthleteId(newAthlete.id)
-          setCurrentUser({ ...accountWithoutPassword, athleteId: newAthlete.id })
-          setRoleState("athlete")
-          setAccounts((prev) =>
-            prev.map((stored) =>
-              stored.email === account.email && stored.role === account.role
-                ? { ...stored, athleteId: newAthlete.id }
-                : stored
-            )
-          )
-          return { success: true }
+          if (response.status === 401 || response.status === 404) {
+            setSessionToken(null)
+            setCurrentUser(null)
+          }
+          return { success: false, error: errorMessage }
         }
 
-        setActiveAthleteId(existingAthlete.id)
-        setCurrentUser({ ...accountWithoutPassword, athleteId: existingAthlete.id })
-        setRoleState("athlete")
-        return { success: true }
-      }
+        const payload = (await response.json()) as {
+          token: string
+          user: UserAccount
+          athletes: Athlete[]
+        }
 
-      setCurrentUser(accountWithoutPassword)
-      setRoleState("coach")
-      return { success: true }
+        applyAuthenticatedSession(payload)
+        return { success: true }
+      } catch (error) {
+        console.error("Failed to sign in", error)
+        return { success: false, error: "Unable to sign in. Please try again." }
+      }
     },
-    [accounts, athletes]
+    [applyAuthenticatedSession]
   )
 
   const createAccount = useCallback(
-    ({ email, role: accountRole, password, name }: CreateAccountInput): AuthResult => {
+    async ({ email, role: accountRole, password, name }: CreateAccountInput): Promise<AuthResult> => {
       const normalizedEmail = email.trim().toLowerCase()
       if (!normalizedEmail) {
         return { success: false, error: "Email is required to create an account." }
@@ -628,73 +656,57 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       if (!password) {
         return { success: false, error: "Password is required." }
       }
-
-      const existingAccount = accounts.find(
-        (stored) => stored.email === normalizedEmail && stored.role === accountRole
-      )
-
-      if (existingAccount) {
-        return { success: false, error: "An account with that email already exists." }
+      if (password.length < 8) {
+        return { success: false, error: "Password must be at least 8 characters long." }
       }
 
-      if (accountRole === "athlete") {
-        const id = Date.now() + Math.floor(Math.random() * 1000)
-        const inferredName = name?.trim() || normalizedEmail.split("@")[0]
-        const newAthlete: Athlete = {
-          id,
-          name: inferredName,
-          email: normalizedEmail,
-          sport: "",
-          level: "",
-          team: "",
-          tags: [],
-          sessions: [],
-          calendar: [],
-          workouts: [],
-          hydrationLogs: [],
-          mealLogs: [],
-        }
-
-        setAthletes((prev) => {
-          const withoutSeed = prev.filter((athlete) => !athlete.isSeedData)
-          return [...withoutSeed, newAthlete]
+      try {
+        const response = await fetch(SIGNUP_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            password,
+            role: accountRole,
+            name,
+          }),
         })
-        setActiveAthleteId(id)
 
-        const newAccount: StoredAccount = {
-          email: normalizedEmail,
-          name: inferredName,
-          role: "athlete",
-          password,
-          athleteId: id,
+        if (!response.ok) {
+          let errorMessage = "Unable to create your account. Please try again."
+          try {
+            const payload = (await response.json()) as { error?: string }
+            if (payload?.error) {
+              errorMessage = payload.error
+            }
+          } catch {
+            // Ignore parse errors
+          }
+          return { success: false, error: errorMessage }
         }
 
-        setAccounts((prev) => [...prev, newAccount])
-        setCurrentUser({ email: normalizedEmail, name: inferredName, role: "athlete", athleteId: id })
-        setRoleState("athlete")
+        const payload = (await response.json()) as {
+          token: string
+          user: UserAccount
+          athletes: Athlete[]
+        }
+
+        applyAuthenticatedSession(payload)
         return { success: true }
+      } catch (error) {
+        console.error("Failed to create account", error)
+        return { success: false, error: "Unable to create your account. Please try again." }
       }
-
-      const coachName = name?.trim() || normalizedEmail.split("@")[0]
-      const newAccount: StoredAccount = {
-        email: normalizedEmail,
-        name: coachName,
-        role: "coach",
-        password,
-      }
-
-      setAccounts((prev) => [...prev, newAccount])
-      setCurrentUser({ email: normalizedEmail, name: coachName, role: "coach" })
-      setRoleState("coach")
-      return { success: true }
     },
-    [accounts]
+    [applyAuthenticatedSession]
   )
-  
+
 
   const logout = useCallback(() => {
     setCurrentUser(null)
     setActiveAthleteId(null)
+    setSessionToken(null)
+    setServerHydrated(false)
     setRoleState("athlete")
   }, [])
 
