@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import type { UserAccount } from "@/lib/role-types"
+import type { UserAccount, Role } from "@/lib/role-types"
 import { createSessionToken } from "@/lib/server/auth-token"
 import {
   getNextAthleteId,
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
   const newAccount = {
     email,
     name,
-    role,
+    role: role as Role,
     password,
     athleteId,
   }
