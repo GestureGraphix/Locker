@@ -20,7 +20,8 @@ import {
   Target,
   CalendarDays,
   Loader2,
-  RefreshCcw
+  RefreshCcw,
+  ChevronDown
 } from "lucide-react"
 
 /* ======================== Types ======================== */
@@ -40,6 +41,14 @@ type MenuMeal = {
 type MenuLocation = {
   location: string
   meals: MenuMeal[]
+}
+
+type MenuMealSection = {
+  type: string
+  label: string
+  locations: MenuLocation[]
+  source: "live" | "fallback" | null
+  error: string | null
 }
 /* ======================== Helpers ======================== */
 
@@ -143,6 +152,12 @@ const MEAL_TYPE_OPTIONS = [
   { value: "dinner", label: "Dinner" }
 ]
 
+const MENU_MEAL_SECTIONS = [
+  { type: "breakfast", label: "Breakfast" },
+  { type: "lunch", label: "Lunch" },
+  { type: "dinner", label: "Dinner" }
+]
+
 const getSourceIcon = (source: string) => {
   switch (source) {
     case "cup": return <Coffee className="h-4 w-4" />
@@ -212,10 +227,22 @@ export default function Fuel() {
       : [...baseOptions, { value: newMeal.mealType, label: formatMealTypeLabel(newMeal.mealType) }]
   }, [newMeal.mealType])
   const [menuDate, setMenuDate] = useState(new Date().toISOString().split("T")[0])
-  const [menuData, setMenuData] = useState<MenuLocation[]>([])
+  const [menuData, setMenuData] = useState<MenuMealSection[]>([])
   const [menuLoading, setMenuLoading] = useState(false)
   const [menuError, setMenuError] = useState<string | null>(null)
-  const [menuSource, setMenuSource] = useState<"live" | "fallback" | null>(null)
+  const [menuSource, setMenuSource] = useState<"live" | "fallback" | "mixed" | null>(null)
+  const [openMealSections, setOpenMealSections] = useState<Record<string, boolean>>({
+    breakfast: false,
+    lunch: false,
+    dinner: true
+  })
+
+  const toggleMealSection = useCallback((type: string) => {
+    setOpenMealSections((prev) => ({
+      ...prev,
+      [type]: !prev[type]
+    }))
+  }, [])
 
   const menuDateStrings = useMemo(() => {
     const baseDate = menuDate ? new Date(`${menuDate}T00:00:00`) : new Date()
@@ -234,6 +261,16 @@ export default function Fuel() {
       })
     }
   }, [menuDate])
+
+  const hasMenuItems = useMemo(
+    () =>
+      menuData.some((section) =>
+        section.locations.some((loc) =>
+          (loc.meals || []).some((meal) => (meal.items || []).length > 0)
+        )
+      ),
+    [menuData]
+  )
 
   const resetMealForm = useCallback(() => {
     setNewMeal({
@@ -286,52 +323,92 @@ export default function Fuel() {
     [menuDate, primaryAthlete]
   )
 
-  /* -------- Fetch menu and normalize calories/protein on the way in -------- */
+  /* -------- Fetch menu sections (breakfast, lunch, dinner) -------- */
   const fetchMenu = useCallback(async () => {
     setMenuLoading(true)
     setMenuError(null)
     try {
-      const res = await fetch(`/api/yale-menu?date=${menuDate}`)
-      if (!res.ok) throw new Error("Unable to reach Yale Dining")
-      const payload = await res.json()
+      const sections = await Promise.all(
+        MENU_MEAL_SECTIONS.map(async ({ type, label }) => {
+          try {
+            const res = await fetch(`/api/yale-menu?date=${menuDate}&meal=${type}`)
+            if (!res.ok) throw new Error("Unable to reach Yale Dining")
 
-      const locations: MenuLocation[] = Array.isArray(payload.menu) ? payload.menu : []
-      if (!locations.length) {
-        setMenuData([])
-        setMenuSource(null)
-        if (payload.source === "live") {
-          setMenuError("We could not find menu items for the selected date.")
-        } else if (payload.error) {
-          setMenuError(`Live data unavailable: ${payload.error}`)
-        } else {
-          setMenuError("Unexpected response while loading menu data.")
-        }
-        return
-      }
+            const payload = await res.json()
+            const locations: MenuLocation[] = Array.isArray(payload.menu) ? payload.menu : []
 
-      // Ensure each item has calories precomputed so buttons/labels never show 0 unless truly missing
-      const normalized: MenuLocation[] = locations.map((loc) => ({
-        ...loc,
-        meals: (loc.meals || []).map((meal) => ({
-          ...meal,
-          items: (meal.items || []).map((item) => {
-            const facts = Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []
-            const calories = getCaloriesFromItem({ ...item, nutritionFacts: facts })
+            const normalized: MenuLocation[] = locations.map((loc) => ({
+              ...loc,
+              meals: (loc.meals || []).map((meal) => ({
+                ...meal,
+                items: (meal.items || []).map((item) => {
+                  const facts = Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []
+                  const calories = getCaloriesFromItem({ ...item, nutritionFacts: facts })
+                  return {
+                    ...item,
+                    calories: calories ?? item.calories,
+                    nutritionFacts: facts
+                  }
+                })
+              }))
+            }))
+
+            const hasItems = normalized.some((loc) =>
+              (loc.meals || []).some((meal) => (meal.items || []).length > 0)
+            )
+
+            const source: "live" | "fallback" | null =
+              payload.source === "live" || payload.source === "fallback" ? payload.source : null
+
+            const payloadError =
+              typeof payload.error === "string" && payload.error.trim().length
+                ? payload.error.trim()
+                : null
+
             return {
-              ...item,
-              calories: calories ?? item.calories,
-              nutritionFacts: facts
-            }
-          })
-        }))
-      }))
+              type,
+              label,
+              locations: normalized,
+              source,
+              error: payloadError ?? (!hasItems ? `No ${label.toLowerCase()} items found.` : null)
+            } satisfies MenuMealSection
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : "Unknown error loading menu"
+            return {
+              type,
+              label,
+              locations: [],
+              source: null,
+              error: message
+            } satisfies MenuMealSection
+          }
+        })
+      )
 
-      setMenuData(normalized)
-      setMenuSource(payload.source ?? null)
+      setMenuData(sections)
 
-      if (payload.source === "fallback" && payload.error) {
-        setMenuError(`Live data unavailable: ${payload.error}`)
+      const distinctSources = new Set<"live" | "fallback">(
+        sections
+          .map((section) => section.source)
+          .filter(
+            (value): value is "live" | "fallback" => value === "live" || value === "fallback"
+          )
+      )
+
+      if (distinctSources.size === 0) {
+        setMenuSource(null)
+      } else if (distinctSources.size === 1) {
+        setMenuSource(distinctSources.values().next().value)
+      } else {
+        setMenuSource("mixed")
       }
+
+      const aggregatedErrors = sections
+        .filter((section) => section.error)
+        .map((section) => `${section.label}: ${section.error}`)
+
+      setMenuError(aggregatedErrors.length ? aggregatedErrors.join(" ") : null)
     } catch (err) {
       setMenuData([])
       setMenuSource(null)
@@ -923,7 +1000,9 @@ export default function Fuel() {
                 <div className="rounded-md border border-muted p-3 text-xs text-muted-foreground">
                   {menuSource === "live"
                     ? `Menu retrieved from Yale Dining (Nutrislice) for ${menuDateStrings.long}.`
-                    : `Showing fallback example menu for ${menuDateStrings.long}.`}
+                    : menuSource === "fallback"
+                      ? `Showing fallback example menu for ${menuDateStrings.long}.`
+                      : `Menus retrieved from a mix of live Yale Dining data and fallback data for ${menuDateStrings.long}.`}
                 </div>
               )}
 
@@ -932,92 +1011,160 @@ export default function Fuel() {
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Fetching dining menu…
                 </div>
-              ) : menuData.length === 0 ? (
+              ) : !hasMenuItems ? (
                 <div className="py-10 text-center text-muted-foreground">
                   No dining menu items found for {menuDateStrings.long}.
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {menuData.map((location) => (
-                    <Card key={location.location} className="border-primary/10">
-                      <CardHeader>
-                        <CardTitle className="flex items-center justify-between">
-                          <span>{location.location}</span>
-                          <Badge variant="secondary">
-                            {location.meals.length} meal{location.meals.length === 1 ? "" : "s"}
-                          </Badge>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {location.meals.map((meal) => (
-                          <div
-                            key={`${location.location}-${meal.mealType}`}
-                            className="space-y-2 rounded-lg border border-border/50 p-3"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                {getMealTypeIcon(normalizeMealType(meal.mealType))}
-                                <span className="font-medium">{meal.mealType}</span>
-                              </div>
-                              <Badge variant="outline">
-                                {meal.items.length} item{meal.items.length === 1 ? "" : "s"}
-                              </Badge>
-                            </div>
+                  {menuData.map((section) => {
+                    const isOpen = openMealSections[section.type] ?? false
+                    const sectionItemCount = section.locations.reduce((total, location) => {
+                      const meals = Array.isArray(location.meals) ? location.meals : []
+                      return (
+                        total +
+                        meals.reduce((mealTotal, meal) => {
+                          if (normalizeMealType(meal.mealType) !== section.type) return mealTotal
+                          const items = Array.isArray(meal.items) ? meal.items : []
+                          return mealTotal + items.length
+                        }, 0)
+                      )
+                    }, 0)
 
-                            <div className="grid gap-2 md:grid-cols-2">
-                              {meal.items.map((item, idx) => {
-                                const calories = getCaloriesFromItem(item)
+                    return (
+                      <Card key={section.type} className="overflow-hidden border-primary/10">
+                        <CardHeader className="p-0">
+                          <Button
+                            variant="ghost"
+                            className="flex w-full items-center justify-between px-4 py-3 text-left text-base font-semibold"
+                            onClick={() => toggleMealSection(section.type)}
+                          >
+                            <span className="flex items-center gap-2">
+                              {getMealTypeIcon(section.type)}
+                              {section.label}
+                            </span>
+                            <span className="flex items-center gap-3">
+                              <Badge variant="secondary">
+                                {sectionItemCount} item{sectionItemCount === 1 ? "" : "s"}
+                              </Badge>
+                              <ChevronDown
+                                className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                              />
+                            </span>
+                          </Button>
+                        </CardHeader>
+                        {section.error && (
+                          <div className="px-4 pt-2 text-xs text-muted-foreground">{section.error}</div>
+                        )}
+                        {isOpen && (
+                          <CardContent className="space-y-6 pt-0 pb-4">
+                            {section.locations.map((location) => {
+                              const relevantMeals = (location.meals || []).filter(
+                                (meal) => normalizeMealType(meal.mealType) === section.type
+                              )
+                              const totalLocationItems = relevantMeals.reduce(
+                                (count, meal) => count + (meal.items?.length ?? 0),
+                                0
+                              )
+
+                              if (!totalLocationItems) {
                                 return (
                                   <div
-                                    key={`${location.location}-${meal.mealType}-${item.name}-${idx}`} // unique key
-                                    className="flex items-start justify-between gap-3 rounded-md border border-border/40 p-3"
+                                    key={`${section.type}-${location.location}`}
+                                    className="rounded-md border border-border/40 p-4 text-sm text-muted-foreground"
                                   >
-                                    <div>
-                                      <p className="text-sm font-medium text-foreground">{item.name}</p>
-                                      {item.description && (
-                                        <p className="text-xs text-muted-foreground">{item.description}</p>
-                                      )}
-                                      {item.nutritionFacts.length > 0 && (
-                                        <div className="mt-2 flex flex-wrap gap-2 text-[0.65rem] text-muted-foreground">
-                                          {getFeaturedNutritionFacts(item.nutritionFacts).map((fact) => {
-                                            const value = formatNutritionFactValue(fact)
-                                            if (!value) return null
-                                            return (
-                                              <Badge
-                                                key={`${item.name}-${fact.name}`}
-                                                variant="outline"
-                                                className="border-dashed px-2 py-0"
-                                              >
-                                                {fact.name}: {value}
-                                              </Badge>
-                                            )
-                                          })}
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
-                                      <Badge variant="secondary" className="whitespace-nowrap">
-                                        {calories != null && Number.isFinite(calories) ? Math.round(calories) : 0} cal
-                                      </Badge>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleAddFromMenu(meal.mealType, item, location.location)}
-                                      >
-                                        Add Meal
-                                      </Button>
-                                    </div>
-
+                                    No {section.label.toLowerCase()} items listed for {location.location}.
                                   </div>
                                 )
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  ))}
+                              }
+
+                              return (
+                                <div
+                                  key={`${section.type}-${location.location}`}
+                                  className="space-y-3"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="text-sm font-semibold text-foreground">
+                                      {location.location}
+                                    </h4>
+                                    <Badge variant="outline">
+                                      {totalLocationItems} item{totalLocationItems === 1 ? "" : "s"}
+                                    </Badge>
+                                  </div>
+
+                                  {relevantMeals.map((meal) => (
+                                    <div
+                                      key={`${location.location}-${meal.mealType}`}
+                                      className="space-y-2 rounded-lg border border-border/50 p-3"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                          {getMealTypeIcon(section.type)}
+                                          <span className="font-medium">{meal.mealType}</span>
+                                        </div>
+                                        <Badge variant="outline">
+                                          {meal.items.length} item{meal.items.length === 1 ? "" : "s"}
+                                        </Badge>
+                                      </div>
+
+                                      <div className="grid gap-2 md:grid-cols-2">
+                                        {meal.items.map((item, idx) => {
+                                          const calories = getCaloriesFromItem(item)
+                                          return (
+                                            <div
+                                              key={`${section.type}-${location.location}-${meal.mealType}-${item.name}-${idx}`}
+                                              className="flex items-start justify-between gap-3 rounded-md border border-border/40 p-3"
+                                            >
+                                              <div>
+                                                <p className="text-sm font-medium text-foreground">{item.name}</p>
+                                                {item.description && (
+                                                  <p className="text-xs text-muted-foreground">{item.description}</p>
+                                                )}
+                                                {item.nutritionFacts.length > 0 && (
+                                                  <div className="mt-2 flex flex-wrap gap-2 text-[0.65rem] text-muted-foreground">
+                                                    {getFeaturedNutritionFacts(item.nutritionFacts).map((fact) => {
+                                                      const value = formatNutritionFactValue(fact)
+                                                      if (!value) return null
+                                                      return (
+                                                        <Badge
+                                                          key={`${item.name}-${fact.name}`}
+                                                          variant="outline"
+                                                          className="border-dashed px-2 py-0"
+                                                        >
+                                                          {fact.name}: {value}
+                                                        </Badge>
+                                                      )
+                                                    })}
+                                                  </div>
+                                                )}
+                                              </div>
+
+                                              <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                                                <Badge variant="secondary" className="whitespace-nowrap">
+                                                  {calories != null && Number.isFinite(calories) ? Math.round(calories) : 0} cal
+                                                </Badge>
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  onClick={() => handleAddFromMenu(meal.mealType, item, location.location)}
+                                                >
+                                                  Add Meal
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            })}
+                          </CardContent>
+                        )}
+                      </Card>
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
