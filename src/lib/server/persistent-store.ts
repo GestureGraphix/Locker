@@ -1,4 +1,5 @@
-import { promises as fs } from "fs"
+import { promises as fs, constants as fsConstants } from "fs"
+import os from "os"
 import path from "path"
 
 import { initialAthletes } from "@/lib/initial-data"
@@ -13,26 +14,59 @@ export type LockerPersistentState = {
 const clone = <T,>(value: T): T =>
   JSON.parse(JSON.stringify(value)) as T
 
-const DATA_DIR = path.join(process.cwd(), "data")
-const DATA_FILE = path.join(DATA_DIR, "locker-store.json")
+const DATA_FILE_NAME = "locker-store.json"
+
+type DataPaths = { dir: string; file: string }
+
+let resolvedDataPathsPromise: Promise<DataPaths> | null = null
+
+const resolveDataPaths = async (): Promise<DataPaths> => {
+  if (!resolvedDataPathsPromise) {
+    resolvedDataPathsPromise = (async () => {
+      const candidateDirs: string[] = []
+      const configuredDir = process.env.LOCKER_DATA_DIR?.trim()
+      if (configuredDir) {
+        candidateDirs.push(configuredDir)
+      }
+      candidateDirs.push(path.join(process.cwd(), "data"))
+      candidateDirs.push(path.join(os.tmpdir(), "locker-data"))
+
+      for (const candidate of candidateDirs) {
+        const dir = path.resolve(candidate)
+        try {
+          await fs.mkdir(dir, { recursive: true })
+          await fs.access(dir, fsConstants.W_OK)
+          return { dir, file: path.join(dir, DATA_FILE_NAME) }
+        } catch {
+          // Try the next candidate directory
+        }
+      }
+
+      throw new Error("Unable to resolve writable data directory for Locker state")
+    })()
+  }
+
+  return resolvedDataPathsPromise
+}
 
 const ensureDataFile = async () => {
-  await fs.mkdir(DATA_DIR, { recursive: true })
+  const { file } = await resolveDataPaths()
   try {
-    await fs.access(DATA_FILE)
+    await fs.access(file)
   } catch {
     const initialState: LockerPersistentState = {
       accounts: [],
       athletes: clone(initialAthletes),
     }
-    await fs.writeFile(DATA_FILE, JSON.stringify(initialState, null, 2), "utf8")
+    await fs.writeFile(file, JSON.stringify(initialState, null, 2), "utf8")
   }
 }
 
 export const readLockerState = async (): Promise<LockerPersistentState> => {
   await ensureDataFile()
   try {
-    const raw = await fs.readFile(DATA_FILE, "utf8")
+    const { file } = await resolveDataPaths()
+    const raw = await fs.readFile(file, "utf8")
     const parsed = JSON.parse(raw) as Partial<LockerPersistentState>
     const accounts = normalizeAccounts(parsed?.accounts ?? [])
     const athletes = normalizeAthletes(parsed?.athletes ?? [])
@@ -42,18 +76,20 @@ export const readLockerState = async (): Promise<LockerPersistentState> => {
       accounts: [],
       athletes: clone(initialAthletes),
     }
-    await fs.writeFile(DATA_FILE, JSON.stringify(fallback, null, 2), "utf8")
+    const { file } = await resolveDataPaths()
+    await fs.writeFile(file, JSON.stringify(fallback, null, 2), "utf8")
     return fallback
   }
 }
 
 export const writeLockerState = async (state: LockerPersistentState) => {
   await ensureDataFile()
+  const { file } = await resolveDataPaths()
   const payload: LockerPersistentState = {
     accounts: state.accounts.map((account) => ({ ...account })),
     athletes: state.athletes.map((athlete) => ({ ...athlete })),
   }
-  await fs.writeFile(DATA_FILE, JSON.stringify(payload, null, 2), "utf8")
+  await fs.writeFile(file, JSON.stringify(payload, null, 2), "utf8")
 }
 
 export const withLockerState = async (
