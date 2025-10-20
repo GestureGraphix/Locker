@@ -39,12 +39,18 @@ type MenuItem = {
   servingSize: string | undefined
   nutritionFacts: NutritionFact[]
 }
-type MenuMeal = { mealType: string; items: MenuItem[] }
-
 /* ---------------- Utils ---------------- */
 const TARGET_MEAL_KEYS = new Set(["lunch", "dinner"])
 const normalizeMealName = (m: string) =>
   m.trim().replace(/[-_]/g, " ").replace(/\s+/g, " ").replace(/(^|\s)([a-z])/g, (s) => s.toUpperCase())
+
+const MEAL_SLUG_CONFIG: Record<
+  string,
+  { label: string; slugs: string[] }
+> = {
+  lunch: { label: "Lunch", slugs: ["lunch"] },
+  dinner: { label: "Dinner", slugs: ["dinner", "additional-dinner-offerings"] }
+}
 
 const nutritionValueToNumber = (value: unknown): number | undefined => {
   if (typeof value === "number" && Number.isFinite(value)) return value
@@ -242,7 +248,7 @@ async function resolveItemMeta(
 }
 
 /* ---------------- Build meals ---------------- */
-async function buildMealsFromWeeks(day: WeeksDay, date: string): Promise<MenuMeal[]> {
+async function buildMenuItemsFromWeeks(day: WeeksDay, date: string): Promise<MenuItem[]> {
   const menuItems = Array.isArray(day.menu_items) ? day.menu_items : []
 
   const settled = await Promise.allSettled(
@@ -307,11 +313,7 @@ async function buildMealsFromWeeks(day: WeeksDay, date: string): Promise<MenuMea
 
   const items: MenuItem[] = []
   for (const s of settled) if (s.status === "fulfilled" && s.value) items.push(s.value)
-
-  return [
-    { mealType: "Lunch", items },
-    { mealType: "Dinner", items }
-  ]
+  return items
 }
 
 /* ---------------- Fallback ---------------- */
@@ -337,24 +339,46 @@ export async function GET(request: NextRequest) {
   const date = url.searchParams.get("date") ?? new Date().toISOString().slice(0, 10)
   const mealRaw = (url.searchParams.get("meal") ?? "dinner").toLowerCase()
   const meal = TARGET_MEAL_KEYS.has(mealRaw) ? mealRaw : "dinner"
+  const mealConfig = MEAL_SLUG_CONFIG[meal] ?? { label: normalizeMealName(meal), slugs: [meal] }
 
   try {
-    const weeks = await fetchWeeksMenuByMeal(SCHOOL_SLUG, meal, date)
-    if (!weeks) return buildFallbackResponse(date, "weeks menu failed or returned non-JSON")
+    const aggregatedItems = new Map<number, MenuItem>()
+    let successful = false
 
-    const day: WeeksDay | undefined = weeks?.days?.find((d) => d?.date === date)
-    if (!day) return buildFallbackResponse(date, `No menu found for ${SCHOOL_SLUG} ${meal} on ${date}`)
+    for (const slug of mealConfig.slugs) {
+      const weeks = await fetchWeeksMenuByMeal(SCHOOL_SLUG, slug, date)
+      if (!weeks) continue
 
-    const meals = await buildMealsFromWeeks(day, date)
-    const picked =
-      meals.find((m) => m.mealType.toLowerCase() === normalizeMealName(meal).toLowerCase()) ??
-      meals.find((m) => m.mealType.toLowerCase() === "dinner") ??
-      meals[0]
+      const day: WeeksDay | undefined = weeks?.days?.find((d) => d?.date === date)
+      if (!day) continue
 
+      successful = true
+      const items = await buildMenuItemsFromWeeks(day, date)
+      for (const item of items) if (!aggregatedItems.has(item.id)) aggregatedItems.set(item.id, item)
+    }
+
+    if (!successful) {
+      return buildFallbackResponse(
+        date,
+        `No menu found for ${SCHOOL_SLUG} ${meal} on ${date}`
+      )
+    }
+
+    const items = Array.from(aggregatedItems.values())
     return NextResponse.json({
       date,
       source: "live" as const,
-      menu: [{ location: "Jonathan Edwards College", meals: [picked] }]
+      menu: [
+        {
+          location: "Jonathan Edwards College",
+          meals: [
+            {
+              mealType: mealConfig.label,
+              items
+            }
+          ]
+        }
+      ]
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
