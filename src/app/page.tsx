@@ -37,6 +37,20 @@ type CheckInDiaryEntry = {
 
 const diaryStorageKey = "locker.checkInDiary"
 
+const determineGreeting = () => {
+  const hour = new Date().getHours()
+
+  if (hour < 12) {
+    return "Hello, good morning"
+  }
+
+  if (hour < 18) {
+    return "Hello, good afternoon"
+  }
+
+  return "Hello, good night"
+}
+
 // Enhanced mock data with more sophisticated metrics
 const mockData = {
   checkIn: {
@@ -197,6 +211,15 @@ export default function DashboardPage() {
   )
   const [academicItems, setAcademicItems] = useState<AcademicItem[] | null>(null)
   const isGuest = !currentUser
+
+  const [greeting, setGreeting] = useState(determineGreeting)
+
+  useEffect(() => {
+    const updateGreeting = () => setGreeting(determineGreeting())
+    const interval = setInterval(updateGreeting, 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (isGuest) {
@@ -570,7 +593,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-4xl font-bold bg-gradient-to-r from-[#0f172a] via-[#0f4d92] to-[#12284b] bg-clip-text text-transparent mb-2">
-                    Good morning, Alex! 👋
+                    {greeting} Alex! 👋
                   </h1>
                   <p className="text-xl text-gray-600 font-medium">Ready to tackle another day?</p>
                 </div>
