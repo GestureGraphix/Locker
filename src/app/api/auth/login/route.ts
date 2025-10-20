@@ -38,10 +38,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email is required." }, { status: 400 })
   }
 
-  if (!requestedRole) {
-    return NextResponse.json({ error: "Role is required." }, { status: 400 })
-  }
-
   if (!password) {
     return NextResponse.json({ error: "Password is required." }, { status: 400 })
   }
@@ -50,34 +46,19 @@ export async function POST(request: Request) {
   const accountsForEmail = current.accounts.filter((account) => account.email === email)
 
   if (accountsForEmail.length === 0) {
-    return NextResponse.json({ error: "Account not found." }, { status: 404 })
+    return NextResponse.json(
+      { error: "Account not found. Check your email or create a new account." },
+      { status: 404 }
+    )
   }
 
   let account =
-    accountsForEmail.find((candidate) => candidate.role === requestedRole) ?? null
+    requestedRole != null
+      ? accountsForEmail.find((candidate) => candidate.role === requestedRole) ?? null
+      : null
 
-  if (!account) {
-    account =
-      accountsForEmail.find((candidate) => candidate.password === password) ?? null
-
-    if (!account) {
-      return NextResponse.json(
-        { error: "Account not found. Try switching your role and signing in again." },
-        { status: 404 }
-      )
-    }
-  } else {
-    // ---- Minimal TS fix: create a const so TS can safely narrow (no other logic changes) ----
-    const acc = account
-    if (acc.password !== password) {
-      const alternativeAccount = accountsForEmail.find(
-        (candidate) => candidate.role !== acc.role && candidate.password === password
-      )
-
-      if (alternativeAccount) {
-        account = alternativeAccount
-      }
-    }
+  if (!account || account.password !== password) {
+    account = accountsForEmail.find((candidate) => candidate.password === password) ?? null
   }
 
   if (!account || account.password !== password) {
