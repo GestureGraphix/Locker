@@ -8,8 +8,9 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useRole } from "@/components/role-context"
 import { cn } from "@/lib/utils"
 
-const defaultFormState = (role: "athlete" | "coach") => ({
+const defaultFormState = (role: "athlete" | "coach", manuallySet: boolean) => ({
   role,
+  roleManuallySet: manuallySet,
   email: "",
   name: "",
   password: "",
@@ -23,7 +24,7 @@ export function LoginDialog() {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const initialRole: "athlete" | "coach" = currentUser?.role ?? "athlete"
-  const [form, setForm] = useState(defaultFormState(initialRole))
+  const [form, setForm] = useState(defaultFormState(initialRole, Boolean(currentUser)))
   const [mode, setMode] = useState<AuthMode>("signIn")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -38,12 +39,11 @@ export function LoginDialog() {
   const roleLabel = currentUser?.role === "coach" ? "Coach" : "Athlete"
 
   const resetForm = () => {
+    const base = defaultFormState(currentUser?.role ?? "athlete", Boolean(currentUser))
     setForm({
-      role: currentUser?.role ?? "athlete",
+      ...base,
       email: currentUser?.email ?? "",
       name: currentUser?.name ?? "",
-      password: "",
-      confirmPassword: "",
     })
     setMode("signIn")
     setError(null)
@@ -95,7 +95,7 @@ export function LoginDialog() {
         }
       } else {
         const result = await login({
-          role: form.role,
+          role: form.roleManuallySet ? form.role : undefined,
           email,
           password: form.password,
         })
@@ -196,7 +196,11 @@ export function LoginDialog() {
               <Tabs
                 value={form.role}
                 onValueChange={(value) =>
-                  setForm((prev) => ({ ...prev, role: value as "athlete" | "coach" }))
+                  setForm((prev) => ({
+                    ...prev,
+                    role: value as "athlete" | "coach",
+                    roleManuallySet: true,
+                  }))
                 }
                 className="w-full"
               >

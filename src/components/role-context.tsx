@@ -65,7 +65,7 @@ type UpdateAthleteInput = Partial<
 
 type LoginInput = {
   email: string
-  role: Role
+  role?: Role
   password: string
 }
 
@@ -608,10 +608,19 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
+        const body: Record<string, unknown> = {
+          email: normalizedEmail,
+          password,
+        }
+
+        if (loginRole) {
+          body.role = loginRole
+        }
+
         const response = await fetch(LOGIN_ENDPOINT, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: normalizedEmail, password, role: loginRole }),
+          body: JSON.stringify(body),
         })
 
         if (!response.ok) {
