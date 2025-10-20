@@ -8,7 +8,10 @@
       "sport": "Track & Field",
       "level": "Elite",
       "team": "Sprints",
-      "tags": ["track", "sprints"],
+      "tags": [
+        "track",
+        "sprints"
+      ],
       "sessions": [
         {
           "id": 1,
@@ -45,11 +48,41 @@
         }
       ],
       "hydrationLogs": [
-        { "id": 1, "date": "2024-01-15", "ounces": 8, "source": "cup", "time": "08:00" },
-        { "id": 2, "date": "2024-01-15", "ounces": 12, "source": "bottle", "time": "10:30" },
-        { "id": 3, "date": "2024-01-15", "ounces": 8, "source": "cup", "time": "12:00" },
-        { "id": 4, "date": "2024-01-15", "ounces": 17, "source": "shake", "time": "14:00" },
-        { "id": 5, "date": "2024-01-15", "ounces": 8, "source": "cup", "time": "16:30" }
+        {
+          "id": 1,
+          "date": "2024-01-15",
+          "ounces": 8,
+          "source": "cup",
+          "time": "08:00"
+        },
+        {
+          "id": 2,
+          "date": "2024-01-15",
+          "ounces": 12,
+          "source": "bottle",
+          "time": "10:30"
+        },
+        {
+          "id": 3,
+          "date": "2024-01-15",
+          "ounces": 8,
+          "source": "cup",
+          "time": "12:00"
+        },
+        {
+          "id": 4,
+          "date": "2024-01-15",
+          "ounces": 17,
+          "source": "shake",
+          "time": "14:00"
+        },
+        {
+          "id": 5,
+          "date": "2024-01-15",
+          "ounces": 8,
+          "source": "cup",
+          "time": "16:30"
+        }
       ],
       "mealLogs": [
         {
@@ -97,12 +130,361 @@
       "position": "Sprint Specialist",
       "heightCm": 175,
       "weightKg": 70,
-      "allergies": ["Peanuts", "Shellfish"],
+      "allergies": [
+        "Peanuts",
+        "Shellfish"
+      ],
       "phone": "+1 (555) 123-4567",
       "location": "San Francisco, CA",
       "university": "University of California",
       "graduationYear": "2025",
       "isSeedData": true
+    },
+    {
+      "id": 1760122434547,
+      "name": "Alex",
+      "email": "alex.hernandezjuarez@yale.edu",
+      "sport": "Track & Field",
+      "level": "Development",
+      "team": "Varsity",
+      "tags": [],
+      "sessions": [],
+      "calendar": [],
+      "workouts": [],
+      "hydrationLogs": [],
+      "mealLogs": [
+        {
+          "id": 1,
+          "dateTime": "2025-10-10T16:00:00.000Z",
+          "mealType": "dinner",
+          "calories": 221,
+          "proteinG": 3.2,
+          "notes": "Banana Pudding (Jonathan Edwards College)",
+          "completed": true,
+          "nutritionFacts": [
+            {
+              "name": "Calories",
+              "amount": 220.582810163562,
+              "display": "220.582810163562"
+            },
+            {
+              "name": "Protein",
+              "amount": 3.158361095736,
+              "unit": "g",
+              "display": "3.158361095736 g"
+            },
+            {
+              "name": "Sodium",
+              "amount": 57.472601151196,
+              "unit": "mg",
+              "display": "57.472601151196 mg"
+            },
+            {
+              "name": "Fat",
+              "amount": 10.515906830121,
+              "unit": "g",
+              "display": "10.515906830121 g"
+            },
+            {
+              "name": "Carbs",
+              "amount": 29.824978074507,
+              "unit": "g",
+              "display": "29.824978074507 g"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "dateTime": "2025-10-10T16:00:00.000Z",
+          "mealType": "dinner",
+          "calories": 316,
+          "proteinG": 29.1,
+          "notes": "North Carolina Pulled Pork (Jonathan Edwards College)",
+          "completed": true,
+          "nutritionFacts": [
+            {
+              "name": "Calories",
+              "amount": 316.4470129755,
+              "display": "316.4470129755"
+            },
+            {
+              "name": "Protein",
+              "amount": 29.105807961,
+              "unit": "g",
+              "display": "29.105807961 g"
+            },
+            {
+              "name": "Sodium",
+              "amount": 156.3068109675,
+              "unit": "mg",
+              "display": "156.3068109675 mg"
+            },
+            {
+              "name": "Fat",
+              "amount": 20.3787262305,
+              "unit": "g",
+              "display": "20.3787262305 g"
+            },
+            {
+              "name": "Carbs",
+              "amount": 2.656574946,
+              "unit": "g",
+              "display": "2.656574946 g"
+            }
+          ]
+        }
+      ],
+      "position": "Sprint",
+      "heightCm": 160,
+      "weightKg": 112,
+      "allergies": [],
+      "phone": "8015562269",
+      "location": "Salt Lake City",
+      "university": "Yale",
+      "graduationYear": "2028",
+      "isSeedData": false
+    },
+    {
+      "id": 1760126717436,
+      "name": "Pancreas",
+      "email": "alex.hernandezjuarez@yale.edu",
+      "sport": "",
+      "level": "",
+      "team": "",
+      "tags": [],
+      "sessions": [],
+      "calendar": [],
+      "workouts": [],
+      "hydrationLogs": [
+        {
+          "id": 1,
+          "date": "2025-10-10",
+          "ounces": 12,
+          "source": "cup",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 2,
+          "date": "2025-10-10",
+          "ounces": 12,
+          "source": "bottle",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 3,
+          "date": "2025-10-10",
+          "ounces": 12,
+          "source": "bottle",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 4,
+          "date": "2025-10-10",
+          "ounces": 12,
+          "source": "bottle",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 5,
+          "date": "2025-10-10",
+          "ounces": 8,
+          "source": "cup",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 6,
+          "date": "2025-10-10",
+          "ounces": 17,
+          "source": "shake",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 7,
+          "date": "2025-10-10",
+          "ounces": 8,
+          "source": "cup",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 8,
+          "date": "2025-10-10",
+          "ounces": 8,
+          "source": "cup",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 9,
+          "date": "2025-10-10",
+          "ounces": 8,
+          "source": "cup",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 10,
+          "date": "2025-10-10",
+          "ounces": 8,
+          "source": "cup",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 11,
+          "date": "2025-10-10",
+          "ounces": 12,
+          "source": "bottle",
+          "time": "4:05 PM"
+        },
+        {
+          "id": 12,
+          "date": "2025-10-16",
+          "ounces": 12,
+          "source": "bottle",
+          "time": "3:17 PM"
+        },
+        {
+          "id": 13,
+          "date": "2025-10-20",
+          "ounces": 12,
+          "source": "bottle",
+          "time": "8:56 PM"
+        },
+        {
+          "id": 14,
+          "date": "2025-10-20",
+          "ounces": 12,
+          "source": "bottle",
+          "time": "8:56 PM"
+        },
+        {
+          "id": 15,
+          "date": "2025-10-20",
+          "ounces": 12,
+          "source": "bottle",
+          "time": "9:10 PM"
+        }
+      ],
+      "mealLogs": [
+        {
+          "id": 1,
+          "dateTime": "2025-10-10T16:00:00.000Z",
+          "mealType": "dinner",
+          "calories": 110,
+          "proteinG": 3.8,
+          "notes": "Farro Cooked (Jonathan Edwards College)",
+          "completed": true,
+          "nutritionFacts": [
+            {
+              "name": "Calories",
+              "amount": 110.189176794,
+              "display": "110.189176794"
+            },
+            {
+              "name": "Protein",
+              "amount": 3.784318056,
+              "unit": "g",
+              "display": "3.784318056 g"
+            },
+            {
+              "name": "Sodium",
+              "amount": 17.748941562,
+              "unit": "mg",
+              "display": "17.748941562 mg"
+            },
+            {
+              "name": "Fat",
+              "amount": 2.091172518,
+              "unit": "g",
+              "display": "2.091172518 g"
+            },
+            {
+              "name": "Carbs",
+              "amount": 20.195276616,
+              "unit": "g",
+              "display": "20.195276616 g"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "dateTime": "2025-10-19T16:00:00.000Z",
+          "mealType": "dinner",
+          "calories": 1303,
+          "proteinG": 67.84,
+          "notes": "Yale Signature Beef Burger with White Cheddar Cheese on Brioche (Jonathan Edwards College)",
+          "completed": true,
+          "nutritionFacts": [
+            {
+              "name": "Calories",
+              "amount": 651.60843805557,
+              "display": "651.60843805557"
+            },
+            {
+              "name": "Protein",
+              "amount": 33.919949952468,
+              "unit": "g",
+              "display": "33.919949952468 g"
+            },
+            {
+              "name": "Sodium",
+              "amount": 802.078398810774,
+              "unit": "mg",
+              "display": "802.078398810774 mg"
+            },
+            {
+              "name": "Fat",
+              "amount": 35.979059185875,
+              "unit": "g",
+              "display": "35.979059185875 g"
+            },
+            {
+              "name": "Carbs",
+              "amount": 48.687969938301,
+              "unit": "g",
+              "display": "48.687969938301 g"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "dateTime": "2025-10-19T16:00:00.000Z",
+          "mealType": "lunch",
+          "calories": 516,
+          "proteinG": 3.17,
+          "notes": "Shredded Potato Hash Brown (Jonathan Edwards College)",
+          "completed": true,
+          "nutritionFacts": [
+            {
+              "name": "Calories",
+              "amount": 172.099835476,
+              "display": "172.099835476"
+            },
+            {
+              "name": "Protein",
+              "amount": 1.055962176,
+              "unit": "g",
+              "display": "1.055962176 g"
+            },
+            {
+              "name": "Sodium",
+              "amount": 113.471935496,
+              "unit": "mg",
+              "display": "113.471935496 mg"
+            },
+            {
+              "name": "Fat",
+              "amount": 11.615583936,
+              "unit": "g",
+              "display": "11.615583936 g"
+            },
+            {
+              "name": "Carbs",
+              "amount": 16.631404272,
+              "unit": "g",
+              "display": "16.631404272 g"
+            }
+          ]
+        }
+      ],
+      "isSeedData": false
     }
   ]
 }

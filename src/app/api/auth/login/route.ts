@@ -66,13 +66,17 @@ export async function POST(request: Request) {
         { status: 404 }
       )
     }
-  } else if (account.password !== password) {
-    const alternativeAccount = accountsForEmail.find(
-      (candidate) => candidate.role !== account.role && candidate.password === password
-    )
+  } else {
+    // ---- Minimal TS fix: create a const so TS can safely narrow (no other logic changes) ----
+    const acc = account
+    if (acc.password !== password) {
+      const alternativeAccount = accountsForEmail.find(
+        (candidate) => candidate.role !== acc.role && candidate.password === password
+      )
 
-    if (alternativeAccount) {
-      account = alternativeAccount
+      if (alternativeAccount) {
+        account = alternativeAccount
+      }
     }
   }
 
