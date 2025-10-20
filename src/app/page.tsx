@@ -6,15 +6,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { NumberScale } from "@/components/number-scale"
-import { Tile } from "@/components/tile"
 import { useRole } from "@/components/role-context"
 import { CoachDashboard } from "@/components/coach-dashboard"
 import {
   BookOpen,
   Dumbbell,
   Apple,
-  Activity,
-  User,
   Calendar,
   Droplets,
   Target,
@@ -24,8 +21,6 @@ import {
   Zap,
   Award,
   Sparkles,
-  Brain,
-  Activity as ActivityIcon,
   ListChecks
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -75,12 +70,6 @@ const mockData = {
     totalCalories: 3200,
     avgHeartRate: 155,
     recoveryScore: 87
-  },
-  performanceMetrics: {
-    strength: 85,
-    endurance: 78,
-    flexibility: 65,
-    mental: 92
   }
 }
 
@@ -358,25 +347,6 @@ export default function DashboardPage() {
     }
   }, [primaryAthlete])
 
-  const performanceMetrics = useMemo(() => {
-    if (!primaryAthlete) return mockData.performanceMetrics
-    const sessions = primaryAthlete.sessions ?? []
-    const totalSessions = sessions.length
-    const completedSessions = sessions.filter((session) => session.completed).length
-    const completionRate = totalSessions > 0 ? Math.round((completedSessions / totalSessions) * 100) : 0
-    const hydrationScore = Math.round(hydrationStats.progress)
-    const enduranceScore = Math.min(100, Math.round(completionRate * 0.9))
-    const flexibilityScore = Math.min(100, hydrationScore)
-    const mentalScore = Math.min(100, Math.round((completionRate + hydrationScore) / 2))
-
-    return {
-      strength: completionRate,
-      endurance: enduranceScore,
-      flexibility: flexibilityScore,
-      mental: mentalScore,
-    }
-  }, [primaryAthlete, hydrationStats.progress])
-
   const handleCheckIn = () => {
     if (mentalState === null || physicalState === null) {
       return
@@ -622,108 +592,6 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
-
-        {/* Performance Metrics */}
-        <div className="mb-12">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-              Performance Metrics
-            </h2>
-            <Button variant="outline" className="glass-card border-white/20 hover:bg-white/50">
-              View details <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <Dumbbell className="h-8 w-8 text-white" />
-                </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Strength</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.strength}%</p>
-                <Progress value={performanceMetrics.strength} className="h-2" />
-                <p className="text-xs text-[#1c6dd0] font-semibold mt-2">+5% this week</p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-success flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <ActivityIcon className="h-8 w-8 text-white" />
-                </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Endurance</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.endurance}%</p>
-                <Progress value={performanceMetrics.endurance} className="h-2" />
-                <p className="text-xs text-[#1c6dd0] font-semibold mt-2">+3% this week</p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-warning flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <Activity className="h-8 w-8 text-white" />
-                </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Flexibility</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.flexibility}%</p>
-                <Progress value={performanceMetrics.flexibility} className="h-2" />
-                <p className="text-xs text-[#123d73] font-semibold mt-2">Needs attention</p>
-              </CardContent>
-            </Card>
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-secondary flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <Brain className="h-8 w-8 text-white" />
-                </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Mental</p>
-                <p className="text-3xl font-bold text-gray-900 mb-2">{performanceMetrics.mental}%</p>
-                <Progress value={performanceMetrics.mental} className="h-2" />
-                <p className="text-xs text-[#1c6dd0] font-semibold mt-2">Excellent!</p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* What's in your locker? */}
-        <div className="mb-12">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-              What&apos;s in your locker?
-            </h2>
-            <Button variant="outline" className="glass-card border-white/20 hover:bg-white/50">
-              View all <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <Tile
-              title="Academics"
-              description="Track assignments and exams"
-              href="/academics"
-              icon={BookOpen}
-            />
-            <Tile
-              title="Training"
-              description="Log sessions and PRs"
-              href="/training"
-              icon={Dumbbell}
-            />
-            <Tile
-              title="Fuel"
-              description="Hydration and nutrition"
-              href="/fuel"
-              icon={Apple}
-            />
-            <Tile
-              title="Mobility"
-              description="Exercise library"
-              href="/mobility"
-              icon={Activity}
-            />
-            <Tile
-              title="Account"
-              description="Profile and settings"
-              href="/account"
-              icon={User}
-            />
-          </div>
-        </div>
 
         {/* Today's Progress & Upcoming */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
