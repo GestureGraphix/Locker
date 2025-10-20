@@ -30,14 +30,15 @@ export async function POST(request: Request) {
   }
 
   const email = normalizeEmail(payload.email)
-  const role = payload.role === "coach" ? "coach" : payload.role === "athlete" ? "athlete" : null
+  const requestedRole =
+    payload.role === "coach" ? "coach" : payload.role === "athlete" ? "athlete" : null
   const password = typeof payload.password === "string" ? payload.password : ""
 
   if (!email) {
     return NextResponse.json({ error: "Email is required." }, { status: 400 })
   }
 
-  if (!role) {
+  if (!requestedRole) {
     return NextResponse.json({ error: "Role is required." }, { status: 400 })
   }
 
@@ -46,28 +47,60 @@ export async function POST(request: Request) {
   }
 
   const current = await readLockerState()
+  const accountsForEmail = current.accounts.filter((account) => account.email === email)
+
+  if (accountsForEmail.length === 0) {
+    return NextResponse.json({ error: "Account not found." }, { status: 404 })
+  }
+
+  let account =
+    accountsForEmail.find((candidate) => candidate.role === requestedRole) ?? null
+
+  if (!account) {
+    account =
+      accountsForEmail.find((candidate) => candidate.password === password) ?? null
+
+    if (!account) {
+      return NextResponse.json(
+        { error: "Account not found. Try switching your role and signing in again." },
+        { status: 404 }
+      )
+    }
+  } else if (account.password !== password) {
+    const alternativeAccount = accountsForEmail.find(
+      (candidate) => candidate.role !== account.role && candidate.password === password
+    )
+
+    if (alternativeAccount) {
+      account = alternativeAccount
+    }
+  }
+
+  if (!account || account.password !== password) {
+    return NextResponse.json({ error: "Invalid credentials." }, { status: 401 })
+  }
+
+  const resolvedAccount = account
+
   const accountIndex = current.accounts.findIndex(
-    (account) => account.email === email && account.role === role
+    (candidate) =>
+      candidate.email === resolvedAccount.email && candidate.role === resolvedAccount.role
   )
 
   if (accountIndex === -1) {
     return NextResponse.json({ error: "Account not found." }, { status: 404 })
   }
 
-  const account = current.accounts[accountIndex]
-
-  if (account.password !== password) {
-    return NextResponse.json({ error: "Invalid credentials." }, { status: 401 })
-  }
+  const role = resolvedAccount.role
 
   let nextAccounts = current.accounts
   let nextAthletes = current.athletes
-  let athleteId = account.athleteId
+  let athleteId = resolvedAccount.athleteId
 
   if (role === "athlete") {
     if (athleteId == null) {
       athleteId = getNextAthleteId(current.athletes)
-      const inferredName = account.name || email.split("@")[0] || email
+      const inferredName = resolvedAccount.name || email.split("@")[0] || email
       const newAthlete = {
         id: athleteId,
         name: inferredName,
@@ -93,7 +126,7 @@ export async function POST(request: Request) {
     } else {
       const existingAthlete = current.athletes.find((athlete) => athlete.id === athleteId)
       if (!existingAthlete) {
-        const inferredName = account.name || email.split("@")[0] || email
+        const inferredName = resolvedAccount.name || email.split("@")[0] || email
         const newAthlete = {
           id: athleteId,
           name: inferredName,
@@ -123,7 +156,7 @@ export async function POST(request: Request) {
   const token = createSessionToken(email, role)
   const user: UserAccount = {
     email,
-    name: account.name,
+    name: resolvedAccount.name,
     role,
     ...(athleteId ? { athleteId } : {}),
   }
