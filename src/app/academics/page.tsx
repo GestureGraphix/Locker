@@ -307,12 +307,12 @@ const formatDate = (dateString: string) => {
 export default function Academics() {
   const { currentUser } = useRole()
   const storageKey = useMemo(
-    () => (currentUser ? `locker-academics-${currentUser.email}` : null),
-    [currentUser]
+    () => `locker-academics-${currentUser?.email ?? "guest"}`,
+    [currentUser?.email]
   )
 
-  const [courses, setCourses] = useState<Course[]>(() => (currentUser ? [] : mockCourses))
-  const [academicItems, setAcademicItems] = useState<AcademicItem[]>(() => (currentUser ? [] : mockAcademicItems))
+  const [courses, setCourses] = useState<Course[]>([])
+  const [academicItems, setAcademicItems] = useState<AcademicItem[]>([])
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -328,19 +328,24 @@ export default function Academics() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    if (!currentUser) {
-      setCourses(mockCourses)
-      setAcademicItems(mockAcademicItems)
-      return
-    }
 
-    if (!storageKey) return
+    const fallbackCourses = currentUser ? [] : mockCourses
+    const fallbackItems = currentUser ? [] : mockAcademicItems
 
     try {
       const stored = window.localStorage.getItem(storageKey)
+
       if (!stored) {
-        setCourses([])
-        setAcademicItems([])
+        setCourses(fallbackCourses)
+        setAcademicItems(fallbackItems)
+
+        if (!currentUser) {
+          const payload = JSON.stringify({
+            courses: fallbackCourses,
+            academicItems: fallbackItems
+          })
+          window.localStorage.setItem(storageKey, payload)
+        }
         return
       }
 
@@ -349,12 +354,15 @@ export default function Academics() {
         academicItems?: AcademicItem[]
       }
 
-      setCourses(Array.isArray(parsed.courses) ? parsed.courses : [])
-      setAcademicItems(Array.isArray(parsed.academicItems) ? parsed.academicItems : [])
+      const nextCourses = Array.isArray(parsed.courses) ? parsed.courses : fallbackCourses
+      const nextItems = Array.isArray(parsed.academicItems) ? parsed.academicItems : fallbackItems
+
+      setCourses(nextCourses)
+      setAcademicItems(nextItems)
     } catch (error) {
       console.error("Failed to load academics data", error)
-      setCourses([])
-      setAcademicItems([])
+      setCourses(fallbackCourses)
+      setAcademicItems(fallbackItems)
     }
   }, [currentUser, storageKey])
 

@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress"
 import { NumberScale } from "@/components/number-scale"
 import { useRole } from "@/components/role-context"
 import { CoachDashboard } from "@/components/coach-dashboard"
+import { ACADEMICS_UPDATED_EVENT, AcademicItem, mockAcademicItems } from "@/lib/academics"
 import {
   BookOpen,
   Dumbbell,
@@ -108,6 +109,56 @@ const formatDateLabel = (value: string) => {
   })
 }
 
+const formatAcademicDueLabel = (value: string) => {
+  if (!value) return "No due date"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  const now = new Date()
+  const diffMs = date.getTime() - now.getTime()
+  const timeLabel = date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  })
+
+  if (diffMs < 0) {
+    const overdueDays = Math.ceil(Math.abs(diffMs) / (1000 * 60 * 60 * 24))
+    if (overdueDays <= 1) {
+      return "Overdue"
+    }
+    return `Overdue by ${overdueDays} days`
+  }
+
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays === 0) return `Today ${timeLabel}`
+  if (diffDays === 1) return `Tomorrow ${timeLabel}`
+  if (diffDays < 7) {
+    const weekday = date.toLocaleDateString("en-US", { weekday: "short" })
+    return `${weekday} ${timeLabel}`
+  }
+
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+}
+
+const getAcademicPriorityLevel = (item: AcademicItem) => {
+  const dueDate = item.dueAt ? new Date(item.dueAt) : null
+  if (dueDate && !Number.isNaN(dueDate.getTime())) {
+    const hoursUntilDue = (dueDate.getTime() - Date.now()) / (1000 * 60 * 60)
+    if (hoursUntilDue <= 24) return "high"
+    if (hoursUntilDue <= 72) return "medium"
+  }
+
+  switch (item.type) {
+    case "exam":
+    case "essay":
+      return "high"
+    case "assignment":
+      return "medium"
+    default:
+      return "low"
+  }
+}
+
 const formatDiaryEntryDate = (value: string) => {
   if (!value) return ""
   const date = new Date(value)
@@ -140,6 +191,11 @@ export default function DashboardPage() {
   const [physicalNotes, setPhysicalNotes] = useState("")
   const [diaryEntries, setDiaryEntries] = useState<CheckInDiaryEntry[]>([])
   const { role, primaryAthlete, currentUser } = useRole()
+  const academicStorageKey = useMemo(
+    () => `locker-academics-${currentUser?.email ?? "guest"}`,
+    [currentUser?.email]
+  )
+  const [academicItems, setAcademicItems] = useState<AcademicItem[] | null>(null)
   const isGuest = !currentUser
 
   useEffect(() => {
@@ -154,6 +210,50 @@ export default function DashboardPage() {
     }
   }, [isGuest])
   const athleteSessions = primaryAthlete?.sessions ?? []
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const fallbackItems = currentUser ? [] : mockAcademicItems
+
+    const loadAcademicItems = () => {
+      try {
+        const stored = window.localStorage.getItem(academicStorageKey)
+        if (!stored) {
+          setAcademicItems(fallbackItems)
+          return
+        }
+
+        const parsed = JSON.parse(stored) as { academicItems?: AcademicItem[] }
+        const items = Array.isArray(parsed.academicItems) ? parsed.academicItems : []
+        setAcademicItems(items)
+      } catch (error) {
+        console.error("Failed to load academics data", error)
+        setAcademicItems(fallbackItems)
+      }
+    }
+
+    loadAcademicItems()
+
+    const handleUpdate = () => {
+      loadAcademicItems()
+    }
+
+    window.addEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
+    return () => {
+      window.removeEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
+    }
+  }, [academicStorageKey, currentUser])
+
+  const academicItemsForDisplay = useMemo(
+    () => academicItems ?? (currentUser ? [] : mockAcademicItems),
+    [academicItems, currentUser]
+  )
+
+  const openAcademicItemsCount = useMemo(
+    () => academicItemsForDisplay.filter((item) => !item.completed).length,
+    [academicItemsForDisplay]
+  )
 
   useEffect(() => {
     if (typeof window === "undefined" || isGuest) return
@@ -246,7 +346,13 @@ export default function DashboardPage() {
   }, [primaryAthlete, todayDate])
 
   const todayStats = useMemo(() => {
-    if (!primaryAthlete) return mockData.todayStats
+    if (!primaryAthlete) {
+      return {
+        ...mockData.todayStats,
+        academicItemsDue: openAcademicItemsCount,
+      }
+    }
+
     const mealsLoggedToday = (primaryAthlete.mealLogs ?? []).filter((log) =>
       isSameDay(log.dateTime, todayDate)
     ).length
@@ -256,30 +362,43 @@ export default function DashboardPage() {
       hydrationGoal: hydrationStats.goal,
       mealsLogged: mealsLoggedToday,
       sessionsCompleted: sessionsCompletedToday,
-      academicItemsDue: 0,
+      academicItemsDue: openAcademicItemsCount,
       sleepHours: null,
       stressLevel: null,
       energyLevel: null,
     }
-  }, [primaryAthlete, hydrationStats, sessionsCompletedToday, todayDate])
+  }, [
+    primaryAthlete,
+    hydrationStats,
+    sessionsCompletedToday,
+    todayDate,
+    openAcademicItemsCount,
+  ])
 
   const upcomingItems = useMemo(() => {
-    if (!primaryAthlete) return mockData.upcomingItems
-    const workouts = (primaryAthlete.workouts ?? []).map((workout) => {
-      const dueLabel = workout.dueDate ? formatDateLabel(workout.dueDate) : "Scheduled"
-      const priority = (workout.intensity ?? "medium").toLowerCase()
-      return {
-        id: workout.id,
-        type: "training",
-        title: workout.title,
-        course: workout.focus ?? workout.title,
-        due: dueLabel,
-        priority,
-        progress: workout.status === "Completed" ? 100 : 0,
-      }
-    })
-    return workouts.slice(0, 4)
-  }, [primaryAthlete])
+    if (academicItemsForDisplay.length === 0) return []
+
+    return academicItemsForDisplay
+      .filter((item) => !item.completed)
+      .sort((a, b) => {
+        const aTime = new Date(a.dueAt ?? "").getTime()
+        const bTime = new Date(b.dueAt ?? "").getTime()
+        if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0
+        if (Number.isNaN(aTime)) return 1
+        if (Number.isNaN(bTime)) return -1
+        return aTime - bTime
+      })
+      .slice(0, 4)
+      .map((item) => ({
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        course: item.course,
+        due: formatAcademicDueLabel(item.dueAt),
+        priority: getAcademicPriorityLevel(item),
+        progress: item.completed ? 100 : 0,
+      }))
+  }, [academicItemsForDisplay])
 
   const weeklyStatsData = useMemo(() => {
     if (!primaryAthlete) return mockData.weeklyStats
@@ -664,26 +783,35 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {upcomingItems.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center">
-                        <BookOpen className="h-6 w-6 text-white" />
+                {upcomingItems.length > 0 ? (
+                  upcomingItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center">
+                          <BookOpen className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900">{item.title}</p>
+                          <p className="text-sm text-gray-600">{item.course}</p>
+                          <Progress value={item.progress} className="w-32 h-2 mt-2" />
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-bold text-gray-900">{item.title}</p>
-                        <p className="text-sm text-gray-600">{item.course}</p>
-                        <Progress value={item.progress} className="w-32 h-2 mt-2" />
+                      <div className="flex items-center gap-3">
+                        {getPriorityBadge(item.priority)}
+                        <span className="text-sm text-gray-500 font-medium">{item.due}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {getPriorityBadge(item.priority)}
-                      <span className="text-sm text-gray-500 font-medium">{item.due}</span>
-                    </div>
+                  ))
+                ) : (
+                  <div className="p-6 text-center rounded-2xl border border-dashed border-gray-300 bg-white/60 text-sm text-gray-500">
+                    You&apos;re all caught up on academic work.
                   </div>
-                ))}
+                )}
                 <Button variant="outline" className="w-full glass-card border-white/20 hover:bg-white/50">
-                  View All ({todayStats.academicItemsDue})
+                  View All ({openAcademicItemsCount})
                 </Button>
               </CardContent>
             </Card>
