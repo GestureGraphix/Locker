@@ -8,6 +8,14 @@ export type NutritionFact = {
   display?: string
 }
 
+export type NutritionGoals = {
+  hydrationOuncesPerDay?: number
+  caloriesPerDay?: number
+  proteinGramsPerDay?: number
+  carbsGramsPerDay?: number
+  fatsGramsPerDay?: number
+}
+
 export type HydrationLog = {
   id: number
   date: string
@@ -72,6 +80,7 @@ export type Athlete = {
   workouts: WorkoutPlan[]
   hydrationLogs: HydrationLog[]
   mealLogs: MealLog[]
+  nutritionGoals?: NutritionGoals
   coachEmail?: string
   position?: string
   heightCm?: number

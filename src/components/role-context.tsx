@@ -66,6 +66,7 @@ type UpdateAthleteInput = Partial<
     | "university"
     | "graduationYear"
     | "notes"
+    | "nutritionGoals"
   >
 >
 
@@ -140,6 +141,40 @@ const sortByDate = <T,>(items: T[], accessor: (item: T) => string) => {
     if (Number.isNaN(bDate)) return -1
     return aDate - bDate
   })
+}
+
+const sanitizeGoalNumber = (value: number | null | undefined): number | undefined => {
+  if (value === null || value === undefined) return undefined
+  return Number.isFinite(value) ? value : undefined
+}
+
+const sanitizeNutritionGoals = (
+  goals: Athlete["nutritionGoals"]
+): Athlete["nutritionGoals"] | undefined => {
+  if (!goals) return undefined
+  const hydrationOuncesPerDay = sanitizeGoalNumber(goals.hydrationOuncesPerDay)
+  const caloriesPerDay = sanitizeGoalNumber(goals.caloriesPerDay)
+  const proteinGramsPerDay = sanitizeGoalNumber(goals.proteinGramsPerDay)
+  const carbsGramsPerDay = sanitizeGoalNumber(goals.carbsGramsPerDay)
+  const fatsGramsPerDay = sanitizeGoalNumber(goals.fatsGramsPerDay)
+
+  if (
+    hydrationOuncesPerDay === undefined &&
+    caloriesPerDay === undefined &&
+    proteinGramsPerDay === undefined &&
+    carbsGramsPerDay === undefined &&
+    fatsGramsPerDay === undefined
+  ) {
+    return undefined
+  }
+
+  return {
+    hydrationOuncesPerDay,
+    caloriesPerDay,
+    proteinGramsPerDay,
+    carbsGramsPerDay,
+    fatsGramsPerDay,
+  }
 }
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
@@ -515,6 +550,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
                 .filter((item) => item.length > 0)
             : athlete.allergies ?? []
           const normalizedEmail = updates.email?.trim().toLowerCase() || athlete.email
+          const hasNutritionGoals = Object.prototype.hasOwnProperty.call(updates, "nutritionGoals")
+          const normalizedNutritionGoals = hasNutritionGoals
+            ? sanitizeNutritionGoals(updates.nutritionGoals)
+            : athlete.nutritionGoals
 
           updated = {
             ...athlete,
@@ -522,6 +561,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             email: normalizedEmail,
             tags: normalizedTags,
             allergies: normalizedAllergies,
+            nutritionGoals: normalizedNutritionGoals,
           }
 
           return updated
