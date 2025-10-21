@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useMemo, useState } from "react"
+import { FormEvent, useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -54,6 +54,14 @@ export function LoginDialog() {
       resetForm()
     }
   }
+
+  const showCoachRoleTab = !currentUser || currentUser.role === "coach"
+
+  useEffect(() => {
+    if (!showCoachRoleTab && form.role === "coach") {
+      setForm((prev) => ({ ...prev, role: "athlete" }))
+    }
+  }, [showCoachRoleTab, form.role])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -193,9 +201,9 @@ export function LoginDialog() {
                 }
                 className="w-full"
               >
-                <TabsList className="grid grid-cols-2">
+                <TabsList className={cn("grid gap-2", showCoachRoleTab ? "grid-cols-2" : "grid-cols-1")}>
                   <TabsTrigger value="athlete">Athlete</TabsTrigger>
-                  <TabsTrigger value="coach">Coach</TabsTrigger>
+                  {showCoachRoleTab && <TabsTrigger value="coach">Coach</TabsTrigger>}
                 </TabsList>
               </Tabs>
             </div>
