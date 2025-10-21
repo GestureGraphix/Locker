@@ -55,11 +55,19 @@ const baseCoachNavigation: NavigationItem[] = [
 export function Navigation() {
   const pathname = usePathname()
   const { role, setRole, currentUser } = useRole()
+  const showCoachRoleToggle = !currentUser || currentUser.role === "coach"
+  const effectiveRole = showCoachRoleToggle ? role : "athlete"
   const storageKey = useMemo(
     () => (currentUser ? `locker-academics-${currentUser.email}` : null),
     [currentUser]
   )
   const [academicCount, setAcademicCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!showCoachRoleToggle && role === "coach") {
+      setRole("athlete")
+    }
+  }, [showCoachRoleToggle, role, setRole])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -106,13 +114,14 @@ export function Navigation() {
 
   const badgeValue = academicCount !== null ? academicCount.toString() : null
   const navigationItems = useMemo(() => {
-    const base = role === "coach" ? baseCoachNavigation : baseAthleteNavigation
+    const base =
+      effectiveRole === "coach" ? baseCoachNavigation : baseAthleteNavigation
     return base.map(item =>
       item.href === "/academics"
         ? { ...item, badge: badgeValue }
         : item
     )
-  }, [role, badgeValue])
+  }, [effectiveRole, badgeValue])
 
   return (
     <>
@@ -131,7 +140,7 @@ export function Navigation() {
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
                 <p className="text-sm text-gray-600 font-medium">
-                  {role === "coach" ? "Coach Portal" : "Athlete Dashboard"}
+                  {effectiveRole === "coach" ? "Coach Portal" : "Athlete Dashboard"}
                 </p>
               </div>
             </div>
@@ -139,27 +148,38 @@ export function Navigation() {
 
           {/* Navigation */}
           <div className="flex-grow px-6 py-8">
-            <div className="mb-6 grid grid-cols-2 gap-2">
+            <div
+              className={cn(
+                "mb-6 grid gap-2",
+                showCoachRoleToggle ? "grid-cols-2" : "grid-cols-1"
+              )}
+            >
               <Button
-                variant={role === "athlete" ? "default" : "outline"}
+                variant={effectiveRole === "athlete" ? "default" : "outline"}
                 className={cn(
                   "rounded-xl font-semibold",
-                  role === "athlete" ? "gradient-primary text-white border-0 shadow-glow" : "bg-white/70"
+                  effectiveRole === "athlete"
+                    ? "gradient-primary text-white border-0 shadow-glow"
+                    : "bg-white/70"
                 )}
                 onClick={() => setRole("athlete")}
               >
                 Athlete
               </Button>
-              <Button
-                variant={role === "coach" ? "default" : "outline"}
-                className={cn(
-                  "rounded-xl font-semibold",
-                  role === "coach" ? "gradient-secondary text-white border-0 shadow-glow" : "bg-white/70"
-                )}
-                onClick={() => setRole("coach")}
-              >
-                Coach
-              </Button>
+              {showCoachRoleToggle && (
+                <Button
+                  variant={effectiveRole === "coach" ? "default" : "outline"}
+                  className={cn(
+                    "rounded-xl font-semibold",
+                    effectiveRole === "coach"
+                      ? "gradient-secondary text-white border-0 shadow-glow"
+                      : "bg-white/70"
+                  )}
+                  onClick={() => setRole("coach")}
+                >
+                  Coach
+                </Button>
+              )}
             </div>
             <nav className="space-y-3">
               {navigationItems.map((item) => (
@@ -238,33 +258,44 @@ export function Navigation() {
                     <div>
                       <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
                       <p className="text-sm text-gray-600 font-medium">
-                        {role === "coach" ? "Coach Portal" : "Athlete Dashboard"}
+                        {effectiveRole === "coach" ? "Coach Portal" : "Athlete Dashboard"}
                       </p>
                     </div>
                   </div>
                 </div>
                 <div className="flex-grow px-4 py-6">
-                  <div className="mb-4 grid grid-cols-2 gap-2">
+                  <div
+                    className={cn(
+                      "mb-4 grid gap-2",
+                      showCoachRoleToggle ? "grid-cols-2" : "grid-cols-1"
+                    )}
+                  >
                     <Button
-                      variant={role === "athlete" ? "default" : "outline"}
+                      variant={effectiveRole === "athlete" ? "default" : "outline"}
                       className={cn(
                         "rounded-xl font-semibold",
-                        role === "athlete" ? "gradient-primary text-white border-0" : "bg-white/80"
+                        effectiveRole === "athlete"
+                          ? "gradient-primary text-white border-0"
+                          : "bg-white/80"
                       )}
                       onClick={() => setRole("athlete")}
                     >
                       Athlete
                     </Button>
-                    <Button
-                      variant={role === "coach" ? "default" : "outline"}
-                      className={cn(
-                        "rounded-xl font-semibold",
-                        role === "coach" ? "gradient-secondary text-white border-0" : "bg-white/80"
-                      )}
-                      onClick={() => setRole("coach")}
-                    >
-                      Coach
-                    </Button>
+                    {showCoachRoleToggle && (
+                      <Button
+                        variant={effectiveRole === "coach" ? "default" : "outline"}
+                        className={cn(
+                          "rounded-xl font-semibold",
+                          effectiveRole === "coach"
+                            ? "gradient-secondary text-white border-0"
+                            : "bg-white/80"
+                        )}
+                        onClick={() => setRole("coach")}
+                      >
+                        Coach
+                      </Button>
+                    )}
                   </div>
                   <nav className="space-y-3">
                     {navigationItems.map((item) => (
