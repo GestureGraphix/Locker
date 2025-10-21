@@ -515,13 +515,38 @@ export default function Fuel() {
   const todayDate = new Date().toISOString().split("T")[0]
   const todaysHydrationLogs = hydrationLogs.filter((log) => log.date === todayDate)
   const todayHydration = todaysHydrationLogs.reduce((sum, log) => sum + log.ounces, 0)
-  const hydrationGoal = 80
-  const hydrationPercentage = Math.round((todayHydration / hydrationGoal) * 100)
+  const nutritionGoals = primaryAthlete.nutritionGoals ?? undefined
+  const hydrationGoal = nutritionGoals?.hydrationOuncesPerDay ?? 80
+  const hydrationRatio = hydrationGoal > 0 ? todayHydration / hydrationGoal : 0
+  const hydrationPercentage = hydrationGoal > 0 ? Math.round(hydrationRatio * 100) : 0
+  const hydrationProgressValue = Number.isFinite(hydrationPercentage)
+    ? Math.min(Math.max(hydrationPercentage, 0), 100)
+    : 0
 
   const todayMeals = mealLogs.filter((m) => new Date(m.dateTime).toDateString() === new Date().toDateString())
   const totalCalories = todayMeals.reduce((sum, m) => sum + m.calories, 0)
   const totalProtein = roundToTwo(todayMeals.reduce((sum, m) => sum + m.proteinG, 0))
   const completedMeals = todayMeals.filter((m) => m.completed).length
+  const baseCalorieGoal = nutritionGoals?.caloriesPerDay
+  const baseProteinGoal = nutritionGoals?.proteinGramsPerDay
+  const hydrationAlignment = hydrationGoal > 0 ? Math.min(Math.max(hydrationRatio, 0), 1) : 1
+  const hydrationGuidedCalorieTarget =
+    baseCalorieGoal && baseCalorieGoal > 0 ? Math.round(baseCalorieGoal * hydrationAlignment) : undefined
+  const hydrationGuidedProteinTarget =
+    baseProteinGoal && baseProteinGoal > 0 ? roundToTwo(baseProteinGoal * hydrationAlignment) : undefined
+  const calorieProgressValue = (() => {
+    const target = hydrationGuidedCalorieTarget ?? baseCalorieGoal
+    if (!target || target <= 0) return 0
+    const progress = Math.round((totalCalories / target) * 100)
+    return Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 100) : 0
+  })()
+  const proteinProgressValue = (() => {
+    const target = hydrationGuidedProteinTarget ?? baseProteinGoal
+    if (!target || target <= 0) return 0
+    const progress = Math.round((totalProtein / target) * 100)
+    return Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 100) : 0
+  })()
+  const proteinSuggestionTarget = hydrationGuidedProteinTarget ?? baseProteinGoal ?? 110
 
   const parsedPortion = Number.parseFloat(newMeal.portion)
   const portionMultiplierPreview = Number.isFinite(parsedPortion) && parsedPortion > 0 ? parsedPortion : 1
@@ -726,49 +751,110 @@ export default function Fuel() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Droplets className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-sm font-medium">Hydration Today</p>
-                <p className="text-2xl font-bold">{todayHydration}oz</p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <Card className="md:col-span-2">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Droplets className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="text-sm font-medium">Hydration Today</p>
+                  <p className="text-2xl font-bold">{todayHydration}oz</p>
+                </div>
               </div>
+              <Badge variant="secondary" className="whitespace-nowrap">
+                Goal: {hydrationGoal}oz
+              </Badge>
             </div>
+            <Progress value={hydrationProgressValue} className="h-2" />
+            <p className="text-xs text-muted-foreground">
+              You’re at {Math.max(hydrationPercentage, 0)}% of today’s hydration goal. Hitting hydration is the anchor for
+              your fuel plan.
+            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
               <Target className="h-5 w-5 text-[#1c6dd0]" />
               <div>
-                <p className="text-sm font-medium">Hydration Goal</p>
-                <p className="text-2xl font-bold">{hydrationPercentage}%</p>
+                <p className="text-sm font-medium">Hydration Alignment</p>
+                <p className="text-2xl font-bold">{Math.max(hydrationPercentage, 0)}%</p>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Nutrition targets scale with your water intake—keep sipping to unlock full goals.
+            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Apple className="h-5 w-5 text-[#0f4d92]" />
-              <div>
-                <p className="text-sm font-medium">Calories Today</p>
-                <p className="text-2xl font-bold">{totalCalories}</p>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Apple className="h-5 w-5 text-[#0f4d92]" />
+                <div>
+                  <p className="text-sm font-medium">Calories</p>
+                  <p className="text-2xl font-bold">
+                    {totalCalories}
+                    {hydrationGuidedCalorieTarget ? ` / ${hydrationGuidedCalorieTarget}` : ""}
+                  </p>
+                </div>
               </div>
+              {baseCalorieGoal && baseCalorieGoal > 0 ? (
+                <Badge variant="outline" className="whitespace-nowrap">
+                  Base goal: {baseCalorieGoal}
+                </Badge>
+              ) : null}
             </div>
+            {(hydrationGuidedCalorieTarget ?? baseCalorieGoal) ? (
+              <>
+                <Progress value={calorieProgressValue} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  Hydration-adjusted target {hydrationGuidedCalorieTarget ?? baseCalorieGoal} cal
+                  {baseCalorieGoal && hydrationGuidedCalorieTarget && hydrationGuidedCalorieTarget !== baseCalorieGoal
+                    ? ` (${hydrationPercentage}% of ${baseCalorieGoal})`
+                    : ""}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">Log a goal in the athlete profile to unlock guidance.</p>
+            )}
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center space-x-2">
-              <Zap className="h-5 w-5 text-[#123d73]" />
-              <div>
-                <p className="text-sm font-medium">Protein Today</p>
-                <p className="text-2xl font-bold">{formatTwoDecimalString(totalProtein)}g</p>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-[#123d73]" />
+                <div>
+                  <p className="text-sm font-medium">Protein</p>
+                  <p className="text-2xl font-bold">
+                    {formatTwoDecimalString(totalProtein)}g
+                    {hydrationGuidedProteinTarget
+                      ? ` / ${formatTwoDecimalString(hydrationGuidedProteinTarget)}g`
+                      : ""}
+                  </p>
+                </div>
               </div>
+              {baseProteinGoal && baseProteinGoal > 0 ? (
+                <Badge variant="outline" className="whitespace-nowrap">
+                  Base goal: {formatTwoDecimalString(baseProteinGoal)}g
+                </Badge>
+              ) : null}
             </div>
+            {(hydrationGuidedProteinTarget ?? baseProteinGoal) ? (
+              <>
+                <Progress value={proteinProgressValue} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  Hydration-adjusted target {formatTwoDecimalString(hydrationGuidedProteinTarget ?? baseProteinGoal ?? 0)}g
+                  {baseProteinGoal && hydrationGuidedProteinTarget && hydrationGuidedProteinTarget !== baseProteinGoal
+                    ? ` (${hydrationPercentage}% of ${formatTwoDecimalString(baseProteinGoal)}g)`
+                    : ""}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">Add a protein goal to see your hydration-guided range.</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -787,7 +873,7 @@ export default function Fuel() {
               <span>{todayHydration}oz consumed</span>
               <span>{hydrationGoal}oz goal</span>
             </div>
-            <Progress value={hydrationPercentage} className="h-3" />
+            <Progress value={hydrationProgressValue} className="h-3" />
             <div className="flex gap-2">
               <Button
                 size="sm"
@@ -1189,10 +1275,11 @@ export default function Fuel() {
                 </p>
               </div>
             )}
-            {totalProtein < 100 && (
+            {totalProtein < proteinSuggestionTarget && (
               <div className="p-3 rounded-lg bg-[#e1ecfb] border border-[#b3c7e6]">
                 <p className="text-sm text-[#0f3a78]">
-                  🥩 You’ve consumed {formatTwoDecimalString(totalProtein)}g protein today. Aim for 100–150g for optimal recovery.
+                  🥩 You’ve logged {formatTwoDecimalString(totalProtein)}g protein. With hydration guiding today’s plan,
+                  target {formatTwoDecimalString(proteinSuggestionTarget)}g to stay on track.
                 </p>
               </div>
             )}
