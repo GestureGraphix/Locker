@@ -97,6 +97,13 @@ export const initialAthletes: Athlete[] = [
     ],
     hydrationLogs: initialHydrationLogs,
     mealLogs: initialMealLogs,
+    nutritionGoals: {
+      hydrationOuncesPerDay: 110,
+      caloriesPerDay: 2800,
+      proteinGramsPerDay: 165,
+      carbsGramsPerDay: 325,
+      fatsGramsPerDay: 80,
+    },
     coachEmail: "coach.rivera@locker.app",
     position: "Sprint Specialist",
     heightCm: 175,

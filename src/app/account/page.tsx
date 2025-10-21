@@ -24,6 +24,7 @@ import {
   Phone,
   MapPin,
   CheckCircle2,
+  Flame,
 } from "lucide-react"
 
 const formatHeight = (cm?: number | null) => {
@@ -67,6 +68,11 @@ const formatTimeRange = (start?: string, end?: string) => {
   return `${formatter.format(startDate)} - ${formatter.format(endDate)}`
 }
 
+type PrimaryAthlete = ReturnType<typeof useRole>["primaryAthlete"]
+type NutritionGoalType = PrimaryAthlete extends { nutritionGoals?: infer GoalType }
+  ? GoalType
+  : undefined
+
 type EditableProfile = {
   name: string
   sport: string
@@ -83,10 +89,7 @@ type EditableProfile = {
   graduationYear: string
 }
 
-const toEditableProfile = (
-  athlete: ReturnType<typeof useRole>["primaryAthlete"],
-  email: string | undefined
-): EditableProfile => ({
+const toEditableProfile = (athlete: PrimaryAthlete, email: string | undefined): EditableProfile => ({
   name: athlete?.name ?? "",
   sport: athlete?.sport ?? "",
   position: athlete?.position ?? "",
@@ -102,17 +105,53 @@ const toEditableProfile = (
   graduationYear: athlete?.graduationYear ?? "",
 })
 
+type EditableNutritionGoals = {
+  hydrationOuncesPerDay: string
+  caloriesPerDay: string
+  proteinGramsPerDay: string
+  carbsGramsPerDay: string
+  fatsGramsPerDay: string
+}
+
+const toEditableNutritionGoals = (goals: NutritionGoalType | undefined): EditableNutritionGoals => ({
+  hydrationOuncesPerDay:
+    goals && goals.hydrationOuncesPerDay != null ? String(goals.hydrationOuncesPerDay) : "",
+  caloriesPerDay: goals && goals.caloriesPerDay != null ? String(goals.caloriesPerDay) : "",
+  proteinGramsPerDay:
+    goals && goals.proteinGramsPerDay != null ? String(goals.proteinGramsPerDay) : "",
+  carbsGramsPerDay:
+    goals && goals.carbsGramsPerDay != null ? String(goals.carbsGramsPerDay) : "",
+  fatsGramsPerDay: goals && goals.fatsGramsPerDay != null ? String(goals.fatsGramsPerDay) : "",
+})
+
+const parseGoalInput = (value: string): number | undefined => {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined
+  return parsed
+}
+
 export default function Account() {
   const { currentUser, primaryAthlete, updateAthleteProfile } = useRole()
   const [isEditing, setIsEditing] = useState(false)
   const [editedProfile, setEditedProfile] = useState<EditableProfile>(() =>
     toEditableProfile(primaryAthlete, currentUser?.email)
   )
+  const [isEditingNutrition, setIsEditingNutrition] = useState(false)
+  const [editedNutritionGoals, setEditedNutritionGoals] = useState<EditableNutritionGoals>(() =>
+    toEditableNutritionGoals(primaryAthlete?.nutritionGoals)
+  )
 
   useEffect(() => {
     setEditedProfile(toEditableProfile(primaryAthlete, currentUser?.email))
     setIsEditing(false)
   }, [primaryAthlete, currentUser?.email])
+
+  useEffect(() => {
+    setEditedNutritionGoals(toEditableNutritionGoals(primaryAthlete?.nutritionGoals))
+    setIsEditingNutrition(false)
+  }, [primaryAthlete])
 
   const handleSave = () => {
     if (!primaryAthlete) return
@@ -142,6 +181,27 @@ export default function Account() {
   const handleCancel = () => {
     setEditedProfile(toEditableProfile(primaryAthlete, currentUser?.email))
     setIsEditing(false)
+  }
+
+  const handleSaveNutrition = () => {
+    if (!primaryAthlete) return
+
+    updateAthleteProfile(primaryAthlete.id, {
+      nutritionGoals: {
+        hydrationOuncesPerDay: parseGoalInput(editedNutritionGoals.hydrationOuncesPerDay),
+        caloriesPerDay: parseGoalInput(editedNutritionGoals.caloriesPerDay),
+        proteinGramsPerDay: parseGoalInput(editedNutritionGoals.proteinGramsPerDay),
+        carbsGramsPerDay: parseGoalInput(editedNutritionGoals.carbsGramsPerDay),
+        fatsGramsPerDay: parseGoalInput(editedNutritionGoals.fatsGramsPerDay),
+      },
+    })
+
+    setIsEditingNutrition(false)
+  }
+
+  const handleCancelNutrition = () => {
+    setEditedNutritionGoals(toEditableNutritionGoals(primaryAthlete?.nutritionGoals))
+    setIsEditingNutrition(false)
   }
 
   const stats = useMemo(() => {
@@ -211,6 +271,37 @@ export default function Account() {
     return [...(primaryAthlete.mealLogs ?? [])]
       .sort((a, b) => new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime())
       .slice(0, 5)
+  }, [primaryAthlete])
+
+  const todaysNutrition = useMemo(() => {
+    if (!primaryAthlete) {
+      return {
+        hydrationOunces: 0,
+        calories: 0,
+        protein: 0,
+      }
+    }
+
+    const today = new Date().toISOString().slice(0, 10)
+    const hydrationOunces = (primaryAthlete.hydrationLogs ?? [])
+      .filter((log) => log.date === today)
+      .reduce((total, log) => total + (log.ounces ?? 0), 0)
+
+    const todaysMeals = (primaryAthlete.mealLogs ?? []).filter((meal) => {
+      if (!meal.completed) return false
+      const date = new Date(meal.dateTime)
+      if (Number.isNaN(date.getTime())) return false
+      return date.toISOString().slice(0, 10) === today
+    })
+
+    const calories = todaysMeals.reduce((total, meal) => total + (meal.calories ?? 0), 0)
+    const protein = todaysMeals.reduce((total, meal) => total + (meal.proteinG ?? 0), 0)
+
+    return {
+      hydrationOunces,
+      calories,
+      protein,
+    }
   }, [primaryAthlete])
 
   if (!currentUser) {
@@ -327,6 +418,7 @@ export default function Account() {
       <Tabs defaultValue="profile" className="space-y-4">
         <TabsList>
           <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="nutrition">Diet</TabsTrigger>
           <TabsTrigger value="stats">Statistics</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -520,6 +612,226 @@ export default function Account() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="nutrition" className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-semibold">Daily Nutrition Goals</h3>
+              <p className="text-sm text-muted-foreground">
+                Dial in your fueling plan by setting realistic daily targets.
+              </p>
+            </div>
+            <div className="flex gap-2 self-end sm:self-auto">
+              {isEditingNutrition ? (
+                <>
+                  <Button variant="outline" size="sm" onClick={handleCancelNutrition}>
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSaveNutrition}>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Goals
+                  </Button>
+                </>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => setIsEditingNutrition(true)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Goals
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <Card>
+            <CardContent className="space-y-6 p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Droplets className="h-4 w-4 text-primary" />
+                    Hydration (oz / day)
+                  </label>
+                  {isEditingNutrition ? (
+                    <Input
+                      type="number"
+                      min="0"
+                      value={editedNutritionGoals.hydrationOuncesPerDay}
+                      onChange={(e) =>
+                        setEditedNutritionGoals((prev) => ({
+                          ...prev,
+                          hydrationOuncesPerDay: e.target.value,
+                        }))
+                      }
+                      placeholder="110"
+                      className="mt-2"
+                    />
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {profile.nutritionGoals?.hydrationOuncesPerDay != null
+                        ? `${profile.nutritionGoals.hydrationOuncesPerDay} oz per day`
+                        : "Add a hydration goal to build consistent habits."}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Flame className="h-4 w-4 text-primary" />
+                    Calories (kcal / day)
+                  </label>
+                  {isEditingNutrition ? (
+                    <Input
+                      type="number"
+                      min="0"
+                      value={editedNutritionGoals.caloriesPerDay}
+                      onChange={(e) =>
+                        setEditedNutritionGoals((prev) => ({
+                          ...prev,
+                          caloriesPerDay: e.target.value,
+                        }))
+                      }
+                      placeholder="2800"
+                      className="mt-2"
+                    />
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {profile.nutritionGoals?.caloriesPerDay != null
+                        ? `${profile.nutritionGoals.caloriesPerDay} kcal per day`
+                        : "Set a calorie range to match your training load."}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Dumbbell className="h-4 w-4 text-primary" />
+                    Protein (g / day)
+                  </label>
+                  {isEditingNutrition ? (
+                    <Input
+                      type="number"
+                      min="0"
+                      value={editedNutritionGoals.proteinGramsPerDay}
+                      onChange={(e) =>
+                        setEditedNutritionGoals((prev) => ({
+                          ...prev,
+                          proteinGramsPerDay: e.target.value,
+                        }))
+                      }
+                      placeholder="160"
+                      className="mt-2"
+                    />
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {profile.nutritionGoals?.proteinGramsPerDay != null
+                        ? `${profile.nutritionGoals.proteinGramsPerDay} grams per day`
+                        : "Prioritize protein to support recovery."}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-primary" />
+                    Carbs (g / day)
+                  </label>
+                  {isEditingNutrition ? (
+                    <Input
+                      type="number"
+                      min="0"
+                      value={editedNutritionGoals.carbsGramsPerDay}
+                      onChange={(e) =>
+                        setEditedNutritionGoals((prev) => ({
+                          ...prev,
+                          carbsGramsPerDay: e.target.value,
+                        }))
+                      }
+                      placeholder="325"
+                      className="mt-2"
+                    />
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {profile.nutritionGoals?.carbsGramsPerDay != null
+                        ? `${profile.nutritionGoals.carbsGramsPerDay} grams per day`
+                        : "Map out carb targets for training and recovery."}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-2">
+                    <Award className="h-4 w-4 text-primary" />
+                    Fats (g / day)
+                  </label>
+                  {isEditingNutrition ? (
+                    <Input
+                      type="number"
+                      min="0"
+                      value={editedNutritionGoals.fatsGramsPerDay}
+                      onChange={(e) =>
+                        setEditedNutritionGoals((prev) => ({
+                          ...prev,
+                          fatsGramsPerDay: e.target.value,
+                        }))
+                      }
+                      placeholder="80"
+                      className="mt-2"
+                    />
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {profile.nutritionGoals?.fatsGramsPerDay != null
+                        ? `${profile.nutritionGoals.fatsGramsPerDay} grams per day`
+                        : "Balance fats for long-lasting energy."}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-dashed border-primary/30 bg-secondary/40 p-4">
+                <p className="text-sm font-medium text-foreground">Today&apos;s Progress</p>
+                <p className="text-xs text-muted-foreground">
+                  Totals are calculated from today&apos;s completed hydration and meal logs.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+                  <div className="rounded-lg bg-background/90 p-3 shadow-sm border">
+                    <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                      <span className="flex items-center gap-2 text-foreground">
+                        <Droplets className="h-4 w-4 text-primary" /> Hydration
+                      </span>
+                      {profile.nutritionGoals?.hydrationOuncesPerDay != null && (
+                        <span>Goal {profile.nutritionGoals.hydrationOuncesPerDay} oz</span>
+                      )}
+                    </div>
+                    <p className="text-2xl font-semibold mt-2">
+                      {formatTwoDecimalString(todaysNutrition.hydrationOunces)} oz
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-background/90 p-3 shadow-sm border">
+                    <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                      <span className="flex items-center gap-2 text-foreground">
+                        <Flame className="h-4 w-4 text-primary" /> Calories
+                      </span>
+                      {profile.nutritionGoals?.caloriesPerDay != null && (
+                        <span>Goal {profile.nutritionGoals.caloriesPerDay}</span>
+                      )}
+                    </div>
+                    <p className="text-2xl font-semibold mt-2">
+                      {formatTwoDecimalString(todaysNutrition.calories)} kcal
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-background/90 p-3 shadow-sm border">
+                    <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                      <span className="flex items-center gap-2 text-foreground">
+                        <Dumbbell className="h-4 w-4 text-primary" /> Protein
+                      </span>
+                      {profile.nutritionGoals?.proteinGramsPerDay != null && (
+                        <span>Goal {profile.nutritionGoals.proteinGramsPerDay} g</span>
+                      )}
+                    </div>
+                    <p className="text-2xl font-semibold mt-2">
+                      {formatTwoDecimalString(todaysNutrition.protein)} g
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="stats" className="space-y-4">

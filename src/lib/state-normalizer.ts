@@ -4,6 +4,7 @@ import type {
   HydrationLog,
   MealLog,
   NutritionFact,
+  NutritionGoals,
   Session,
   StoredAccount,
   WorkoutPlan,
@@ -94,6 +95,40 @@ const normalizeMealLogs = (logs: unknown): MealLog[] => {
     })
   }
   return normalized
+}
+
+const normalizeGoalNumber = (value: unknown): number | undefined => {
+  if (typeof value !== "number") return undefined
+  if (!Number.isFinite(value)) return undefined
+  return value
+}
+
+const normalizeNutritionGoals = (goals: unknown): NutritionGoals | undefined => {
+  if (!goals || typeof goals !== "object") return undefined
+  const record = goals as Record<string, unknown>
+  const hydrationOuncesPerDay = normalizeGoalNumber(record.hydrationOuncesPerDay)
+  const caloriesPerDay = normalizeGoalNumber(record.caloriesPerDay)
+  const proteinGramsPerDay = normalizeGoalNumber(record.proteinGramsPerDay)
+  const carbsGramsPerDay = normalizeGoalNumber(record.carbsGramsPerDay)
+  const fatsGramsPerDay = normalizeGoalNumber(record.fatsGramsPerDay)
+
+  if (
+    hydrationOuncesPerDay === undefined &&
+    caloriesPerDay === undefined &&
+    proteinGramsPerDay === undefined &&
+    carbsGramsPerDay === undefined &&
+    fatsGramsPerDay === undefined
+  ) {
+    return undefined
+  }
+
+  return {
+    hydrationOuncesPerDay,
+    caloriesPerDay,
+    proteinGramsPerDay,
+    carbsGramsPerDay,
+    fatsGramsPerDay,
+  }
 }
 
 const normalizeSessions = (sessions: unknown): Session[] => {
@@ -194,6 +229,7 @@ const normalizeAthlete = (value: unknown): Athlete | null => {
     ? record.allergies.filter(isString).map((item) => item.trim()).filter((item) => item.length > 0)
     : undefined
   const tags = normalizeTags(record.tags)
+  const nutritionGoals = normalizeNutritionGoals(record.nutritionGoals)
   return {
     id: record.id,
     name,
@@ -207,6 +243,7 @@ const normalizeAthlete = (value: unknown): Athlete | null => {
     workouts: normalizeWorkouts(record.workouts),
     hydrationLogs: normalizeHydrationLogs(record.hydrationLogs),
     mealLogs: normalizeMealLogs(record.mealLogs),
+    nutritionGoals,
     coachEmail,
     position,
     heightCm,
