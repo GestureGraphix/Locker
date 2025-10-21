@@ -752,7 +752,7 @@ export default function Fuel() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <Card className="md:col-span-2">
+        <Card>
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -807,15 +807,7 @@ export default function Fuel() {
               ) : null}
             </div>
             {(hydrationGuidedCalorieTarget ?? baseCalorieGoal) ? (
-              <>
-                <Progress value={calorieProgressValue} className="h-2" />
-                <p className="text-xs text-muted-foreground">
-                  Hydration-adjusted target {hydrationGuidedCalorieTarget ?? baseCalorieGoal} cal
-                  {baseCalorieGoal && hydrationGuidedCalorieTarget && hydrationGuidedCalorieTarget !== baseCalorieGoal
-                    ? ` (${hydrationPercentage}% of ${baseCalorieGoal})`
-                    : ""}
-                </p>
-              </>
+              <Progress value={calorieProgressValue} className="h-2" />
             ) : (
               <p className="text-xs text-muted-foreground">Log a goal in the athlete profile to unlock guidance.</p>
             )}
@@ -843,15 +835,7 @@ export default function Fuel() {
               ) : null}
             </div>
             {(hydrationGuidedProteinTarget ?? baseProteinGoal) ? (
-              <>
-                <Progress value={proteinProgressValue} className="h-2" />
-                <p className="text-xs text-muted-foreground">
-                  Hydration-adjusted target {formatTwoDecimalString(hydrationGuidedProteinTarget ?? baseProteinGoal ?? 0)}g
-                  {baseProteinGoal && hydrationGuidedProteinTarget && hydrationGuidedProteinTarget !== baseProteinGoal
-                    ? ` (${hydrationPercentage}% of ${formatTwoDecimalString(baseProteinGoal)}g)`
-                    : ""}
-                </p>
-              </>
+              <Progress value={proteinProgressValue} className="h-2" />
             ) : (
               <p className="text-xs text-muted-foreground">Add a protein goal to see your hydration-guided range.</p>
             )}
