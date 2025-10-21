@@ -27,6 +27,8 @@ import {
   Flame,
 } from "lucide-react"
 
+
+
 const formatHeight = (cm?: number | null) => {
   if (!cm || Number.isNaN(cm)) return "Add your height"
   const feet = Math.floor(cm / 30.48)
@@ -69,9 +71,15 @@ const formatTimeRange = (start?: string, end?: string) => {
 }
 
 type PrimaryAthlete = ReturnType<typeof useRole>["primaryAthlete"]
-type NutritionGoalType = PrimaryAthlete extends { nutritionGoals?: infer GoalType }
-  ? GoalType
-  : undefined
+
+// Concrete shape for nutrition goals (allow undefined/null from backend)
+type NutritionGoals = {
+  hydrationOuncesPerDay?: number | null
+  caloriesPerDay?: number | null
+  proteinGramsPerDay?: number | null
+  carbsGramsPerDay?: number | null
+  fatsGramsPerDay?: number | null
+}
 
 type EditableProfile = {
   name: string
@@ -113,16 +121,19 @@ type EditableNutritionGoals = {
   fatsGramsPerDay: string
 }
 
-const toEditableNutritionGoals = (goals: NutritionGoalType | undefined): EditableNutritionGoals => ({
+const toEditableNutritionGoals = (goals?: NutritionGoals | null): EditableNutritionGoals => ({
   hydrationOuncesPerDay:
-    goals && goals.hydrationOuncesPerDay != null ? String(goals.hydrationOuncesPerDay) : "",
-  caloriesPerDay: goals && goals.caloriesPerDay != null ? String(goals.caloriesPerDay) : "",
+    goals?.hydrationOuncesPerDay != null ? String(goals.hydrationOuncesPerDay) : "",
+  caloriesPerDay:
+    goals?.caloriesPerDay != null ? String(goals.caloriesPerDay) : "",
   proteinGramsPerDay:
-    goals && goals.proteinGramsPerDay != null ? String(goals.proteinGramsPerDay) : "",
+    goals?.proteinGramsPerDay != null ? String(goals.proteinGramsPerDay) : "",
   carbsGramsPerDay:
-    goals && goals.carbsGramsPerDay != null ? String(goals.carbsGramsPerDay) : "",
-  fatsGramsPerDay: goals && goals.fatsGramsPerDay != null ? String(goals.fatsGramsPerDay) : "",
+    goals?.carbsGramsPerDay != null ? String(goals.carbsGramsPerDay) : "",
+  fatsGramsPerDay:
+    goals?.fatsGramsPerDay != null ? String(goals.fatsGramsPerDay) : "",
 })
+
 
 const parseGoalInput = (value: string): number | undefined => {
   const trimmed = value.trim()
