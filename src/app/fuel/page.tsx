@@ -529,24 +529,19 @@ export default function Fuel() {
   const completedMeals = todayMeals.filter((m) => m.completed).length
   const baseCalorieGoal = nutritionGoals?.caloriesPerDay
   const baseProteinGoal = nutritionGoals?.proteinGramsPerDay
-  const hydrationAlignment = hydrationGoal > 0 ? Math.min(Math.max(hydrationRatio, 0), 1) : 1
-  const hydrationGuidedCalorieTarget =
-    baseCalorieGoal && baseCalorieGoal > 0 ? Math.round(baseCalorieGoal * hydrationAlignment) : undefined
-  const hydrationGuidedProteinTarget =
-    baseProteinGoal && baseProteinGoal > 0 ? roundToTwo(baseProteinGoal * hydrationAlignment) : undefined
+  const calorieTarget = baseCalorieGoal && baseCalorieGoal > 0 ? baseCalorieGoal : undefined
+  const proteinTarget = baseProteinGoal && baseProteinGoal > 0 ? baseProteinGoal : undefined
   const calorieProgressValue = (() => {
-    const target = hydrationGuidedCalorieTarget ?? baseCalorieGoal
-    if (!target || target <= 0) return 0
-    const progress = Math.round((totalCalories / target) * 100)
+    if (!calorieTarget) return 0
+    const progress = Math.round((totalCalories / calorieTarget) * 100)
     return Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 100) : 0
   })()
   const proteinProgressValue = (() => {
-    const target = hydrationGuidedProteinTarget ?? baseProteinGoal
-    if (!target || target <= 0) return 0
-    const progress = Math.round((totalProtein / target) * 100)
+    if (!proteinTarget) return 0
+    const progress = Math.round((totalProtein / proteinTarget) * 100)
     return Number.isFinite(progress) ? Math.min(Math.max(progress, 0), 100) : 0
   })()
-  const proteinSuggestionTarget = hydrationGuidedProteinTarget ?? baseProteinGoal ?? 110
+  const proteinSuggestionTarget = proteinTarget ?? 110
 
   const parsedPortion = Number.parseFloat(newMeal.portion)
   const portionMultiplierPreview = Number.isFinite(parsedPortion) && parsedPortion > 0 ? parsedPortion : 1
@@ -571,7 +566,6 @@ export default function Fuel() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Fuel</h1>
-          <p className="text-muted-foreground">Track your hydration and nutrition</p>
         </div>
         <div className="flex gap-2">
           {/* Add Hydration */}
@@ -751,7 +745,7 @@ export default function Fuel() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
@@ -767,24 +761,7 @@ export default function Fuel() {
               </Badge>
             </div>
             <Progress value={hydrationProgressValue} className="h-2" />
-            <p className="text-xs text-muted-foreground">
-              You’re at {Math.max(hydrationPercentage, 0)}% of today’s hydration goal. Hitting hydration is the anchor for
-              your fuel plan.
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-[#1c6dd0]" />
-              <div>
-                <p className="text-sm font-medium">Hydration Alignment</p>
-                <p className="text-2xl font-bold">{Math.max(hydrationPercentage, 0)}%</p>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Nutrition targets scale with your water intake—keep sipping to unlock full goals.
-            </p>
+            <p className="text-xs text-muted-foreground">You’re at {Math.max(hydrationPercentage, 0)}% of today’s hydration goal.</p>
           </CardContent>
         </Card>
         <Card>
@@ -796,7 +773,7 @@ export default function Fuel() {
                   <p className="text-sm font-medium">Calories</p>
                   <p className="text-2xl font-bold">
                     {totalCalories}
-                    {hydrationGuidedCalorieTarget ? ` / ${hydrationGuidedCalorieTarget}` : ""}
+                    {calorieTarget ? ` / ${calorieTarget}` : ""}
                   </p>
                 </div>
               </div>
@@ -806,7 +783,7 @@ export default function Fuel() {
                 </Badge>
               ) : null}
             </div>
-            {(hydrationGuidedCalorieTarget ?? baseCalorieGoal) ? (
+            {calorieTarget ? (
               <Progress value={calorieProgressValue} className="h-2" />
             ) : (
               <p className="text-xs text-muted-foreground">Log a goal in the athlete profile to unlock guidance.</p>
@@ -822,9 +799,7 @@ export default function Fuel() {
                   <p className="text-sm font-medium">Protein</p>
                   <p className="text-2xl font-bold">
                     {formatTwoDecimalString(totalProtein)}g
-                    {hydrationGuidedProteinTarget
-                      ? ` / ${formatTwoDecimalString(hydrationGuidedProteinTarget)}g`
-                      : ""}
+                    {proteinTarget ? ` / ${formatTwoDecimalString(proteinTarget)}g` : ""}
                   </p>
                 </div>
               </div>
@@ -834,10 +809,10 @@ export default function Fuel() {
                 </Badge>
               ) : null}
             </div>
-            {(hydrationGuidedProteinTarget ?? baseProteinGoal) ? (
+            {proteinTarget ? (
               <Progress value={proteinProgressValue} className="h-2" />
             ) : (
-              <p className="text-xs text-muted-foreground">Add a protein goal to see your hydration-guided range.</p>
+              <p className="text-xs text-muted-foreground">Add a protein goal to unlock progress tracking.</p>
             )}
           </CardContent>
         </Card>
@@ -1262,8 +1237,9 @@ export default function Fuel() {
             {totalProtein < proteinSuggestionTarget && (
               <div className="p-3 rounded-lg bg-[#e1ecfb] border border-[#b3c7e6]">
                 <p className="text-sm text-[#0f3a78]">
-                  🥩 You’ve logged {formatTwoDecimalString(totalProtein)}g protein. With hydration guiding today’s plan,
-                  target {formatTwoDecimalString(proteinSuggestionTarget)}g to stay on track.
+                  🥩 You’ve logged {formatTwoDecimalString(totalProtein)}g protein. Aim for
+                  {" "}
+                  {formatTwoDecimalString(proteinSuggestionTarget)}g to stay on track.
                 </p>
               </div>
             )}
