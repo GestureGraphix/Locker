@@ -10,9 +10,9 @@ import type {
   StoredAccount,
   UserAccount,
   Session,
-  WorkoutPlan
+  WorkoutPlan,
+  NutritionFact
 } from "@/lib/role-types"
-export type { MealLog, NutritionFact } from "@/lib/role-types"
 import { initialAthletes } from "@/lib/initial-data"
 import type { CalendarEvent } from "@/lib/role-types"
 import {
