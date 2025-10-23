@@ -1212,3 +1212,5 @@ export const useRole = () => {
   }
   return context
 }
+
+export type { MealLog, NutritionFact } from "@/lib/role-types"

@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
-import { useRole, MealLog, NutritionFact } from "@/components/role-context"
+import { useRole } from "@/components/role-context"
+import type { MealLog, NutritionFact } from "@/components/role-context"
 import {
   Apple,
   Plus,
