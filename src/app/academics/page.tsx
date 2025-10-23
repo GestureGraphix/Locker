@@ -1,6 +1,6 @@
 "use client"
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react"
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +26,7 @@ import {
   mockCourses,
   ACADEMICS_UPDATED_EVENT
 } from "@/lib/academics"
+import { isSqlAuth } from "@/lib/auth-mode"
 
 type NewItem = {
   courseId: string
@@ -325,6 +326,9 @@ export default function Academics() {
   })
   const [editingItem, setEditingItem] = useState<EditItemState | null>(null)
   const [editingCourse, setEditingCourse] = useState<EditCourseState | null>(null)
+  const sqlAuthEnabled = isSqlAuth()
+  const [hasInitialized, setHasInitialized] = useState(!sqlAuthEnabled)
+  const lastSyncedPayload = useRef<string | null>(null)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -332,50 +336,128 @@ export default function Academics() {
     const fallbackCourses = currentUser ? [] : mockCourses
     const fallbackItems = currentUser ? [] : mockAcademicItems
 
-    try {
-      const stored = window.localStorage.getItem(storageKey)
+    const readFromLocalStorage = () => {
+      try {
+        const stored = window.localStorage.getItem(storageKey)
 
-      if (!stored) {
-        setCourses(fallbackCourses)
-        setAcademicItems(fallbackItems)
+        if (!stored) {
+          if (!currentUser) {
+            const payload = JSON.stringify({
+              courses: fallbackCourses,
+              academicItems: fallbackItems
+            })
+            window.localStorage.setItem(storageKey, payload)
+          }
 
-        if (!currentUser) {
-          const payload = JSON.stringify({
-            courses: fallbackCourses,
-            academicItems: fallbackItems
-          })
-          window.localStorage.setItem(storageKey, payload)
+          return { courses: fallbackCourses, items: fallbackItems }
         }
-        return
+
+        const parsed = JSON.parse(stored) as {
+          courses?: Course[]
+          academicItems?: AcademicItem[]
+        }
+
+        const nextCourses = Array.isArray(parsed.courses) ? parsed.courses : fallbackCourses
+        const nextItems = Array.isArray(parsed.academicItems) ? parsed.academicItems : fallbackItems
+
+        return { courses: nextCourses, items: nextItems }
+      } catch (error) {
+        console.error("Failed to load academics data", error)
+        return { courses: fallbackCourses, items: fallbackItems }
       }
-
-      const parsed = JSON.parse(stored) as {
-        courses?: Course[]
-        academicItems?: AcademicItem[]
-      }
-
-      const nextCourses = Array.isArray(parsed.courses) ? parsed.courses : fallbackCourses
-      const nextItems = Array.isArray(parsed.academicItems) ? parsed.academicItems : fallbackItems
-
-      setCourses(nextCourses)
-      setAcademicItems(nextItems)
-    } catch (error) {
-      console.error("Failed to load academics data", error)
-      setCourses(fallbackCourses)
-      setAcademicItems(fallbackItems)
     }
-  }, [currentUser, storageKey])
+
+    if (!sqlAuthEnabled || !currentUser?.id) {
+      const local = readFromLocalStorage()
+      setCourses(local.courses)
+      setAcademicItems(local.items)
+      lastSyncedPayload.current = JSON.stringify({
+        courses: local.courses,
+        academicItems: local.items
+      })
+      setHasInitialized(true)
+      return
+    }
+
+    setHasInitialized(false)
+
+    const local = readFromLocalStorage()
+    setCourses(local.courses)
+    setAcademicItems(local.items)
+    lastSyncedPayload.current = JSON.stringify({
+      courses: local.courses,
+      academicItems: local.items
+    })
+
+    let cancelled = false
+
+    const fetchAcademics = async () => {
+      try {
+        const response = await fetch("/api/academics", { cache: "no-store" })
+        if (!response.ok) {
+          console.error("Failed to fetch academics data", response.status)
+          return
+        }
+
+        let payload: { courses?: Course[]; academicItems?: AcademicItem[] } | null = null
+        try {
+          payload = (await response.json()) as {
+            courses?: Course[]
+            academicItems?: AcademicItem[]
+          }
+        } catch {
+          payload = null
+        }
+
+        if (cancelled) return
+
+        const rawCourses = payload?.courses
+        const rawItems = payload?.academicItems
+        const serverCourses = Array.isArray(rawCourses) ? rawCourses : []
+        const serverItems = Array.isArray(rawItems) ? rawItems : []
+
+        setCourses(serverCourses)
+        setAcademicItems(serverItems)
+
+        const serialized = JSON.stringify({
+          courses: serverCourses,
+          academicItems: serverItems
+        })
+        lastSyncedPayload.current = serialized
+
+        try {
+          window.localStorage.setItem(storageKey, serialized)
+        } catch (error) {
+          console.error("Failed to save academics data", error)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch academics data", error)
+        }
+      } finally {
+        if (!cancelled) {
+          setHasInitialized(true)
+        }
+      }
+    }
+
+    void fetchAcademics()
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser, sqlAuthEnabled, storageKey])
 
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    if (storageKey) {
-      try {
-        const payload = JSON.stringify({ courses, academicItems })
-        window.localStorage.setItem(storageKey, payload)
-      } catch (error) {
-        console.error("Failed to save academics data", error)
-      }
+    const payload = { courses, academicItems }
+    const payloadJson = JSON.stringify(payload)
+
+    try {
+      window.localStorage.setItem(storageKey, payloadJson)
+    } catch (error) {
+      console.error("Failed to save academics data", error)
     }
 
     window.dispatchEvent(
@@ -383,7 +465,67 @@ export default function Academics() {
         detail: { count: academicItems.length }
       })
     )
-  }, [courses, academicItems, storageKey])
+
+    if (!hasInitialized) {
+      return
+    }
+
+    if (!sqlAuthEnabled || !currentUser?.id) {
+      lastSyncedPayload.current = payloadJson
+      return
+    }
+
+    if (lastSyncedPayload.current === payloadJson) {
+      return
+    }
+
+    const sync = async () => {
+      try {
+        const response = await fetch("/api/academics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payloadJson
+        })
+
+        if (!response.ok) {
+          console.error("Failed to sync academics data", response.status)
+          return
+        }
+
+        let result: { courses?: Course[]; academicItems?: AcademicItem[] } | null = null
+        try {
+          result = (await response.json()) as {
+            courses?: Course[]
+            academicItems?: AcademicItem[]
+          }
+        } catch {
+          result = null
+        }
+
+        const resultCourses = result?.courses
+        const resultItems = result?.academicItems
+
+        const normalizedCourses = Array.isArray(resultCourses) ? resultCourses : courses
+        const normalizedItems = Array.isArray(resultItems) ? resultItems : academicItems
+
+        const normalizedJson = JSON.stringify({
+          courses: normalizedCourses,
+          academicItems: normalizedItems
+        })
+
+        lastSyncedPayload.current = normalizedJson
+
+        if (normalizedJson !== payloadJson) {
+          setCourses(normalizedCourses)
+          setAcademicItems(normalizedItems)
+        }
+      } catch (error) {
+        console.error("Failed to sync academics data", error)
+      }
+    }
+
+    void sync()
+  }, [academicItems, courses, currentUser?.id, hasInitialized, sqlAuthEnabled, storageKey])
 
   const handleAddItem = () => {
     if (newItem.courseId && newItem.title && newItem.dueAt) {
