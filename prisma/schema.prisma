@@ -20,6 +20,7 @@ model User {
   role               Role                 @default(ATHLETE)
   passwordCredential PasswordCredentials?
   athleteProfile     AthleteProfile?
+  academics          Academics?
   sessionTokens      SessionToken[]
 
   @@map("users")
@@ -54,6 +55,14 @@ model AthleteProfile {
   nutritionGoals Json?
 
   @@map("athlete_profiles")
+}
+
+model Academics {
+  userId  Int  @id
+  payload Json
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("academics")
 }
 
 model SessionToken {
