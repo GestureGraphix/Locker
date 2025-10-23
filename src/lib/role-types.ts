@@ -102,4 +102,4 @@ export type StoredAccount = {
   athleteId?: number
 }
 
-export type UserAccount = Omit<StoredAccount, "password">
+export type UserAccount = Omit<StoredAccount, "password"> & { id?: number }

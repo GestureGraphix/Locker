@@ -21,6 +21,7 @@ import {
   normalizeTag,
   normalizeTags,
 } from "@/lib/state-normalizer"
+import { isSqlAuth } from "@/lib/auth-mode"
 
 
 
@@ -87,6 +88,41 @@ type AuthResult =
   | { success: true }
   | { success: false; error: string }
 
+type SignInInput = {
+  email: string
+  password: string
+  role?: Role
+}
+
+type SqlAuthUserPayload = {
+  id: number
+  email: string
+  name: string | null
+  role: string
+}
+
+const toRoleFromSql = (value: string | null | undefined): Role | null => {
+  if (typeof value !== "string") return null
+  const normalized = value.trim().toLowerCase()
+  if (normalized === "athlete" || normalized === "coach") {
+    return normalized
+  }
+  return null
+}
+
+const toUserAccountFromSql = (user: SqlAuthUserPayload | null | undefined): UserAccount | null => {
+  if (!user) return null
+  const role = toRoleFromSql(user.role)
+  if (!role) return null
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name ?? user.email,
+    role,
+  }
+}
+
 type RoleContextValue = {
   role: Role
   setRole: (role: Role) => void
@@ -104,6 +140,8 @@ type RoleContextValue = {
   login: (input: LoginInput) => AuthResult
   createAccount: (input: CreateAccountInput) => AuthResult
   logout: () => void
+  signIn: (input: SignInInput) => Promise<AuthResult>
+  signOut: () => Promise<AuthResult>
   updateAthleteProfile: (athleteId: number, updates: UpdateAthleteInput) => void
 }
 
@@ -186,9 +224,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [accounts, setAccounts] = useState<StoredAccount[]>([])
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null)
   const [isHydrated, setIsHydrated] = useState(false)
+  const sqlAuthEnabled = isSqlAuth()
 
   useEffect(() => {
-    if (typeof window === "undefined") return
+    if (sqlAuthEnabled || typeof window === "undefined") return
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY)
       if (!stored) return
@@ -220,10 +259,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsHydrated(true)
     }
-  }, [])
+  }, [sqlAuthEnabled])
 
   useEffect(() => {
-    if (typeof window === "undefined" || !isHydrated) return
+    if (sqlAuthEnabled || typeof window === "undefined" || !isHydrated) return
     const payload = JSON.stringify({
       role,
       athletes,
@@ -232,10 +271,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       accounts,
     })
     window.localStorage.setItem(STORAGE_KEY, payload)
-  }, [role, athletes, activeAthleteId, currentUser, accounts, isHydrated])
+  }, [sqlAuthEnabled, role, athletes, activeAthleteId, currentUser, accounts, isHydrated])
 
   useEffect(() => {
-    if (typeof window === "undefined" || !isHydrated) return
+    if (sqlAuthEnabled || typeof window === "undefined" || !isHydrated) return
     let cancelled = false
 
     const fetchServerState = async () => {
@@ -299,14 +338,61 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [isHydrated])
+  }, [sqlAuthEnabled, isHydrated])
+
+  useEffect(() => {
+    if (!sqlAuthEnabled) return
+
+    let cancelled = false
+
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await fetch("/api/me", { cache: "no-store" })
+        if (!response.ok) {
+          if (response.status !== 401) {
+            console.error("Failed to fetch authenticated user", response.status)
+          }
+          if (!cancelled) {
+            setCurrentUser(null)
+            setRoleState("athlete")
+            setActiveAthleteId(null)
+          }
+          return
+        }
+
+        const payload = (await response.json()) as { user?: SqlAuthUserPayload | null }
+        if (cancelled) return
+
+        const account = toUserAccountFromSql(payload.user)
+        if (!account) {
+          setCurrentUser(null)
+          setRoleState("athlete")
+          setActiveAthleteId(null)
+          return
+        }
+
+        setCurrentUser(account)
+        setRoleState(account.role)
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch authenticated user", error)
+        }
+      }
+    }
+
+    void fetchCurrentUser()
+
+    return () => {
+      cancelled = true
+    }
+  }, [sqlAuthEnabled])
 
   const setRole = useCallback((nextRole: Role) => {
     setRoleState(nextRole)
   }, [])
 
   useEffect(() => {
-    if (typeof window === "undefined" || !isHydrated) return
+    if (sqlAuthEnabled || typeof window === "undefined" || !isHydrated) return
     const controller = new AbortController()
 
     const syncState = async () => {
@@ -328,7 +414,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     return () => {
       controller.abort()
     }
-  }, [accounts, athletes, isHydrated])
+  }, [sqlAuthEnabled, accounts, athletes, isHydrated])
 
   const applySessionToAthlete = useCallback(
     (
@@ -738,6 +824,86 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     setRoleState("athlete")
   }, [])
 
+  const signIn = useCallback(
+    async ({ email, password, role: inputRole }: SignInInput): Promise<AuthResult> => {
+      if (!sqlAuthEnabled) {
+        if (!inputRole) {
+          return { success: false, error: "Role is required to sign in." }
+        }
+        return login({ email, password, role: inputRole })
+      }
+
+      const normalizedEmail = email.trim().toLowerCase()
+      if (!normalizedEmail) {
+        return { success: false, error: "Email is required to sign in." }
+      }
+      if (!password) {
+        return { success: false, error: "Password is required to sign in." }
+      }
+
+      try {
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: normalizedEmail, password }),
+        })
+
+        let payload: { user?: SqlAuthUserPayload | null; error?: unknown } | null = null
+        try {
+          payload = (await response.json()) as { user?: SqlAuthUserPayload | null; error?: unknown }
+        } catch {
+          payload = null
+        }
+
+        if (!response.ok) {
+          const errorMessage =
+            typeof payload?.error === "string" && payload.error
+              ? payload.error
+              : "Unable to sign in."
+          return { success: false, error: errorMessage }
+        }
+
+        const account = toUserAccountFromSql(payload?.user)
+        if (!account) {
+          return { success: false, error: "Unable to sign in." }
+        }
+
+        setCurrentUser(account)
+        setRoleState(account.role)
+        setActiveAthleteId(null)
+
+        return { success: true }
+      } catch (error) {
+        console.error("Failed to sign in", error)
+        return { success: false, error: "Unable to sign in." }
+      }
+    },
+    [sqlAuthEnabled, login]
+  )
+
+  const signOut = useCallback(async (): Promise<AuthResult> => {
+    if (!sqlAuthEnabled) {
+      logout()
+      return { success: true }
+    }
+
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST" })
+      if (!response.ok) {
+        return { success: false, error: "Unable to sign out." }
+      }
+
+      setCurrentUser(null)
+      setRoleState("athlete")
+      setActiveAthleteId(null)
+
+      return { success: true }
+    } catch (error) {
+      console.error("Failed to sign out", error)
+      return { success: false, error: "Unable to sign out." }
+    }
+  }, [sqlAuthEnabled, logout])
+
   useEffect(() => {
     if (currentUser?.role === "athlete" && currentUser.athleteId) {
       setActiveAthleteId((prev) => prev ?? currentUser.athleteId ?? null)
@@ -770,6 +936,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       login,
       createAccount,
       logout,
+      signIn,
+      signOut,
     }),
     [
       role,
@@ -788,6 +956,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       login,
       createAccount,
       logout,
+      signIn,
+      signOut,
     ]
   )
 
