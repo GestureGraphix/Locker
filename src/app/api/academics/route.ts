@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { Prisma } from "@prisma/client"
+import { AcademicItemType as PrismaAcademicItemType, Prisma } from "@prisma/client"
 
 import { getSessionUser } from "@/lib/auth"
 import prisma from "@/lib/prisma"
@@ -204,18 +204,188 @@ const sanitizePayload = (
   }
 }
 
+const persistAcademicsPayload = async (
+  userId: number,
+  courses: Course[],
+  academicItems: AcademicItem[]
+) => {
+  await prisma.$transaction(async tx => {
+    const courseIds = courses.map(course => course.id)
+
+    if (courseIds.length === 0) {
+      await tx.academicCourse.deleteMany({ where: { userId } })
+    } else {
+      await tx.academicCourse.deleteMany({
+        where: {
+          userId,
+          id: { notIn: courseIds },
+        },
+      })
+    }
+
+    for (const course of courses) {
+      const source = allowedSources.has(course.source ?? "")
+        ? (course.source as Course["source"])
+        : "manual"
+
+      await tx.academicCourse.upsert({
+        where: {
+          userId_id: {
+            userId,
+            id: course.id,
+          },
+        },
+        create: {
+          userId,
+          id: course.id,
+          code: course.code,
+          name: course.name,
+          professor: course.professor,
+          schedule: course.schedule ?? null,
+          source,
+        },
+        update: {
+          code: course.code,
+          name: course.name,
+          professor: course.professor,
+          schedule: course.schedule ?? null,
+          source,
+        },
+      })
+    }
+
+    const itemIds = academicItems.map(item => item.id)
+
+    if (itemIds.length === 0) {
+      await tx.academicItem.deleteMany({ where: { userId } })
+    } else {
+      await tx.academicItem.deleteMany({
+        where: {
+          userId,
+          id: { notIn: itemIds },
+        },
+      })
+    }
+
+    for (const item of academicItems) {
+      const dueAt = new Date(item.dueAt)
+      const source = allowedSources.has(item.source ?? "") ? item.source : "manual"
+      const type = item.type as PrismaAcademicItemType
+
+      await tx.academicItem.upsert({
+        where: {
+          userId_id: {
+            userId,
+            id: item.id,
+          },
+        },
+        create: {
+          userId,
+          id: item.id,
+          courseId: item.courseId ?? null,
+          courseLabel: item.course,
+          type,
+          title: item.title,
+          dueAt,
+          notes: item.notes ?? null,
+          completed: item.completed,
+          source,
+          externalId: item.externalId ?? null,
+        },
+        update: {
+          courseId: item.courseId ?? null,
+          courseLabel: item.course,
+          type,
+          title: item.title,
+          dueAt,
+          notes: item.notes ?? null,
+          completed: item.completed,
+          source,
+          externalId: item.externalId ?? null,
+        },
+      })
+    }
+
+    await tx.academics.upsert({
+      where: { userId },
+      create: {
+        userId,
+        payload: {
+          courses,
+          academicItems,
+        },
+      },
+      update: {
+        payload: {
+          courses,
+          academicItems,
+        },
+      },
+    })
+  })
+}
+
 export async function GET() {
   const user = await getSessionUser()
   if (!user) {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 })
   }
 
-  const academics = await prisma.academics.findUnique({
+  let courses = await prisma.academicCourse.findMany({
     where: { userId: user.id },
+    orderBy: { id: "asc" },
   })
 
-  const payload = sanitizePayload(academics?.payload ?? null)
-  return NextResponse.json(payload)
+  let academicItems = await prisma.academicItem.findMany({
+    where: { userId: user.id },
+    orderBy: [{ dueAt: "asc" }, { id: "asc" }],
+  })
+
+  if (courses.length === 0 && academicItems.length === 0) {
+    const academics = await prisma.academics.findUnique({
+      where: { userId: user.id },
+    })
+
+    const payload = sanitizePayload(academics?.payload ?? null)
+
+    if (payload.courses.length > 0 || payload.academicItems.length > 0) {
+      await persistAcademicsPayload(user.id, payload.courses, payload.academicItems)
+      courses = await prisma.academicCourse.findMany({
+        where: { userId: user.id },
+        orderBy: { id: "asc" },
+      })
+      academicItems = await prisma.academicItem.findMany({
+        where: { userId: user.id },
+        orderBy: [{ dueAt: "asc" }, { id: "asc" }],
+      })
+    }
+  }
+
+  const coursePayload: Course[] = courses.map(course => ({
+    id: course.id,
+    code: course.code,
+    name: course.name,
+    professor: course.professor,
+    schedule: course.schedule ?? undefined,
+    source: allowedSources.has(course.source) ? (course.source as Course["source"]) : "manual",
+  }))
+
+  const academicItemPayload: AcademicItem[] = academicItems.map(item => ({
+    id: item.id,
+    courseId: item.courseId ?? undefined,
+    course: item.courseLabel,
+    type: item.type as AcademicItemType,
+    title: item.title,
+    dueAt: item.dueAt.toISOString(),
+    notes: item.notes ?? undefined,
+    completed: item.completed,
+    source: allowedSources.has(item.source)
+      ? (item.source as AcademicItem["source"])
+      : "manual",
+    externalId: item.externalId ?? undefined,
+  }))
+
+  return NextResponse.json({ courses: coursePayload, academicItems: academicItemPayload })
 }
 
 export async function POST(request: NextRequest) {
@@ -247,21 +417,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: itemsResult.error }, { status: 400 })
   }
 
-  const payload: Prisma.JsonObject = {
-    courses: coursesResult.courses,
-    academicItems: itemsResult.academicItems,
-  }
-
-  await prisma.academics.upsert({
-    where: { userId: user.id },
-    create: {
-      userId: user.id,
-      payload,
-    },
-    update: {
-      payload,
-    },
-  })
+  await persistAcademicsPayload(
+    user.id,
+    coursesResult.courses,
+    itemsResult.academicItems
+  )
 
   return NextResponse.json({
     courses: coursesResult.courses,

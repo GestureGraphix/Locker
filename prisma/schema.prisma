@@ -23,6 +23,8 @@ model User {
   academics          Academics?
   sessionTokens      SessionToken[]
   mealLogs           MealLog[]
+  academicCourses    AcademicCourse[]
+  academicItems      AcademicItem[]
 
   @@map("users")
 }
@@ -64,6 +66,51 @@ model Academics {
   user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("academics")
+}
+
+enum AcademicItemType {
+  assignment
+  exam
+  reading
+  essay
+  calendar
+}
+
+model AcademicCourse {
+  userId    Int
+  id        Int
+  code      String
+  name      String
+  professor String
+  schedule  String?
+  source    String   @default("manual")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     AcademicItem[] @relation("CourseItems")
+
+  @@id([userId, id])
+  @@map("academic_courses")
+  @@index([userId, code])
+}
+
+model AcademicItem {
+  userId      Int
+  id          Int
+  courseId    Int?
+  courseLabel String
+  type        AcademicItemType
+  title       String
+  dueAt       DateTime
+  notes       String?
+  completed   Boolean           @default(false)
+  source      String            @default("manual")
+  externalId  String?
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      AcademicCourse?   @relation("CourseItems", fields: [userId, courseId], references: [userId, id], onDelete: SetNull)
+
+  @@id([userId, id])
+  @@map("academic_items")
+  @@index([userId, dueAt])
+  @@index([userId, courseId])
 }
 
 model SessionToken {
