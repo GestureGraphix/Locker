@@ -24,6 +24,7 @@ import { LoginDialog } from "./login-dialog"
 import {
   ACADEMICS_UPDATED_EVENT,
   AcademicsUpdateDetail,
+  getAcademicsStorageKeys,
   mockAcademicItems
 } from "@/lib/academics"
 
@@ -57,8 +58,8 @@ export function Navigation() {
   const { role, setRole, currentUser } = useRole()
   const showCoachRoleToggle = !currentUser || currentUser.role === "coach"
   const effectiveRole = showCoachRoleToggle ? role : "athlete"
-  const storageKey = useMemo(
-    () => (currentUser ? `locker-academics-${currentUser.email}` : null),
+  const storageKeys = useMemo(
+    () => getAcademicsStorageKeys(currentUser),
     [currentUser]
   )
   const [academicCount, setAcademicCount] = useState<number | null>(null)
@@ -73,25 +74,39 @@ export function Navigation() {
     if (typeof window === "undefined") return
 
     const loadCount = () => {
-      if (!storageKey) {
+      const keysToCheck = [storageKeys.primary, ...storageKeys.fallbacks]
+
+      for (const key of keysToCheck) {
+        try {
+          const stored = window.localStorage.getItem(key)
+          if (!stored) {
+            continue
+          }
+
+          const parsed = JSON.parse(stored) as { academicItems?: unknown }
+          const items = Array.isArray(parsed.academicItems) ? parsed.academicItems : []
+
+          if (key !== storageKeys.primary) {
+            try {
+              window.localStorage.setItem(storageKeys.primary, stored)
+            } catch (error) {
+              console.error("Failed to migrate academics data", error)
+            }
+          }
+
+          setAcademicCount(items.length)
+          return
+        } catch (error) {
+          console.error("Failed to read academics data", error)
+        }
+      }
+
+      if (!currentUser) {
         setAcademicCount(mockAcademicItems.length)
         return
       }
 
-      try {
-        const stored = window.localStorage.getItem(storageKey)
-        if (!stored) {
-          setAcademicCount(0)
-          return
-        }
-
-        const parsed = JSON.parse(stored) as { academicItems?: unknown }
-        const items = Array.isArray(parsed.academicItems) ? parsed.academicItems : []
-        setAcademicCount(items.length)
-      } catch (error) {
-        console.error("Failed to read academics data", error)
-        setAcademicCount(0)
-      }
+      setAcademicCount(0)
     }
 
     const handleUpdate = (event: Event) => {
@@ -110,7 +125,7 @@ export function Navigation() {
     return () => {
       window.removeEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
     }
-  }, [storageKey])
+  }, [currentUser, storageKeys])
 
   const badgeValue = academicCount !== null ? academicCount.toString() : null
   const navigationItems = useMemo(() => {

@@ -8,7 +8,13 @@ import { Progress } from "@/components/ui/progress"
 import { NumberScale } from "@/components/number-scale"
 import { useRole } from "@/components/role-context"
 import { CoachDashboard } from "@/components/coach-dashboard"
-import { ACADEMICS_UPDATED_EVENT, AcademicItem, Course, mockAcademicItems } from "@/lib/academics"
+import {
+  ACADEMICS_UPDATED_EVENT,
+  AcademicItem,
+  Course,
+  getAcademicsStorageKeys,
+  mockAcademicItems
+} from "@/lib/academics"
 import {
   BookOpen,
   Dumbbell,
@@ -206,9 +212,9 @@ export default function DashboardPage() {
   const [physicalNotes, setPhysicalNotes] = useState("")
   const [diaryEntries, setDiaryEntries] = useState<CheckInDiaryEntry[]>([])
   const { role, primaryAthlete, currentUser } = useRole()
-  const academicStorageKey = useMemo(
-    () => `locker-academics-${currentUser?.email ?? "guest"}`,
-    [currentUser?.email]
+  const academicStorageKeys = useMemo(
+    () => getAcademicsStorageKeys(currentUser),
+    [currentUser]
   )
   const [academicItems, setAcademicItems] = useState<AcademicItem[] | null>(null)
   const isGuest = !currentUser
@@ -241,26 +247,50 @@ export default function DashboardPage() {
 
     const fallbackItems = currentUser ? [] : mockAcademicItems
 
-    const readFromLocalStorage = () => {
-      try {
-        const stored = window.localStorage.getItem(academicStorageKey)
-        if (!stored) {
-          if (!currentUser) {
-            window.localStorage.setItem(
-              academicStorageKey,
-              JSON.stringify({ academicItems: fallbackItems })
-            )
-          }
-          return fallbackItems
-        }
+    const storageKeysToCheck = [
+      academicStorageKeys.primary,
+      ...academicStorageKeys.fallbacks
+    ]
 
-        const parsed = JSON.parse(stored) as { academicItems?: AcademicItem[] }
-        const items = Array.isArray(parsed.academicItems) ? parsed.academicItems : []
-        return items
-      } catch (error) {
-        console.error("Failed to load academics data", error)
-        return fallbackItems
+    const readFromLocalStorage = () => {
+      for (const key of storageKeysToCheck) {
+        try {
+          const stored = window.localStorage.getItem(key)
+          if (!stored) {
+            continue
+          }
+
+          const parsed = JSON.parse(stored) as {
+            academicItems?: AcademicItem[]
+          }
+          const items = Array.isArray(parsed.academicItems)
+            ? parsed.academicItems
+            : []
+
+          if (key !== academicStorageKeys.primary) {
+            try {
+              window.localStorage.setItem(academicStorageKeys.primary, stored)
+            } catch (error) {
+              console.error("Failed to migrate academics data", error)
+            }
+          }
+
+          return items
+        } catch (error) {
+          console.error("Failed to load academics data", error)
+        }
       }
+
+      if (!currentUser) {
+        const payload = JSON.stringify({ academicItems: fallbackItems })
+        try {
+          window.localStorage.setItem(academicStorageKeys.primary, payload)
+        } catch (error) {
+          console.error("Failed to save academics data", error)
+        }
+      }
+
+      return fallbackItems
     }
 
     const applyItems = (items: AcademicItem[]) => {
@@ -304,7 +334,7 @@ export default function DashboardPage() {
 
         try {
           window.localStorage.setItem(
-            academicStorageKey,
+            academicStorageKeys.primary,
             JSON.stringify({ courses, academicItems: items })
           )
         } catch (error) {
@@ -334,7 +364,7 @@ export default function DashboardPage() {
       cancelled = true
       window.removeEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
     }
-  }, [academicStorageKey, currentUser, sqlAuthEnabled])
+  }, [academicStorageKeys, currentUser, sqlAuthEnabled])
 
   const academicItemsForDisplay = useMemo(
     () => academicItems ?? (currentUser ? [] : mockAcademicItems),
