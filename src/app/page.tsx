@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress"
 import { NumberScale } from "@/components/number-scale"
 import { useRole } from "@/components/role-context"
 import { CoachDashboard } from "@/components/coach-dashboard"
-import { ACADEMICS_UPDATED_EVENT, AcademicItem, mockAcademicItems } from "@/lib/academics"
+import { ACADEMICS_UPDATED_EVENT, AcademicItem, Course, mockAcademicItems } from "@/lib/academics"
 import {
   BookOpen,
   Dumbbell,
@@ -25,6 +25,7 @@ import {
   ListChecks
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { isSqlAuth } from "@/lib/auth-mode"
 
 type CheckInDiaryEntry = {
   date: string
@@ -211,6 +212,7 @@ export default function DashboardPage() {
   )
   const [academicItems, setAcademicItems] = useState<AcademicItem[] | null>(null)
   const isGuest = !currentUser
+  const sqlAuthEnabled = isSqlAuth()
 
   const [greeting, setGreeting] = useState(determineGreeting)
 
@@ -239,34 +241,100 @@ export default function DashboardPage() {
 
     const fallbackItems = currentUser ? [] : mockAcademicItems
 
-    const loadAcademicItems = () => {
+    const readFromLocalStorage = () => {
       try {
         const stored = window.localStorage.getItem(academicStorageKey)
         if (!stored) {
-          setAcademicItems(fallbackItems)
-          return
+          if (!currentUser) {
+            window.localStorage.setItem(
+              academicStorageKey,
+              JSON.stringify({ academicItems: fallbackItems })
+            )
+          }
+          return fallbackItems
         }
 
         const parsed = JSON.parse(stored) as { academicItems?: AcademicItem[] }
         const items = Array.isArray(parsed.academicItems) ? parsed.academicItems : []
-        setAcademicItems(items)
+        return items
       } catch (error) {
         console.error("Failed to load academics data", error)
-        setAcademicItems(fallbackItems)
+        return fallbackItems
       }
     }
 
-    loadAcademicItems()
+    const applyItems = (items: AcademicItem[]) => {
+      setAcademicItems(items)
+    }
+
+    applyItems(readFromLocalStorage())
+
+    let cancelled = false
+
+    const fetchFromServer = async () => {
+      if (!sqlAuthEnabled || !currentUser?.id) return
+
+      try {
+        const response = await fetch("/api/academics", { cache: "no-store" })
+        if (!response.ok) {
+          if (response.status !== 401 && response.status !== 403) {
+            console.error("Failed to fetch academics data", response.status)
+          }
+          return
+        }
+
+        let payload: { courses?: Course[]; academicItems?: AcademicItem[] } | null = null
+        try {
+          payload = (await response.json()) as {
+            courses?: Course[]
+            academicItems?: AcademicItem[]
+          }
+        } catch {
+          payload = null
+        }
+
+        if (cancelled) return
+
+        const rawItems = payload?.academicItems
+        const items = Array.isArray(rawItems) ? rawItems : []
+        const rawCourses = payload?.courses
+        const courses = Array.isArray(rawCourses) ? rawCourses : []
+
+        applyItems(items)
+
+        try {
+          window.localStorage.setItem(
+            academicStorageKey,
+            JSON.stringify({ courses, academicItems: items })
+          )
+        } catch (error) {
+          console.error("Failed to save academics data", error)
+        }
+
+        window.dispatchEvent(
+          new CustomEvent(ACADEMICS_UPDATED_EVENT, {
+            detail: { count: items.length }
+          })
+        )
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch academics data", error)
+        }
+      }
+    }
+
+    void fetchFromServer()
 
     const handleUpdate = () => {
-      loadAcademicItems()
+      applyItems(readFromLocalStorage())
     }
 
     window.addEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
     return () => {
+      cancelled = true
       window.removeEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
     }
-  }, [academicStorageKey, currentUser])
+  }, [academicStorageKey, currentUser, sqlAuthEnabled])
 
   const academicItemsForDisplay = useMemo(
     () => academicItems ?? (currentUser ? [] : mockAcademicItems),
