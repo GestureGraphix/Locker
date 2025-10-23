@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id                 Int                  @id @default(autoincrement())
+  email              String               @unique
+  name               String?
+  role               Role                 @default(USER)
+  passwordCredential PasswordCredentials?
+  athleteProfile     AthleteProfile?
+  sessionTokens      SessionToken[]
+
+  @@map("users")
+}
+
+model PasswordCredentials {
+  userId       Int    @id
+  passwordHash String
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_credentials")
+}
+
+model AthleteProfile {
+  id     Int   @id @default(autoincrement())
+  userId Int   @unique
+  user   User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("athlete_profiles")
+}
+
+model SessionToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session_tokens")
+}
