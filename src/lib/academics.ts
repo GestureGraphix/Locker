@@ -77,6 +77,11 @@ export type Course = {
   source?: "manual" | "ics"
 }
 
+export type AcademicsState = {
+  courses: Course[]
+  academicItems: AcademicItem[]
+}
+
 export type AcademicsUpdateDetail = {
   count: number
 }

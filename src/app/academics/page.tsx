@@ -1,6 +1,6 @@
 "use client"
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
+import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,6 +20,7 @@ import {
 import {
   AcademicItem,
   AcademicItemType,
+  AcademicsState,
   Course,
   ManualItemType,
   mockAcademicItems,
@@ -94,6 +95,11 @@ const parseIcsContent = (content: string): RawIcsEvent[] => {
 
   return events
 }
+
+const buildMockAcademicsState = (): AcademicsState => ({
+  courses: mockCourses.map(course => ({ ...course })),
+  academicItems: mockAcademicItems.map(item => ({ ...item })),
+})
 
 const parseCourseDetails = (summary: string) => {
   const cleanSummary = summary.trim()
@@ -307,14 +313,23 @@ const formatDate = (dateString: string) => {
 }
 
 export default function Academics() {
-  const { currentUser } = useRole()
+  const {
+    currentUser,
+    academics: contextAcademics,
+    updateAcademics: updateContextAcademics,
+    academicsInitialized
+  } = useRole()
   const storageKeys = useMemo(
     () => getAcademicsStorageKeys(currentUser),
     [currentUser]
   )
 
-  const [courses, setCourses] = useState<Course[]>([])
-  const [academicItems, setAcademicItems] = useState<AcademicItem[]>([])
+  const sqlAuthEnabled = isSqlAuth()
+  const isSqlUser = sqlAuthEnabled && Boolean(currentUser?.id)
+  const [localAcademics, setLocalAcademics] = useState<AcademicsState>(() =>
+    currentUser ? { courses: [], academicItems: [] } : buildMockAcademicsState()
+  )
+  const [hasInitializedLocal, setHasInitializedLocal] = useState(!sqlAuthEnabled)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -327,23 +342,37 @@ export default function Academics() {
   })
   const [editingItem, setEditingItem] = useState<EditItemState | null>(null)
   const [editingCourse, setEditingCourse] = useState<EditCourseState | null>(null)
-  const sqlAuthEnabled = isSqlAuth()
-  const [hasInitialized, setHasInitialized] = useState(!sqlAuthEnabled)
-  const lastSyncedPayload = useRef<string | null>(null)
+
+  const activeAcademics = isSqlUser ? contextAcademics : localAcademics
+  const courses = activeAcademics.courses
+  const academicItems = activeAcademics.academicItems
+  const hasInitialized = isSqlUser ? academicsInitialized : hasInitializedLocal
+
+  const mutateAcademics = useCallback(
+    (updater: (state: AcademicsState) => AcademicsState) => {
+      if (isSqlUser) {
+        updateContextAcademics(updater)
+      } else {
+        setLocalAcademics(prev => updater(prev))
+      }
+    },
+    [isSqlUser, updateContextAcademics]
+  )
 
   useEffect(() => {
     if (typeof window === "undefined") return
+    if (isSqlUser) return
 
-    const fallbackCourses = currentUser ? [] : mockCourses
-    const fallbackItems = currentUser ? [] : mockAcademicItems
+    const fallbackState = currentUser
+      ? { courses: [] as Course[], academicItems: [] as AcademicItem[] }
+      : buildMockAcademicsState()
 
     const storageKeysToCheck = [storageKeys.primary, ...storageKeys.fallbacks]
 
-    const readFromLocalStorage = () => {
+    const readFromLocalStorage = (): AcademicsState => {
       for (const key of storageKeysToCheck) {
         try {
           const stored = window.localStorage.getItem(key)
-
           if (!stored) {
             continue
           }
@@ -355,10 +384,10 @@ export default function Academics() {
 
           const nextCourses = Array.isArray(parsed.courses)
             ? parsed.courses
-            : fallbackCourses
+            : fallbackState.courses
           const nextItems = Array.isArray(parsed.academicItems)
             ? parsed.academicItems
-            : fallbackItems
+            : fallbackState.academicItems
 
           if (key !== storageKeys.primary) {
             try {
@@ -368,17 +397,17 @@ export default function Academics() {
             }
           }
 
-          return { courses: nextCourses, items: nextItems }
+          return {
+            courses: nextCourses.map(course => ({ ...course })),
+            academicItems: nextItems.map(item => ({ ...item })),
+          }
         } catch (error) {
           console.error("Failed to load academics data", error)
         }
       }
 
       if (!currentUser) {
-        const payload = JSON.stringify({
-          courses: fallbackCourses,
-          academicItems: fallbackItems
-        })
+        const payload = JSON.stringify(fallbackState)
         try {
           window.localStorage.setItem(storageKeys.primary, payload)
         } catch (error) {
@@ -386,184 +415,79 @@ export default function Academics() {
         }
       }
 
-      return { courses: fallbackCourses, items: fallbackItems }
-    }
-
-    if (!sqlAuthEnabled || !currentUser?.id) {
-      const local = readFromLocalStorage()
-      setCourses(local.courses)
-      setAcademicItems(local.items)
-      lastSyncedPayload.current = JSON.stringify({
-        courses: local.courses,
-        academicItems: local.items
-      })
-      setHasInitialized(true)
-      return
-    }
-
-    setHasInitialized(false)
-
-    const local = readFromLocalStorage()
-    setCourses(local.courses)
-    setAcademicItems(local.items)
-    lastSyncedPayload.current = JSON.stringify({
-      courses: local.courses,
-      academicItems: local.items
-    })
-
-    let cancelled = false
-
-    const fetchAcademics = async () => {
-      try {
-        const response = await fetch("/api/academics", { cache: "no-store" })
-        if (!response.ok) {
-          console.error("Failed to fetch academics data", response.status)
-          return
-        }
-
-        let payload: { courses?: Course[]; academicItems?: AcademicItem[] } | null = null
-        try {
-          payload = (await response.json()) as {
-            courses?: Course[]
-            academicItems?: AcademicItem[]
-          }
-        } catch {
-          payload = null
-        }
-
-        if (cancelled) return
-
-        const rawCourses = payload?.courses
-        const rawItems = payload?.academicItems
-        const serverCourses = Array.isArray(rawCourses) ? rawCourses : []
-        const serverItems = Array.isArray(rawItems) ? rawItems : []
-
-        setCourses(serverCourses)
-        setAcademicItems(serverItems)
-
-        const serialized = JSON.stringify({
-          courses: serverCourses,
-          academicItems: serverItems
-        })
-        lastSyncedPayload.current = serialized
-
-        try {
-          window.localStorage.setItem(storageKeys.primary, serialized)
-        } catch (error) {
-          console.error("Failed to save academics data", error)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Failed to fetch academics data", error)
-        }
-      } finally {
-        if (!cancelled) {
-          setHasInitialized(true)
-        }
+      return {
+        courses: fallbackState.courses.map(course => ({ ...course })),
+        academicItems: fallbackState.academicItems.map(item => ({ ...item })),
       }
     }
 
-    void fetchAcademics()
-
-    return () => {
-      cancelled = true
-    }
-  }, [currentUser, sqlAuthEnabled, storageKeys])
+    const local = readFromLocalStorage()
+    setLocalAcademics(local)
+    setHasInitializedLocal(true)
+  }, [currentUser, isSqlUser, storageKeys])
 
   useEffect(() => {
     if (typeof window === "undefined") return
+    if (!hasInitialized) return
 
-    const payload = { courses, academicItems }
-    const payloadJson = JSON.stringify(payload)
-
+    const payload = JSON.stringify(activeAcademics)
     try {
-      window.localStorage.setItem(storageKeys.primary, payloadJson)
+      window.localStorage.setItem(storageKeys.primary, payload)
     } catch (error) {
       console.error("Failed to save academics data", error)
     }
 
     window.dispatchEvent(
       new CustomEvent(ACADEMICS_UPDATED_EVENT, {
-        detail: { count: academicItems.length }
+        detail: { count: activeAcademics.academicItems.length }
       })
     )
+  }, [activeAcademics, hasInitialized, storageKeys])
 
-    if (!hasInitialized) {
-      return
-    }
+  useEffect(() => {
+    if (typeof window === "undefined") return
 
-    if (!sqlAuthEnabled || !currentUser?.id) {
-      lastSyncedPayload.current = payloadJson
-      return
-    }
+    const handleStorageUpdate = () => {
+      if (isSqlUser) return
 
-    if (lastSyncedPayload.current === payloadJson) {
-      return
-    }
+      const stored = window.localStorage.getItem(storageKeys.primary)
+      if (!stored) return
 
-    const sync = async () => {
       try {
-        const response = await fetch("/api/academics", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: payloadJson
-        })
-
-        if (!response.ok) {
-          console.error("Failed to sync academics data", response.status)
-          return
-        }
-
-        let result: { courses?: Course[]; academicItems?: AcademicItem[] } | null = null
-        try {
-          result = (await response.json()) as {
-            courses?: Course[]
-            academicItems?: AcademicItem[]
-          }
-        } catch {
-          result = null
-        }
-
-        const resultCourses = result?.courses
-        const resultItems = result?.academicItems
-
-        const normalizedCourses = Array.isArray(resultCourses) ? resultCourses : courses
-        const normalizedItems = Array.isArray(resultItems) ? resultItems : academicItems
-
-        const normalizedJson = JSON.stringify({
-          courses: normalizedCourses,
-          academicItems: normalizedItems
-        })
-
-        lastSyncedPayload.current = normalizedJson
-
-        if (normalizedJson !== payloadJson) {
-          setCourses(normalizedCourses)
-          setAcademicItems(normalizedItems)
-        }
+        const parsed = JSON.parse(stored) as AcademicsState
+        if (!parsed || typeof parsed !== "object") return
+        setLocalAcademics(prevState => ({
+          courses: Array.isArray(parsed.courses)
+            ? parsed.courses.map(course => ({ ...course }))
+            : prevState.courses,
+          academicItems: Array.isArray(parsed.academicItems)
+            ? parsed.academicItems.map(item => ({ ...item }))
+            : prevState.academicItems,
+        }))
       } catch (error) {
-        console.error("Failed to sync academics data", error)
+        console.error("Failed to refresh academics data", error)
       }
     }
 
-    void sync()
-  }, [
-    academicItems,
-    courses,
-    currentUser?.id,
-    hasInitialized,
-    sqlAuthEnabled,
-    storageKeys
-  ])
+    window.addEventListener(ACADEMICS_UPDATED_EVENT, handleStorageUpdate as EventListener)
+    return () => {
+      window.removeEventListener(
+        ACADEMICS_UPDATED_EVENT,
+        handleStorageUpdate as EventListener
+      )
+    }
+  }, [isSqlUser, storageKeys])
 
   const handleAddItem = () => {
     if (newItem.courseId && newItem.title && newItem.dueAt) {
-      setAcademicItems(prev => {
-        const course = courses.find(c => c.id === parseInt(newItem.courseId))
-        const nextId = prev.reduce((max, item) => Math.max(max, item.id), 0) + 1
+      mutateAcademics(prev => {
+        const courseIdNumber = Number.parseInt(newItem.courseId, 10)
+        const course = prev.courses.find(c => c.id === courseIdNumber)
+        const nextId =
+          prev.academicItems.reduce((max, item) => Math.max(max, item.id), 0) + 1
         const item: AcademicItem = {
           id: nextId,
-          courseId: parseInt(newItem.courseId),
+          courseId: Number.isNaN(courseIdNumber) ? undefined : courseIdNumber,
           course: course?.code ?? "General",
           type: newItem.type,
           title: newItem.title,
@@ -572,7 +496,10 @@ export default function Academics() {
           completed: false,
           source: "manual"
         }
-        return [...prev, item]
+        return {
+          courses: prev.courses,
+          academicItems: [...prev.academicItems, item]
+        }
       })
       setNewItem({ courseId: "", type: "assignment", title: "", dueAt: "", notes: "" })
       setIsAddDialogOpen(false)
@@ -591,10 +518,16 @@ export default function Academics() {
         const rawEvents = parseIcsContent(text)
         let addedCount = 0
 
-        setCourses(prev => {
-          const { courses: mergedCourses, added } = mergeIcsCourses(rawEvents, prev)
+        mutateAcademics(prev => {
+          const { courses: mergedCourses, added } = mergeIcsCourses(
+            rawEvents,
+            prev.courses
+          )
           addedCount = added
-          return mergedCourses
+          return {
+            courses: mergedCourses,
+            academicItems: prev.academicItems
+          }
         })
 
         if (addedCount > 0) {
@@ -616,11 +549,12 @@ export default function Academics() {
   }
 
   const toggleComplete = (id: number) => {
-    setAcademicItems(prev =>
-      prev.map(item =>
+    mutateAcademics(prev => ({
+      courses: prev.courses,
+      academicItems: prev.academicItems.map(item =>
         item.id === id ? { ...item, completed: !item.completed } : item
       )
-    )
+    }))
   }
 
   const startEditingItem = (item: AcademicItem) => {
@@ -643,8 +577,9 @@ export default function Academics() {
 
     const selectedCourse = courses.find(course => course.id === Number(editingItem.courseId))
 
-    setAcademicItems(prev =>
-      prev.map(item =>
+    mutateAcademics(prev => ({
+      courses: prev.courses,
+      academicItems: prev.academicItems.map(item =>
         item.id === editingItem.id
           ? {
               ...item,
@@ -657,7 +592,7 @@ export default function Academics() {
             }
           : item
       )
-    )
+    }))
 
     setEditingItem(null)
   }
@@ -682,21 +617,18 @@ export default function Academics() {
       return
     }
 
-    setCourses(prev =>
-      prev.map(course =>
+    mutateAcademics(prev => ({
+      courses: prev.courses.map(course =>
         course.id === editingCourse.id
           ? { ...course, code, name, professor }
           : course
-      )
-    )
-
-    setAcademicItems(prev =>
-      prev.map(item =>
+      ),
+      academicItems: prev.academicItems.map(item =>
         item.courseId === editingCourse.id
           ? { ...item, course: code }
           : item
       )
-    )
+    }))
 
     setEditingCourse(null)
   }

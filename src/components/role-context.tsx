@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 
 import type {
   Athlete,
@@ -22,6 +22,12 @@ import {
   normalizeTags,
 } from "@/lib/state-normalizer"
 import { isSqlAuth } from "@/lib/auth-mode"
+import type {
+  AcademicItem,
+  AcademicItemType,
+  AcademicsState,
+  Course
+} from "@/lib/academics"
 
 
 
@@ -194,6 +200,117 @@ const sanitizeMealLogsFromServer = (value: unknown): MealLog[] => {
   )
 }
 
+const allowedAcademicItemTypes = new Set<AcademicItemType>([
+  "assignment",
+  "exam",
+  "reading",
+  "essay",
+  "calendar",
+])
+
+const sanitizeAcademicCoursesFromServer = (value: unknown): Course[] => {
+  if (!Array.isArray(value)) return []
+  const courses: Course[] = []
+  const seen = new Set<number>()
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+    const idNumber = coerceNumber(record.id)
+    if (idNumber == null || !Number.isInteger(idNumber) || idNumber <= 0) {
+      continue
+    }
+    if (seen.has(idNumber)) {
+      continue
+    }
+    seen.add(idNumber)
+    const codeRaw = typeof record.code === "string" ? record.code.trim() : ""
+    const nameRaw = typeof record.name === "string" ? record.name.trim() : ""
+    const professorRaw =
+      typeof record.professor === "string" ? record.professor.trim() : ""
+    const scheduleRaw =
+      typeof record.schedule === "string" ? record.schedule.trim() : ""
+    const sourceRaw =
+      typeof record.source === "string" ? record.source.trim().toLowerCase() : ""
+    const course: Course = {
+      id: idNumber,
+      code: codeRaw || nameRaw || `Course ${idNumber}`,
+      name: nameRaw || codeRaw || `Course ${idNumber}`,
+      professor: professorRaw || "Instructor TBA",
+      source: sourceRaw === "ics" ? "ics" : "manual",
+    }
+    if (scheduleRaw) {
+      course.schedule = scheduleRaw
+    }
+    courses.push(course)
+  }
+  return courses
+}
+
+const sanitizeAcademicItemsFromServer = (value: unknown): AcademicItem[] => {
+  if (!Array.isArray(value)) return []
+  const items: AcademicItem[] = []
+  const seen = new Set<number>()
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+    const idNumber = coerceNumber(record.id)
+    if (idNumber == null || !Number.isInteger(idNumber) || idNumber <= 0) {
+      continue
+    }
+    if (seen.has(idNumber)) {
+      continue
+    }
+    seen.add(idNumber)
+    const titleRaw = typeof record.title === "string" ? record.title.trim() : ""
+    if (!titleRaw) continue
+    const dueAtRaw = typeof record.dueAt === "string" ? record.dueAt.trim() : ""
+    if (!dueAtRaw || Number.isNaN(new Date(dueAtRaw).getTime())) {
+      continue
+    }
+    const typeRaw =
+      typeof record.type === "string" ? record.type.trim().toLowerCase() : ""
+    if (!allowedAcademicItemTypes.has(typeRaw as AcademicItemType)) {
+      continue
+    }
+    const courseIdNumber = coerceNumber(record.courseId)
+    const courseId =
+      courseIdNumber != null && Number.isInteger(courseIdNumber) && courseIdNumber > 0
+        ? courseIdNumber
+        : undefined
+    const courseLabel =
+      typeof record.course === "string" && record.course.trim()
+        ? record.course.trim()
+        : "General"
+    const notesRaw = typeof record.notes === "string" ? record.notes.trim() : ""
+    const sourceRaw =
+      typeof record.source === "string" ? record.source.trim().toLowerCase() : ""
+    const externalIdRaw =
+      typeof record.externalId === "string" ? record.externalId.trim() : ""
+    const academicItem: AcademicItem = {
+      id: idNumber,
+      courseId,
+      course: courseLabel,
+      type: typeRaw as AcademicItemType,
+      title: titleRaw,
+      dueAt: dueAtRaw,
+      completed: Boolean(record.completed),
+      source: sourceRaw === "ics" ? "ics" : "manual",
+    }
+    if (notesRaw) {
+      academicItem.notes = notesRaw
+    }
+    if (externalIdRaw) {
+      academicItem.externalId = externalIdRaw
+    }
+    items.push(academicItem)
+  }
+  return items.sort((a, b) => {
+    const dateDiff = new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime()
+    if (dateDiff !== 0) return dateDiff
+    return a.id - b.id
+  })
+}
+
 const buildAthleteForSqlUser = (
   user: UserAccount,
   options: {
@@ -256,6 +373,9 @@ type RoleContextValue = {
   signIn: (input: SignInInput) => Promise<AuthResult>
   signOut: () => Promise<AuthResult>
   updateAthleteProfile: (athleteId: number, updates: UpdateAthleteInput) => void
+  academics: AcademicsState
+  updateAcademics: (updater: (state: AcademicsState) => AcademicsState) => void
+  academicsInitialized: boolean
 }
 
 const RoleContext = createContext<RoleContextValue | undefined>(undefined)
@@ -338,6 +458,13 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null)
   const [isHydrated, setIsHydrated] = useState(false)
   const sqlAuthEnabled = isSqlAuth()
+  const [academicsState, setAcademicsState] = useState<AcademicsState>({
+    courses: [],
+    academicItems: [],
+  })
+  const [academicsInitialized, setAcademicsInitialized] = useState(!sqlAuthEnabled)
+  const lastSyncedAcademics = useRef<string | null>(null)
+  const pendingAcademicsSync = useRef<string | null>(null)
 
   useEffect(() => {
     if (sqlAuthEnabled || typeof window === "undefined") return
@@ -585,6 +712,71 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }
   }, [sqlAuthEnabled, currentUser])
 
+  useEffect(() => {
+    if (!sqlAuthEnabled) {
+      setAcademicsState({ courses: [], academicItems: [] })
+      setAcademicsInitialized(true)
+      lastSyncedAcademics.current = null
+      return
+    }
+
+    if (!currentUser || currentUser.role !== "athlete" || currentUser.id == null) {
+      setAcademicsState({ courses: [], academicItems: [] })
+      setAcademicsInitialized(true)
+      lastSyncedAcademics.current = null
+      return
+    }
+
+    let cancelled = false
+    setAcademicsInitialized(false)
+
+    const loadAcademics = async () => {
+      try {
+        const response = await fetch("/api/academics", { cache: "no-store" })
+        if (!response.ok) {
+          if (response.status !== 404) {
+            console.error("Failed to fetch academics data", response.status)
+          }
+          if (!cancelled) {
+            setAcademicsInitialized(true)
+          }
+          return
+        }
+
+        let payload: { courses?: unknown; academicItems?: unknown } | null = null
+        try {
+          payload = (await response.json()) as {
+            courses?: unknown
+            academicItems?: unknown
+          }
+        } catch {
+          payload = null
+        }
+
+        if (cancelled) return
+
+        const courses = sanitizeAcademicCoursesFromServer(payload?.courses)
+        const academicItems = sanitizeAcademicItemsFromServer(payload?.academicItems)
+        const nextState: AcademicsState = { courses, academicItems }
+
+        setAcademicsState(nextState)
+        lastSyncedAcademics.current = JSON.stringify(nextState)
+        setAcademicsInitialized(true)
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch academics data", error)
+          setAcademicsInitialized(true)
+        }
+      }
+    }
+
+    void loadAcademics()
+
+    return () => {
+      cancelled = true
+    }
+  }, [sqlAuthEnabled, currentUser])
+
   const setRole = useCallback((nextRole: Role) => {
     setRoleState(nextRole)
   }, [])
@@ -802,6 +994,109 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       )
     },
     []
+  )
+
+  const syncAcademicsToServer = useCallback(
+    async (state: AcademicsState) => {
+      if (!sqlAuthEnabled) return
+      if (!currentUser || currentUser.role !== "athlete" || currentUser.id == null) return
+
+      const payloadJson = JSON.stringify(state)
+      if (lastSyncedAcademics.current === payloadJson) {
+        return
+      }
+
+      pendingAcademicsSync.current = payloadJson
+
+      try {
+        const response = await fetch("/api/academics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payloadJson,
+        })
+
+        if (!response.ok) {
+          console.error("Failed to sync academics data", response.status)
+          if (pendingAcademicsSync.current === payloadJson) {
+            pendingAcademicsSync.current = null
+          }
+          return
+        }
+
+        let payload: { courses?: unknown; academicItems?: unknown } | null = null
+        try {
+          payload = (await response.json()) as {
+            courses?: unknown
+            academicItems?: unknown
+          }
+        } catch {
+          payload = null
+        }
+
+        const courses = sanitizeAcademicCoursesFromServer(payload?.courses)
+        const academicItems = sanitizeAcademicItemsFromServer(payload?.academicItems)
+        const normalized: AcademicsState = { courses, academicItems }
+        const normalizedJson = JSON.stringify(normalized)
+
+        if (pendingAcademicsSync.current && pendingAcademicsSync.current !== payloadJson) {
+          return
+        }
+
+        pendingAcademicsSync.current = null
+        lastSyncedAcademics.current = normalizedJson
+
+        setAcademicsState((prev) => {
+          if (JSON.stringify(prev) === normalizedJson) {
+            return prev
+          }
+          return normalized
+        })
+      } catch (error) {
+        console.error("Failed to sync academics data", error)
+        if (pendingAcademicsSync.current === payloadJson) {
+          pendingAcademicsSync.current = null
+        }
+      }
+    },
+    [sqlAuthEnabled, currentUser]
+  )
+
+  const updateAcademics = useCallback(
+    (updater: (state: AcademicsState) => AcademicsState) => {
+      let nextState: AcademicsState | null = null
+      let changed = false
+
+      setAcademicsState((prev) => {
+        const updated = updater(prev)
+        const prevJson = JSON.stringify(prev)
+        const updatedJson = JSON.stringify(updated)
+        if (prevJson === updatedJson) {
+          nextState = prev
+          return prev
+        }
+        nextState = updated
+        changed = true
+        return updated
+      })
+
+      if (
+        changed &&
+        nextState &&
+        sqlAuthEnabled &&
+        currentUser &&
+        currentUser.role === "athlete" &&
+        currentUser.id != null &&
+        academicsInitialized
+      ) {
+        void syncAcademicsToServer(nextState)
+      }
+    },
+    [
+      sqlAuthEnabled,
+      currentUser,
+      academicsInitialized,
+      syncAcademicsToServer,
+    ]
   )
 
   const syncMealLogsToServer = useCallback(
@@ -1179,6 +1474,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       logout,
       signIn,
       signOut,
+      academics: academicsState,
+      updateAcademics,
+      academicsInitialized,
     }),
     [
       role,
@@ -1199,6 +1497,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       logout,
       signIn,
       signOut,
+      academicsState,
+      updateAcademics,
+      academicsInitialized,
     ]
   )
 
