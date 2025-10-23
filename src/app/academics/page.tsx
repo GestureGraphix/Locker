@@ -24,7 +24,8 @@ import {
   ManualItemType,
   mockAcademicItems,
   mockCourses,
-  ACADEMICS_UPDATED_EVENT
+  ACADEMICS_UPDATED_EVENT,
+  getAcademicsStorageKeys
 } from "@/lib/academics"
 import { isSqlAuth } from "@/lib/auth-mode"
 
@@ -307,9 +308,9 @@ const formatDate = (dateString: string) => {
 
 export default function Academics() {
   const { currentUser } = useRole()
-  const storageKey = useMemo(
-    () => `locker-academics-${currentUser?.email ?? "guest"}`,
-    [currentUser?.email]
+  const storageKeys = useMemo(
+    () => getAcademicsStorageKeys(currentUser),
+    [currentUser]
   )
 
   const [courses, setCourses] = useState<Course[]>([])
@@ -336,35 +337,56 @@ export default function Academics() {
     const fallbackCourses = currentUser ? [] : mockCourses
     const fallbackItems = currentUser ? [] : mockAcademicItems
 
-    const readFromLocalStorage = () => {
-      try {
-        const stored = window.localStorage.getItem(storageKey)
+    const storageKeysToCheck = [storageKeys.primary, ...storageKeys.fallbacks]
 
-        if (!stored) {
-          if (!currentUser) {
-            const payload = JSON.stringify({
-              courses: fallbackCourses,
-              academicItems: fallbackItems
-            })
-            window.localStorage.setItem(storageKey, payload)
+    const readFromLocalStorage = () => {
+      for (const key of storageKeysToCheck) {
+        try {
+          const stored = window.localStorage.getItem(key)
+
+          if (!stored) {
+            continue
           }
 
-          return { courses: fallbackCourses, items: fallbackItems }
+          const parsed = JSON.parse(stored) as {
+            courses?: Course[]
+            academicItems?: AcademicItem[]
+          }
+
+          const nextCourses = Array.isArray(parsed.courses)
+            ? parsed.courses
+            : fallbackCourses
+          const nextItems = Array.isArray(parsed.academicItems)
+            ? parsed.academicItems
+            : fallbackItems
+
+          if (key !== storageKeys.primary) {
+            try {
+              window.localStorage.setItem(storageKeys.primary, stored)
+            } catch (error) {
+              console.error("Failed to migrate academics data", error)
+            }
+          }
+
+          return { courses: nextCourses, items: nextItems }
+        } catch (error) {
+          console.error("Failed to load academics data", error)
         }
-
-        const parsed = JSON.parse(stored) as {
-          courses?: Course[]
-          academicItems?: AcademicItem[]
-        }
-
-        const nextCourses = Array.isArray(parsed.courses) ? parsed.courses : fallbackCourses
-        const nextItems = Array.isArray(parsed.academicItems) ? parsed.academicItems : fallbackItems
-
-        return { courses: nextCourses, items: nextItems }
-      } catch (error) {
-        console.error("Failed to load academics data", error)
-        return { courses: fallbackCourses, items: fallbackItems }
       }
+
+      if (!currentUser) {
+        const payload = JSON.stringify({
+          courses: fallbackCourses,
+          academicItems: fallbackItems
+        })
+        try {
+          window.localStorage.setItem(storageKeys.primary, payload)
+        } catch (error) {
+          console.error("Failed to save academics data", error)
+        }
+      }
+
+      return { courses: fallbackCourses, items: fallbackItems }
     }
 
     if (!sqlAuthEnabled || !currentUser?.id) {
@@ -426,7 +448,7 @@ export default function Academics() {
         lastSyncedPayload.current = serialized
 
         try {
-          window.localStorage.setItem(storageKey, serialized)
+          window.localStorage.setItem(storageKeys.primary, serialized)
         } catch (error) {
           console.error("Failed to save academics data", error)
         }
@@ -446,7 +468,7 @@ export default function Academics() {
     return () => {
       cancelled = true
     }
-  }, [currentUser, sqlAuthEnabled, storageKey])
+  }, [currentUser, sqlAuthEnabled, storageKeys])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -455,7 +477,7 @@ export default function Academics() {
     const payloadJson = JSON.stringify(payload)
 
     try {
-      window.localStorage.setItem(storageKey, payloadJson)
+      window.localStorage.setItem(storageKeys.primary, payloadJson)
     } catch (error) {
       console.error("Failed to save academics data", error)
     }
@@ -525,7 +547,14 @@ export default function Academics() {
     }
 
     void sync()
-  }, [academicItems, courses, currentUser?.id, hasInitialized, sqlAuthEnabled, storageKey])
+  }, [
+    academicItems,
+    courses,
+    currentUser?.id,
+    hasInitialized,
+    sqlAuthEnabled,
+    storageKeys
+  ])
 
   const handleAddItem = () => {
     if (newItem.courseId && newItem.title && newItem.dueAt) {

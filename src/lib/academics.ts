@@ -1,5 +1,57 @@
 export const ACADEMICS_UPDATED_EVENT = "locker-academics-updated"
 
+type StorageKeyUser = {
+  id?: number | null
+  email?: string | null
+}
+
+export type AcademicsStorageKeys = {
+  primary: string
+  fallbacks: string[]
+}
+
+export const getAcademicsStorageKeys = (
+  user: StorageKeyUser | null | undefined
+): AcademicsStorageKeys => {
+  if (!user) {
+    return { primary: "locker-academics-guest", fallbacks: [] }
+  }
+
+  const fallbacks = new Set<string>()
+
+  const email =
+    typeof user.email === "string" && user.email.trim().length > 0
+      ? user.email.trim()
+      : null
+
+  if (email) {
+    fallbacks.add(`locker-academics-${email}`)
+  }
+
+  // Always allow migrating guest data into an authenticated account
+  fallbacks.add("locker-academics-guest")
+
+  const id =
+    typeof user.id === "number" && Number.isInteger(user.id) && user.id > 0
+      ? user.id
+      : null
+
+  if (id != null) {
+    const primary = `locker-academics-user-${id}`
+    const fallbackList = Array.from(fallbacks).filter(key => key !== primary)
+    return { primary, fallbacks: fallbackList }
+  }
+
+  if (email) {
+    const fallbackList = Array.from(fallbacks).filter(
+      key => key !== `locker-academics-${email}`
+    )
+    return { primary: `locker-academics-${email}`, fallbacks: fallbackList }
+  }
+
+  return { primary: "locker-academics-guest", fallbacks: [] }
+}
+
 export type ManualItemType = "assignment" | "exam" | "reading" | "essay"
 export type AcademicItemType = ManualItemType | "calendar"
 
