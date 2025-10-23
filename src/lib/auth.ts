@@ -28,7 +28,7 @@ export const createSession = async (userId: number): Promise<void> => {
     },
   })
 
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   cookieStore.set({
     name: SESSION_COOKIE_NAME,
     value: token,
@@ -42,7 +42,7 @@ export const createSession = async (userId: number): Promise<void> => {
 }
 
 export const destroySession = async (): Promise<void> => {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const existingToken = cookieStore.get(SESSION_COOKIE_NAME)?.value
 
   if (existingToken) {
