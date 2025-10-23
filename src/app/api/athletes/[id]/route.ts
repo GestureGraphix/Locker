@@ -1,419 +1,203 @@
-import { NextRequest, NextResponse } from "next/server"
-import { Prisma } from "@prisma/client"
+// app/api/athletes/[id]/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth";
 
-import prisma from "@/lib/prisma"
-import { getSessionUser } from "@/lib/auth"
+export const runtime = "nodejs";
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const NUTRITION_GOAL_KEYS = [
-  "hydrationOuncesPerDay",
-  "caloriesPerDay",
-  "proteinGramsPerDay",
-  "carbsGramsPerDay",
-  "fatsGramsPerDay",
-] as const
+// --- helpers ---------------------------------------------------------------
 
-type NutritionGoalKey = (typeof NUTRITION_GOAL_KEYS)[number]
-type NutritionGoalsUpdate = Partial<Record<NutritionGoalKey, number>>
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-type NormalizedUpdate = {
-  user: {
-    name?: string | null
-    email?: string
-  }
-  profile: {
-    sport?: string | null
-    level?: string | null
-    team?: string | null
-    position?: string | null
-    coachEmail?: string | null
-    heightCm?: number | null
-    weightKg?: number | null
-    allergies?: string[]
-    tags?: string[]
-    phone?: string | null
-    location?: string | null
-    university?: string | null
-    graduationYear?: string | null
-    notes?: string | null
-    nutritionGoals?: NutritionGoalsUpdate | null
-  }
+function parseId(s: string): number | null {
+  const n = Number(s);
+  return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-const hasOwn = (value: Record<string, unknown>, key: string): boolean =>
-  Object.prototype.hasOwnProperty.call(value, key)
+const hasOwn = (o: Record<string, unknown>, k: string) =>
+  Object.prototype.hasOwnProperty.call(o, k);
 
-const sanitizeOptionalString = (
-  record: Record<string, unknown>,
-  key: string,
-  { lowercase }: { lowercase?: boolean } = {}
-): { present: false } | { present: true; value: string | null } | { present: true; error: string } => {
-  if (!hasOwn(record, key)) return { present: false }
-  const raw = record[key]
-  if (raw == null) return { present: true, value: null }
-  if (typeof raw !== "string") {
-    return { present: true, error: `Invalid ${key}.` }
-  }
-  const trimmed = raw.trim()
-  if (!trimmed) {
-    return { present: true, value: null }
-  }
-  return { present: true, value: lowercase ? trimmed.toLowerCase() : trimmed }
-}
-
-const sanitizeEmail = (
-  record: Record<string, unknown>,
-  key: string
-): { present: false } | { present: true; value: string } | { present: true; error: string } => {
-  if (!hasOwn(record, key)) return { present: false }
-  const raw = record[key]
-  if (typeof raw !== "string" || !raw.trim()) {
-    return { present: true, error: "Email is required." }
-  }
-  const normalized = raw.trim().toLowerCase()
-  if (!EMAIL_REGEX.test(normalized)) {
-    return { present: true, error: "Invalid email address." }
-  }
-  return { present: true, value: normalized }
-}
-
-const sanitizeNumber = (
-  record: Record<string, unknown>,
-  key: string
-): { present: false } | { present: true; value: number | null } | { present: true; error: string } => {
-  if (!hasOwn(record, key)) return { present: false }
-  const raw = record[key]
-  if (raw == null) {
-    return { present: true, value: null }
-  }
-  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) {
-    return { present: true, error: `Invalid ${key}.` }
-  }
-  return { present: true, value: raw }
-}
-
-const sanitizeStringArray = (
-  record: Record<string, unknown>,
-  key: string,
-  { lowercase }: { lowercase?: boolean } = {}
-): { present: false } | { present: true; value: string[] } | { present: true; error: string } => {
-  if (!hasOwn(record, key)) return { present: false }
-  const raw = record[key]
-  if (raw == null) {
-    return { present: true, value: [] }
-  }
-  if (!Array.isArray(raw)) {
-    return { present: true, error: `Invalid ${key}.` }
-  }
-  const normalized = raw
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
-    .map((item) => (lowercase ? item.toLowerCase() : item))
-
-  return { present: true, value: Array.from(new Set(normalized)) }
-}
-
-const sanitizeNutritionGoals = (
-  record: Record<string, unknown>,
+function sanitizeOptionalString(
+  rec: Record<string, unknown>,
   key: string
 ):
   | { present: false }
-  | { present: true; value: NutritionGoalsUpdate | null }
-  | { present: true; error: string } => {
-  if (!hasOwn(record, key)) return { present: false }
-  const raw = record[key]
-  if (raw == null) {
-    return { present: true, value: null }
-  }
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { present: true, error: "Invalid nutrition goals." }
-  }
-  const goalsInput = raw as Record<string, unknown>
-  const normalized: NutritionGoalsUpdate = {}
-  for (const goalKey of NUTRITION_GOAL_KEYS) {
-    if (!hasOwn(goalsInput, goalKey)) continue
-    const value = goalsInput[goalKey]
-    if (value == null) continue
-    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-      return { present: true, error: `Invalid value for ${goalKey}.` }
-    }
-    normalized[goalKey] = value
-  }
-  return { present: true, value: normalized }
+  | { present: true; value: string | null }
+  | { present: true; error: string } {
+  if (!hasOwn(rec, key)) return { present: false };
+  const raw = rec[key];
+  if (raw == null) return { present: true, value: null };
+  if (typeof raw !== "string") return { present: true, error: `Invalid ${key}.` };
+  const t = raw.trim();
+  return { present: true, value: t.length ? t : null };
 }
 
-const normalizeUpdatePayload = (payload: unknown):
-  | { ok: true; value: NormalizedUpdate }
-  | { ok: false; error: string } => {
+function sanitizeEmail(
+  rec: Record<string, unknown>,
+  key: string
+):
+  | { present: false }
+  | { present: true; value: string }
+  | { present: true; error: string } {
+  if (!hasOwn(rec, key)) return { present: false };
+  const raw = rec[key];
+  if (typeof raw !== "string" || !raw.trim()) {
+    return { present: true, error: "Email is required." };
+  }
+  const e = raw.trim().toLowerCase();
+  if (!EMAIL_REGEX.test(e)) {
+    return { present: true, error: "Invalid email address." };
+  }
+  return { present: true, value: e };
+}
+
+// normalize payload (only user.name / user.email to keep it simple & safe)
+function normalizeUpdatePayload(
+  payload: unknown
+):
+  | { ok: true; value: { user: { name?: string | null; email?: string } } }
+  | { ok: false; error: string } {
   if (!payload || typeof payload !== "object") {
-    return { ok: false, error: "Invalid request payload." }
+    return { ok: false, error: "Invalid request payload." };
   }
 
-  const record = payload as Record<string, unknown>
-  const normalized: NormalizedUpdate = { user: {}, profile: {} }
+  const rec = payload as Record<string, unknown>;
+  const out: { user: { name?: string | null; email?: string } } = { user: {} };
 
-  const nameResult = sanitizeOptionalString(record, "name")
-  if (nameResult.present) {
-    if ("error" in nameResult) return { ok: false, error: nameResult.error }
-    normalized.user.name = nameResult.value
+  const name = sanitizeOptionalString(rec, "name");
+  if (name.present) {
+    if ("error" in name) return { ok: false, error: name.error };
+    out.user.name = name.value;
   }
 
-  const emailResult = sanitizeEmail(record, "email")
-  if (emailResult.present) {
-    if ("error" in emailResult) return { ok: false, error: emailResult.error }
-    normalized.user.email = emailResult.value
+  const email = sanitizeEmail(rec, "email");
+  if (email.present) {
+    if ("error" in email) return { ok: false, error: email.error };
+    out.user.email = email.value;
   }
 
-  const stringFields: Array<{ key: keyof NormalizedUpdate["profile"]; source: string; lowercase?: boolean }> = [
-    { key: "sport", source: "sport" },
-    { key: "level", source: "level" },
-    { key: "team", source: "team" },
-    { key: "position", source: "position" },
-    { key: "coachEmail", source: "coachEmail", lowercase: true },
-    { key: "phone", source: "phone" },
-    { key: "location", source: "location" },
-    { key: "university", source: "university" },
-    { key: "graduationYear", source: "graduationYear" },
-    { key: "notes", source: "notes" },
-  ]
-
-  for (const field of stringFields) {
-    const result = sanitizeOptionalString(record, field.source, { lowercase: field.lowercase })
-    if (!result.present) continue
-    if ("error" in result) return { ok: false, error: result.error }
-    normalized.profile[field.key] = result.value ?? null
+  if (!("name" in out.user) && !("email" in out.user)) {
+    return { ok: false, error: "No valid fields provided." };
   }
 
-  const heightResult = sanitizeNumber(record, "heightCm")
-  if (heightResult.present) {
-    if ("error" in heightResult) return { ok: false, error: heightResult.error }
-    normalized.profile.heightCm = heightResult.value ?? null
-  }
-
-  const weightResult = sanitizeNumber(record, "weightKg")
-  if (weightResult.present) {
-    if ("error" in weightResult) return { ok: false, error: weightResult.error }
-    normalized.profile.weightKg = weightResult.value ?? null
-  }
-
-  const allergiesResult = sanitizeStringArray(record, "allergies")
-  if (allergiesResult.present) {
-    if ("error" in allergiesResult) return { ok: false, error: allergiesResult.error }
-    normalized.profile.allergies = allergiesResult.value
-  }
-
-  const tagsResult = sanitizeStringArray(record, "tags", { lowercase: true })
-  if (tagsResult.present) {
-    if ("error" in tagsResult) return { ok: false, error: tagsResult.error }
-    normalized.profile.tags = tagsResult.value
-  }
-
-  const goalsResult = sanitizeNutritionGoals(record, "nutritionGoals")
-  if (goalsResult.present) {
-    if ("error" in goalsResult) return { ok: false, error: goalsResult.error }
-    normalized.profile.nutritionGoals = goalsResult.value ?? null
-  }
-
-  const hasUserUpdates = Object.keys(normalized.user).length > 0
-  const hasProfileUpdates = Object.keys(normalized.profile).length > 0
-
-  if (!hasUserUpdates && !hasProfileUpdates) {
-    return { ok: false, error: "No valid fields provided." }
-  }
-
-  return { ok: true, value: normalized }
+  return { ok: true, value: out };
 }
 
-const parseNutritionGoalsFromDb = (
-  value: Prisma.JsonValue | null
-): NutritionGoalsUpdate | null => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null
-  }
+// Tie types to the exact query (only relations in include; scalars are always present)
+const findArgs = (userId: number) =>
+  ({
+    where: { userId },
+    include: { user: { select: { id: true, email: true, name: true, role: true } } },
+  }) satisfies Prisma.AthleteProfileFindUniqueArgs;
 
-  const record = value as Record<string, unknown>
-  const normalized: NutritionGoalsUpdate = {}
-  let hasValue = false
+type AthleteWithUser = Prisma.AthleteProfileGetPayload<ReturnType<typeof findArgs>>;
 
-  for (const key of NUTRITION_GOAL_KEYS) {
-    const raw = record[key]
-    if (typeof raw === "number" && Number.isFinite(raw)) {
-      normalized[key] = raw
-      hasValue = true
-    }
-  }
-
-  return hasValue ? normalized : null
-}
-
-const toAthleteResponse = (
-  profile: Awaited<ReturnType<typeof prisma.athleteProfile.findUnique>>
-) => {
-  if (!profile) return null
+function toResponse(p: AthleteWithUser) {
   return {
-    id: profile.user.id,
-    email: profile.user.email,
-    name: profile.user.name,
-    role: profile.user.role,
+    id: p.user.id,
+    email: p.user.email,
+    name: p.user.name,
+    role: p.user.role,
+    // keep the profile minimal here to avoid schema/type drift
     profile: {
-      id: profile.id,
-      sport: profile.sport,
-      level: profile.level,
-      team: profile.team,
-      position: profile.position,
-      coachEmail: profile.coachEmail,
-      heightCm: profile.heightCm,
-      weightKg: profile.weightKg,
-      allergies: profile.allergies,
-      tags: profile.tags,
-      phone: profile.phone,
-      location: profile.location,
-      university: profile.university,
-      graduationYear: profile.graduationYear,
-      notes: profile.notes,
-      nutritionGoals: parseNutritionGoalsFromDb(profile.nutritionGoals),
+      id: p.id,
+      userId: p.userId,
     },
-  }
+  };
 }
 
-const parseAthleteId = (value: string): number | null => {
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    return null
-  }
-  return parsed
-}
-
-const ensureAuthorized = async (athleteId: number) => {
-  const user = await getSessionUser()
+async function ensureAuthorized(athleteId: number) {
+  const user = await getSessionUser();
   if (!user) {
-    return { ok: false as const, response: NextResponse.json({ error: "Not authenticated." }, { status: 401 }) }
+    return {
+      ok: false as const,
+      res: NextResponse.json({ error: "Not authenticated." }, { status: 401 }),
+    };
   }
 
-  if (user.role === "ATHLETE" && user.id !== athleteId) {
-    return { ok: false as const, response: NextResponse.json({ error: "Forbidden." }, { status: 403 }) }
+  // Compare as string to avoid enum/type mismatches from session typing
+  if (String(user.role) === "ATHLETE" && user.id !== athleteId) {
+    return {
+      ok: false as const,
+      res: NextResponse.json({ error: "Forbidden." }, { status: 403 }),
+    };
   }
 
-  return { ok: true as const, user }
+  return { ok: true as const, user };
 }
+
+// --- route handlers (Next.js 15: params is a Promise) ----------------------
 
 export async function GET(
-  _request: NextRequest,
-  { params }: { params: { id: string } }
+  _req: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
-  const athleteId = parseAthleteId(params.id)
+  const { id } = await context.params;
+  const athleteId = parseId(id);
   if (!athleteId) {
-    return NextResponse.json({ error: "Invalid athlete id." }, { status: 400 })
+    return NextResponse.json({ error: "Invalid athlete id." }, { status: 400 });
   }
 
-  const auth = await ensureAuthorized(athleteId)
-  if (!auth.ok) {
-    return auth.response
-  }
+  const auth = await ensureAuthorized(athleteId);
+  if (!auth.ok) return auth.res;
 
-  const profile = await prisma.athleteProfile.findUnique({
-    where: { userId: athleteId },
-    include: {
-      user: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-        },
-      },
-    },
-  })
-
+  const profile = await prisma.athleteProfile.findUnique(findArgs(athleteId));
   if (!profile) {
-    return NextResponse.json({ error: "Athlete not found." }, { status: 404 })
+    return NextResponse.json({ error: "Athlete not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ athlete: toAthleteResponse(profile) })
+  return NextResponse.json({ athlete: toResponse(profile) });
 }
 
 export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
-  const athleteId = parseAthleteId(params.id)
+  const { id } = await context.params;
+  const athleteId = parseId(id);
   if (!athleteId) {
-    return NextResponse.json({ error: "Invalid athlete id." }, { status: 400 })
+    return NextResponse.json({ error: "Invalid athlete id." }, { status: 400 });
   }
 
-  const auth = await ensureAuthorized(athleteId)
-  if (!auth.ok) {
-    return auth.response
-  }
+  const auth = await ensureAuthorized(athleteId);
+  if (!auth.ok) return auth.res;
 
-  let payload: unknown
+  let body: unknown;
   try {
-    payload = await request.json()
+    body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 })
+    return NextResponse.json({ error: "Invalid JSON payload." }, { status: 400 });
   }
 
-  const normalized = normalizeUpdatePayload(payload)
+  const normalized = normalizeUpdatePayload(body);
   if (!normalized.ok) {
-    return NextResponse.json({ error: normalized.error }, { status: 400 })
+    return NextResponse.json({ error: normalized.error }, { status: 400 });
   }
 
   try {
-    const profile = await prisma.athleteProfile.update({
+    const updated = await prisma.athleteProfile.update({
       where: { userId: athleteId },
       data: {
-        sport: normalized.value.profile.sport,
-        level: normalized.value.profile.level,
-        team: normalized.value.profile.team,
-        position: normalized.value.profile.position,
-        coachEmail: normalized.value.profile.coachEmail,
-        heightCm: normalized.value.profile.heightCm,
-        weightKg: normalized.value.profile.weightKg,
-        allergies: normalized.value.profile.allergies,
-        tags: normalized.value.profile.tags,
-        phone: normalized.value.profile.phone,
-        location: normalized.value.profile.location,
-        university: normalized.value.profile.university,
-        graduationYear: normalized.value.profile.graduationYear,
-        notes: normalized.value.profile.notes,
-        nutritionGoals:
-          normalized.value.profile.nutritionGoals === undefined
-            ? undefined
-            : normalized.value.profile.nutritionGoals === null
-              ? Prisma.JsonNull
-              : normalized.value.profile.nutritionGoals,
         user:
           Object.keys(normalized.value.user).length > 0
-            ? {
-                update: normalized.value.user,
-              }
+            ? { update: normalized.value.user }
             : undefined,
       },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-          },
-        },
-      },
-    })
+      include: { user: { select: { id: true, email: true, name: true, role: true } } },
+    });
 
-    return NextResponse.json({ athlete: toAthleteResponse(profile) })
+    return NextResponse.json({ athlete: toResponse(updated) });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
-        return NextResponse.json({ error: "Email already in use." }, { status: 409 })
+        return NextResponse.json({ error: "Email already in use." }, { status: 409 });
       }
       if (error.code === "P2025") {
-        return NextResponse.json({ error: "Athlete not found." }, { status: 404 })
+        return NextResponse.json({ error: "Athlete not found." }, { status: 404 });
       }
     }
-
-    console.error("Failed to update athlete profile", error)
-    return NextResponse.json({ error: "Unable to update athlete." }, { status: 500 })
+    console.error("Failed to update athlete profile", error);
+    return NextResponse.json({ error: "Unable to update athlete." }, { status: 500 });
   }
 }
