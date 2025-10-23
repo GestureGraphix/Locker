@@ -123,6 +123,119 @@ const toUserAccountFromSql = (user: SqlAuthUserPayload | null | undefined): User
   }
 }
 
+const coerceNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+const sanitizeNutritionFactsFromServer = (value: unknown): NutritionFact[] => {
+  if (!Array.isArray(value)) return []
+  const facts: NutritionFact[] = []
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+    const name = typeof record.name === "string" ? record.name.trim() : ""
+    if (!name) continue
+    const fact: NutritionFact = { name }
+    const amount = coerceNumber(record.amount)
+    if (amount != null) fact.amount = amount
+    if (typeof record.unit === "string" && record.unit.trim()) {
+      fact.unit = record.unit.trim()
+    }
+    const pdv = coerceNumber(record.percentDailyValue)
+    if (pdv != null) fact.percentDailyValue = pdv
+    if (typeof record.display === "string" && record.display.trim()) {
+      fact.display = record.display.trim()
+    }
+    facts.push(fact)
+  }
+  return facts
+}
+
+const sanitizeMealLogsFromServer = (value: unknown): MealLog[] => {
+  if (!Array.isArray(value)) return []
+  const logs: MealLog[] = []
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+    const idNumber = coerceNumber(record.id)
+    if (idNumber == null || !Number.isInteger(idNumber) || idNumber <= 0) continue
+    const rawDate = typeof record.dateTime === "string" ? record.dateTime : null
+    const dateTime = rawDate && !Number.isNaN(new Date(rawDate).getTime()) ? rawDate : new Date().toISOString()
+    const mealType =
+      typeof record.mealType === "string" && record.mealType.trim()
+        ? record.mealType.trim()
+        : "meal"
+    const calories = coerceNumber(record.calories) ?? 0
+    const protein =
+      coerceNumber(record.proteinG) ??
+      coerceNumber((record as Record<string, unknown>).proteinGrams) ??
+      0
+    const notes = typeof record.notes === "string" ? record.notes : ""
+    const completed = Boolean(record.completed)
+    const nutritionFacts = sanitizeNutritionFactsFromServer(record.nutritionFacts)
+    logs.push({
+      id: idNumber,
+      dateTime,
+      mealType,
+      calories: Math.round(calories),
+      proteinG: protein,
+      notes,
+      completed,
+      nutritionFacts,
+    })
+  }
+  return logs.sort(
+    (a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
+  )
+}
+
+const buildAthleteForSqlUser = (
+  user: UserAccount,
+  options: {
+    hydrationLogs?: HydrationLog[]
+    mealLogs?: MealLog[]
+    previous?: Athlete | null
+  } = {}
+): Athlete => {
+  const base = options.previous ?? initialAthletes[0] ?? null
+  const baseIsSeed = base?.isSeedData ?? false
+  const hydrationLogs =
+    options.hydrationLogs ?? (baseIsSeed ? [] : base?.hydrationLogs ?? [])
+  const mealLogs = options.mealLogs ?? (baseIsSeed ? [] : base?.mealLogs ?? [])
+
+  return {
+    id: user.id ?? base?.id ?? Date.now(),
+    name: user.name ?? base?.name ?? user.email,
+    email: user.email,
+    sport: base?.sport ?? "",
+    level: base?.level ?? "",
+    team: base?.team ?? "",
+    tags: baseIsSeed ? [] : base?.tags ?? [],
+    sessions: baseIsSeed ? [] : base?.sessions ?? [],
+    calendar: baseIsSeed ? [] : base?.calendar ?? [],
+    workouts: baseIsSeed ? [] : base?.workouts ?? [],
+    hydrationLogs,
+    mealLogs,
+    nutritionGoals: baseIsSeed ? undefined : base?.nutritionGoals,
+    coachEmail: baseIsSeed ? undefined : base?.coachEmail,
+    position: baseIsSeed ? undefined : base?.position,
+    heightCm: baseIsSeed ? undefined : base?.heightCm,
+    weightKg: baseIsSeed ? undefined : base?.weightKg,
+    allergies: baseIsSeed ? [] : base?.allergies ?? [],
+    phone: baseIsSeed ? undefined : base?.phone,
+    location: baseIsSeed ? undefined : base?.location,
+    university: baseIsSeed ? undefined : base?.university,
+    graduationYear: baseIsSeed ? undefined : base?.graduationYear,
+    notes: baseIsSeed ? undefined : base?.notes,
+    isSeedData: false,
+  }
+}
+
 type RoleContextValue = {
   role: Role
   setRole: (role: Role) => void
@@ -387,6 +500,91 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }
   }, [sqlAuthEnabled])
 
+  useEffect(() => {
+    if (!sqlAuthEnabled) return
+
+    if (!currentUser || currentUser.role !== "athlete" || currentUser.id == null) {
+      setAthletes(initialAthletes)
+      setActiveAthleteId(initialAthletes[0]?.id ?? null)
+      return
+    }
+
+    const userId = currentUser.id
+
+    setAthletes((prev) => {
+      const previous = prev.find((athlete) => athlete.id === userId) ?? null
+      const hydrationLogs = previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
+      const mealLogs = previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
+      return [
+        buildAthleteForSqlUser(currentUser, {
+          previous,
+          hydrationLogs,
+          mealLogs,
+        }),
+      ]
+    })
+    setActiveAthleteId(userId)
+
+    let cancelled = false
+
+    const loadMealLogs = async () => {
+      try {
+        const response = await fetch(`/api/athletes/${userId}/meal-logs`, { cache: "no-store" })
+        if (!response.ok) {
+          if (response.status !== 404) {
+            console.error("Failed to fetch meal logs", response.status)
+          }
+          if (cancelled) return
+          setAthletes((prev) => {
+            const previous = prev.find((athlete) => athlete.id === userId) ?? null
+            const hydrationLogs =
+              previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
+            return [
+              buildAthleteForSqlUser(currentUser, {
+                previous,
+                hydrationLogs,
+                mealLogs: [],
+              }),
+            ]
+          })
+          return
+        }
+
+        let payload: { mealLogs?: unknown } | null = null
+        try {
+          payload = (await response.json()) as { mealLogs?: unknown }
+        } catch {
+          payload = null
+        }
+        if (cancelled) return
+
+        const mealLogs = sanitizeMealLogsFromServer(payload?.mealLogs)
+        setAthletes((prev) => {
+          const previous = prev.find((athlete) => athlete.id === userId) ?? null
+          const hydrationLogs =
+            previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
+          return [
+            buildAthleteForSqlUser(currentUser, {
+              previous,
+              hydrationLogs,
+              mealLogs,
+            }),
+          ]
+        })
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch meal logs", error)
+        }
+      }
+    }
+
+    void loadMealLogs()
+
+    return () => {
+      cancelled = true
+    }
+  }, [sqlAuthEnabled, currentUser])
+
   const setRole = useCallback((nextRole: Role) => {
     setRoleState(nextRole)
   }, [])
@@ -606,20 +804,63 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     []
   )
 
+  const syncMealLogsToServer = useCallback(
+    async (athleteId: number, logs: MealLog[]) => {
+      if (!sqlAuthEnabled) return
+      if (!currentUser || currentUser.role !== "athlete" || currentUser.id == null) return
+      if (currentUser.id !== athleteId) return
+
+      try {
+        const response = await fetch(`/api/athletes/${athleteId}/meal-logs`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mealLogs: logs }),
+        })
+
+        if (!response.ok) {
+          console.error("Failed to sync meal logs", response.status)
+          return
+        }
+
+        let payload: { mealLogs?: unknown } | null = null
+        try {
+          payload = (await response.json()) as { mealLogs?: unknown }
+        } catch {
+          payload = null
+        }
+
+        const normalized = sanitizeMealLogsFromServer(payload?.mealLogs)
+        setAthletes((prev) =>
+          prev.map((athlete) =>
+            athlete.id === athleteId ? { ...athlete, mealLogs: normalized } : athlete
+          )
+        )
+      } catch (error) {
+        console.error("Failed to sync meal logs", error)
+      }
+    },
+    [sqlAuthEnabled, currentUser]
+  )
+
   const updateMealLogs = useCallback(
     (athleteId: number, updater: (logs: MealLog[]) => MealLog[]) => {
+      let updatedLogs: MealLog[] | null = null
       setAthletes((prev) =>
         prev.map((athlete) => {
           if (athlete.id !== athleteId) return athlete
           const nextLogs = updater(athlete.mealLogs ?? [])
+          updatedLogs = nextLogs
           return {
             ...athlete,
             mealLogs: nextLogs,
           }
         })
       )
+      if (updatedLogs) {
+        void syncMealLogsToServer(athleteId, updatedLogs)
+      }
     },
-    []
+    [syncMealLogsToServer]
   )
 
   const updateAthleteProfile = useCallback(

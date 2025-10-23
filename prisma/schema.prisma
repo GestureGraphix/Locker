@@ -22,6 +22,7 @@ model User {
   athleteProfile     AthleteProfile?
   academics          Academics?
   sessionTokens      SessionToken[]
+  mealLogs           MealLog[]
 
   @@map("users")
 }
@@ -73,4 +74,20 @@ model SessionToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("session_tokens")
+}
+
+model MealLog {
+  userId         Int
+  id             Int
+  dateTime       DateTime
+  mealType       String
+  calories       Int
+  proteinGrams   Float
+  notes          String?
+  completed      Boolean  @default(false)
+  nutritionFacts Json
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, id])
+  @@map("meal_logs")
 }
