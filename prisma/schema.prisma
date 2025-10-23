@@ -34,9 +34,24 @@ model PasswordCredentials {
 }
 
 model AthleteProfile {
-  id     Int   @id @default(autoincrement())
-  userId Int   @unique
-  user   User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             Int     @id @default(autoincrement())
+  userId         Int     @unique
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sport          String?
+  level          String?
+  team           String?
+  position       String?
+  coachEmail     String?
+  heightCm       Float?
+  weightKg       Float?
+  allergies      String[] @default([])
+  tags           String[] @default([])
+  phone          String?
+  location       String?
+  university     String?
+  graduationYear String?
+  notes          String?
+  nutritionGoals Json?
 
   @@map("athlete_profiles")
 }
