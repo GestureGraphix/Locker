@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { randomBytes } from 'node:crypto'
 
 import prisma from './prisma'
+import type { Role } from '@prisma/client'
 
 const SALT_ROUNDS = 12
 export const SESSION_COOKIE_NAME = 'session_token'
@@ -61,4 +62,42 @@ export const destroySession = async (): Promise<void> => {
     maxAge: 0,
     expires: new Date(0),
   })
+}
+
+export type SessionUser = {
+  id: number
+  email: string
+  name: string | null
+  role: Role
+}
+
+export const getSessionUser = async (): Promise<SessionUser | null> => {
+  const cookieStore = await cookies()
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value
+
+  if (!token) {
+    return null
+  }
+
+  const session = await prisma.sessionToken.findUnique({
+    where: { token },
+    select: {
+      expiresAt: true,
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+        },
+      },
+    },
+  })
+
+  if (!session || session.expiresAt <= new Date()) {
+    await destroySession()
+    return null
+  }
+
+  return session.user
 }
