@@ -21,35 +21,40 @@ const ACADEMIC_ITEM_TYPES = new Set([
 
 const normalizeCourse = (
   value: unknown,
-):
-  | {
-      ok: true
-      course: {
-        id: number
-        name: string
-        code: string
-        professor: string
-        schedule?: string
-        source?: string
-      }
-    }
-  | { ok: false } => {
+): {
+  ok: boolean
+  course?: {
+    id: number
+    name: string
+    code: string
+    professor: string
+    schedule?: string
+    source?: string
+  }
+} => {
   if (!value || typeof value !== "object") return { ok: false }
   const record = value as Record<string, unknown>
+
   const id = Number(record.id)
   if (!Number.isInteger(id) || id <= 0) return { ok: false }
+
   const name = typeof record.name === "string" ? record.name.trim() : ""
   const code = typeof record.code === "string" ? record.code.trim() : ""
-  const professor = typeof record.professor === "string" ? record.professor.trim() : ""
+  const professor =
+    typeof record.professor === "string" ? record.professor.trim() : ""
   if (!name || !code) return { ok: false }
+
   const schedule =
     typeof record.schedule === "string" && record.schedule.trim()
       ? record.schedule.trim()
       : undefined
+
   const source =
-    typeof record.source === "string" && COURSE_SOURCE_VALUES.has(record.source)
+    typeof record.source === "string" &&
+    COURSE_SOURCE_VALUES.has(record.source)
       ? record.source
       : undefined
+
   return {
     ok: true,
     course: {
@@ -63,79 +68,120 @@ const normalizeCourse = (
   }
 }
 
+
 const normalizeCourses = (
   value: unknown,
-):
-  | { ok: true; courses: ReturnType<typeof normalizeCourse>["course"][] }
-  | { ok: false; error: string } => {
+): {
+  ok: boolean
+  courses: {
+    id: number
+    name: string
+    code: string
+    professor: string
+    schedule?: string
+    source?: string
+  }[]
+  error?: string
+} => {
   if (value === undefined) {
     return { ok: true, courses: [] }
   }
   if (!Array.isArray(value)) {
-    return { ok: false, error: "courses must be an array." }
+    return { ok: false, courses: [], error: "courses must be an array." }
   }
   if (value.length > 200) {
-    return { ok: false, error: "Too many courses provided." }
+    return {
+      ok: false,
+      courses: [],
+      error: "Too many courses provided.",
+    }
   }
-  const courses: ReturnType<typeof normalizeCourse>["course"][] = []
+
+  const courses: {
+    id: number
+    name: string
+    code: string
+    professor: string
+    schedule?: string
+    source?: string
+  }[] = []
+
   const seen = new Set<number>()
+
   for (const item of value) {
     const normalized = normalizeCourse(item)
-    if (!normalized.ok) {
-      return { ok: false, error: "Invalid course entry." }
+    if (!normalized.ok || !normalized.course) {
+      return { ok: false, courses: [], error: "Invalid course entry." }
     }
     if (seen.has(normalized.course.id)) {
-      return { ok: false, error: "Duplicate course id detected." }
+      return {
+        ok: false,
+        courses: [],
+        error: "Duplicate course id detected.",
+      }
     }
     seen.add(normalized.course.id)
     courses.push(normalized.course)
   }
+
   return { ok: true, courses }
 }
 
+
 const normalizeAcademicItem = (
   value: unknown,
-):
-  | {
-      ok: true
-      item: {
-        id: number
-        courseId?: number
-        course: string
-        type: string
-        title: string
-        dueAt: string
-        notes?: string
-        completed: boolean
-        source: string
-        externalId?: string
-      }
-    }
-  | { ok: false } => {
+): {
+  ok: boolean
+  item?: {
+    id: number
+    courseId?: number
+    course: string
+    type: string
+    title: string
+    dueAt: string
+    notes?: string
+    completed: boolean
+    source: string
+    externalId?: string
+  }
+} => {
   if (!value || typeof value !== "object") return { ok: false }
+
   const record = value as Record<string, unknown>
   const id = Number(record.id)
   if (!Number.isInteger(id) || id <= 0) return { ok: false }
+
   const course = typeof record.course === "string" ? record.course.trim() : ""
   const title = typeof record.title === "string" ? record.title.trim() : ""
   const dueAt = typeof record.dueAt === "string" ? record.dueAt : ""
   if (!course || !title || !dueAt) return { ok: false }
+
   const type = typeof record.type === "string" ? record.type.trim() : ""
   if (!ACADEMIC_ITEM_TYPES.has(type)) return { ok: false }
+
   const courseId =
-    typeof record.courseId === "number" && Number.isInteger(record.courseId) && record.courseId > 0
+    typeof record.courseId === "number" &&
+    Number.isInteger(record.courseId) &&
+    record.courseId > 0
       ? record.courseId
       : undefined
+
   const notes =
-    typeof record.notes === "string" && record.notes.trim() ? record.notes.trim() : undefined
+    typeof record.notes === "string" && record.notes.trim()
+      ? record.notes.trim()
+      : undefined
+
   const source =
-    typeof record.source === "string" && COURSE_SOURCE_VALUES.has(record.source)
+    typeof record.source === "string" &&
+    COURSE_SOURCE_VALUES.has(record.source)
       ? record.source
       : "manual"
+
   const externalId =
     typeof record.externalId === "string" && record.externalId.trim()
       ? record.externalId.trim()
       : undefined
+
   return {
     ok: true,
     item: {
@@ -155,33 +201,78 @@ const normalizeAcademicItem = (
 
 const normalizeAcademicItems = (
   value: unknown,
-):
-  | { ok: true; academicItems: ReturnType<typeof normalizeAcademicItem>["item"][] }
-  | { ok: false; error: string } => {
+): {
+  ok: boolean
+  academicItems: {
+    id: number
+    courseId?: number
+    course: string
+    type: string
+    title: string
+    dueAt: string
+    notes?: string
+    completed: boolean
+    source: string
+    externalId?: string
+  }[]
+  error?: string
+} => {
   if (value === undefined) {
     return { ok: true, academicItems: [] }
   }
   if (!Array.isArray(value)) {
-    return { ok: false, error: "academicItems must be an array." }
+    return {
+      ok: false,
+      academicItems: [],
+      error: "academicItems must be an array.",
+    }
   }
   if (value.length > 500) {
-    return { ok: false, error: "Too many academic items provided." }
+    return {
+      ok: false,
+      academicItems: [],
+      error: "Too many academic items provided.",
+    }
   }
-  const items: ReturnType<typeof normalizeAcademicItem>["item"][] = []
+
+  const items: {
+    id: number
+    courseId?: number
+    course: string
+    type: string
+    title: string
+    dueAt: string
+    notes?: string
+    completed: boolean
+    source: string
+    externalId?: string
+  }[] = []
+
   const seen = new Set<number>()
+
   for (const entry of value) {
     const normalized = normalizeAcademicItem(entry)
-    if (!normalized.ok) {
-      return { ok: false, error: "Invalid academic item entry." }
+    if (!normalized.ok || !normalized.item) {
+      return {
+        ok: false,
+        academicItems: [],
+        error: "Invalid academic item entry.",
+      }
     }
     if (seen.has(normalized.item.id)) {
-      return { ok: false, error: "Duplicate academic item id detected." }
+      return {
+        ok: false,
+        academicItems: [],
+        error: "Duplicate academic item id detected.",
+      }
     }
     seen.add(normalized.item.id)
     items.push(normalized.item)
   }
+
   return { ok: true, academicItems: items }
 }
+
 
 async function ensureAuthorized(athleteId: number) {
   const user = await getSessionUser()
