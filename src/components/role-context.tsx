@@ -8,6 +8,7 @@ import type {
   MealLog,
   MobilityExercise,
   MobilityLog,
+  CheckInLog,
   Role,
   StoredAccount,
   UserAccount,
@@ -298,6 +299,50 @@ const sanitizeMobilityLogsFromServer = (value: unknown): MobilityLog[] => {
   })
 }
 
+const sanitizeCheckInLogsFromServer = (value: unknown): CheckInLog[] => {
+  if (!Array.isArray(value)) return []
+  const logs: CheckInLog[] = []
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+    const idNumber = coerceNumber(record.id)
+    if (idNumber == null || !Number.isInteger(idNumber) || idNumber <= 0) continue
+    const date = typeof record.date === "string" ? record.date.trim() : ""
+    if (!date) continue
+    const createdAt =
+      typeof record.createdAt === "string" && record.createdAt.trim()
+        ? record.createdAt.trim()
+        : null
+    if (!createdAt || Number.isNaN(new Date(createdAt).getTime())) continue
+    const mentalState = coerceNumber(record.mentalState)
+    if (mentalState == null || mentalState < 1 || mentalState > 10) continue
+    const physicalState = coerceNumber(record.physicalState)
+    if (physicalState == null || physicalState < 1 || physicalState > 10) continue
+    const mentalNotes =
+      typeof record.mentalNotes === "string" && record.mentalNotes.trim()
+        ? record.mentalNotes.trim()
+        : undefined
+    const physicalNotes =
+      typeof record.physicalNotes === "string" && record.physicalNotes.trim()
+        ? record.physicalNotes.trim()
+        : undefined
+    logs.push({
+      id: idNumber,
+      date,
+      createdAt,
+      mentalState: Math.round(mentalState),
+      physicalState: Math.round(physicalState),
+      ...(mentalNotes ? { mentalNotes } : {}),
+      ...(physicalNotes ? { physicalNotes } : {}),
+    })
+  }
+  return logs.sort((a, b) => {
+    const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime()
+    if (dateDiff !== 0) return dateDiff
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
+}
+
 const sanitizeWorkoutsFromServer = (value: unknown): WorkoutPlan[] => {
   if (!Array.isArray(value)) return []
   const workouts: WorkoutPlan[] = []
@@ -364,6 +409,7 @@ const buildAthleteForSqlUser = (
     workouts?: WorkoutPlan[]
     mobilityExercises?: MobilityExercise[]
     mobilityLogs?: MobilityLog[]
+    checkInLogs?: CheckInLog[]
     previous?: Athlete | null
   } = {}
 ): Athlete => {
@@ -377,6 +423,8 @@ const buildAthleteForSqlUser = (
     options.mobilityExercises ?? (baseIsSeed ? [] : base?.mobilityExercises ?? [])
   const mobilityLogs =
     options.mobilityLogs ?? (baseIsSeed ? [] : base?.mobilityLogs ?? [])
+  const checkInLogs =
+    options.checkInLogs ?? (baseIsSeed ? [] : base?.checkInLogs ?? [])
 
   return {
     id: user.id ?? base?.id ?? Date.now(),
@@ -393,6 +441,7 @@ const buildAthleteForSqlUser = (
     mealLogs,
     mobilityExercises,
     mobilityLogs,
+    checkInLogs,
     nutritionGoals: baseIsSeed ? undefined : base?.nutritionGoals,
     coachEmail: baseIsSeed ? undefined : base?.coachEmail,
     position: baseIsSeed ? undefined : base?.position,
@@ -426,6 +475,7 @@ type RoleContextValue = {
     updater: (exercises: MobilityExercise[]) => MobilityExercise[]
   ) => void
   updateMobilityLogs: (athleteId: number, updater: (logs: MobilityLog[]) => MobilityLog[]) => void
+  updateCheckInLogs: (athleteId: number, updater: (logs: CheckInLog[]) => CheckInLog[]) => void
   currentUser: UserAccount | null
   login: (input: LoginInput) => AuthResult
   createAccount: (input: CreateAccountInput) => AuthResult
@@ -696,6 +746,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       const mobilityExercises =
         previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
       const mobilityLogs = previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+      const checkInLogs = previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
       return [
         buildAthleteForSqlUser(currentUser, {
           previous,
@@ -704,6 +755,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           workouts,
           mobilityExercises,
           mobilityLogs,
+          checkInLogs,
         }),
       ]
     })
@@ -729,19 +781,22 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               previous && !previous.isSeedData ? previous.workouts ?? [] : []
             const mobilityExercises =
               previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-            const mobilityLogs =
-              previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-            return [
-              buildAthleteForSqlUser(currentUser, {
-                previous,
-                hydrationLogs: [],
-                mealLogs,
-                workouts,
-                mobilityExercises,
-                mobilityLogs,
-              }),
-            ]
-          })
+          const mobilityLogs =
+            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+          const checkInLogs =
+            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+          return [
+            buildAthleteForSqlUser(currentUser, {
+              previous,
+              hydrationLogs: [],
+              mealLogs,
+              workouts,
+              mobilityExercises,
+              mobilityLogs,
+              checkInLogs,
+            }),
+          ]
+        })
           return
         }
 
@@ -764,6 +819,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
           const mobilityLogs =
             previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+          const checkInLogs =
+            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
@@ -772,6 +829,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               workouts,
               mobilityExercises,
               mobilityLogs,
+              checkInLogs,
             }),
           ]
         })
@@ -796,21 +854,24 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
             const workouts =
               previous && !previous.isSeedData ? previous.workouts ?? [] : []
-            const mobilityExercises =
-              previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-            const mobilityLogs =
-              previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-            return [
-              buildAthleteForSqlUser(currentUser, {
-                previous,
-                hydrationLogs,
-                mealLogs: [],
-                workouts,
-                mobilityExercises,
-                mobilityLogs,
-              }),
-            ]
-          })
+          const mobilityExercises =
+            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
+          const mobilityLogs =
+            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+          const checkInLogs =
+            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+          return [
+            buildAthleteForSqlUser(currentUser, {
+              previous,
+              hydrationLogs,
+              mealLogs: [],
+              workouts,
+              mobilityExercises,
+              mobilityLogs,
+              checkInLogs,
+            }),
+          ]
+        })
           return
         }
 
@@ -833,6 +894,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
           const mobilityLogs =
             previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+          const checkInLogs =
+            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
@@ -841,6 +904,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               workouts,
               mobilityExercises,
               mobilityLogs,
+              checkInLogs,
             }),
           ]
         })
@@ -867,21 +931,24 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
             const mealLogs =
               previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-            const mobilityExercises =
-              previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-            const mobilityLogs =
-              previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-            return [
-              buildAthleteForSqlUser(currentUser, {
-                previous,
-                hydrationLogs,
-                mealLogs,
-                workouts: [],
-                mobilityExercises,
-                mobilityLogs,
-              }),
-            ]
-          })
+          const mobilityExercises =
+            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
+          const mobilityLogs =
+            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+          const checkInLogs =
+            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+          return [
+            buildAthleteForSqlUser(currentUser, {
+              previous,
+              hydrationLogs,
+              mealLogs,
+              workouts: [],
+              mobilityExercises,
+              mobilityLogs,
+              checkInLogs,
+            }),
+          ]
+        })
           return
         }
 
@@ -904,6 +971,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
           const mobilityLogs =
             previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+          const checkInLogs =
+            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
@@ -912,6 +981,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               workouts,
               mobilityExercises,
               mobilityLogs,
+              checkInLogs,
             }),
           ]
         })
@@ -940,19 +1010,22 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
             const workouts =
               previous && !previous.isSeedData ? previous.workouts ?? [] : []
-            const mobilityLogs =
-              previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-            return [
-              buildAthleteForSqlUser(currentUser, {
-                previous,
-                hydrationLogs,
-                mealLogs,
-                workouts,
-                mobilityExercises: [],
-                mobilityLogs,
-              }),
-            ]
-          })
+          const mobilityLogs =
+            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+          const checkInLogs =
+            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+          return [
+            buildAthleteForSqlUser(currentUser, {
+              previous,
+              hydrationLogs,
+              mealLogs,
+              workouts,
+              mobilityExercises: [],
+              mobilityLogs,
+              checkInLogs,
+            }),
+          ]
+        })
           return
         }
 
@@ -977,6 +1050,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             previous && !previous.isSeedData ? previous.workouts ?? [] : []
           const mobilityLogs =
             previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+          const checkInLogs =
+            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
@@ -985,6 +1060,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               workouts,
               mobilityExercises,
               mobilityLogs,
+              checkInLogs,
             }),
           ]
         })
@@ -1013,19 +1089,22 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
             const workouts =
               previous && !previous.isSeedData ? previous.workouts ?? [] : []
-            const mobilityExercises =
-              previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-            return [
-              buildAthleteForSqlUser(currentUser, {
-                previous,
-                hydrationLogs,
-                mealLogs,
-                workouts,
-                mobilityExercises,
-                mobilityLogs: [],
-              }),
-            ]
-          })
+          const mobilityExercises =
+            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
+          const checkInLogs =
+            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+          return [
+            buildAthleteForSqlUser(currentUser, {
+              previous,
+              hydrationLogs,
+              mealLogs,
+              workouts,
+              mobilityExercises,
+              mobilityLogs: [],
+              checkInLogs,
+            }),
+          ]
+        })
           return
         }
 
@@ -1048,6 +1127,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             previous && !previous.isSeedData ? previous.workouts ?? [] : []
           const mobilityExercises =
             previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
+          const checkInLogs =
+            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
@@ -1056,6 +1137,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               workouts,
               mobilityExercises,
               mobilityLogs,
+              checkInLogs,
             }),
           ]
         })
@@ -1066,11 +1148,89 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const loadCheckInLogs = async () => {
+      try {
+        const response = await fetch(`/api/athletes/${userId}/check-in-logs`, {
+          cache: "no-store",
+        })
+        if (!response.ok) {
+          if (response.status !== 404) {
+            console.error("Failed to fetch check-in logs", response.status)
+          }
+          if (cancelled) return
+          setAthletes((prev) => {
+            const previous = prev.find((athlete) => athlete.id === userId) ?? null
+            const hydrationLogs =
+              previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
+            const mealLogs =
+              previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
+            const workouts =
+              previous && !previous.isSeedData ? previous.workouts ?? [] : []
+            const mobilityExercises =
+              previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
+            const mobilityLogs =
+              previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+            return [
+              buildAthleteForSqlUser(currentUser, {
+                previous,
+                hydrationLogs,
+                mealLogs,
+                workouts,
+                mobilityExercises,
+                mobilityLogs,
+                checkInLogs: [],
+              }),
+            ]
+          })
+          return
+        }
+
+        let payload: { checkInLogs?: unknown } | null = null
+        try {
+          payload = (await response.json()) as { checkInLogs?: unknown }
+        } catch {
+          payload = null
+        }
+        if (cancelled) return
+
+        const checkInLogs = sanitizeCheckInLogsFromServer(payload?.checkInLogs)
+        setAthletes((prev) => {
+          const previous = prev.find((athlete) => athlete.id === userId) ?? null
+          const hydrationLogs =
+            previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
+          const mealLogs =
+            previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
+          const workouts =
+            previous && !previous.isSeedData ? previous.workouts ?? [] : []
+          const mobilityExercises =
+            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
+          const mobilityLogs =
+            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+          return [
+            buildAthleteForSqlUser(currentUser, {
+              previous,
+              hydrationLogs,
+              mealLogs,
+              workouts,
+              mobilityExercises,
+              mobilityLogs,
+              checkInLogs,
+            }),
+          ]
+        })
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch check-in logs", error)
+        }
+      }
+    }
+
     void loadHydrationLogs()
     void loadMealLogs()
     void loadWorkouts()
     void loadMobilityExercises()
     void loadMobilityLogs()
+    void loadCheckInLogs()
 
     return () => {
       cancelled = true
@@ -1583,6 +1743,67 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     [syncMobilityLogsToServer]
   )
 
+  const syncCheckInLogsToServer = useCallback(
+    async (athleteId: number, logs: CheckInLog[]) => {
+      if (!sqlAuthEnabled) return
+      if (!currentUser || currentUser.role !== "athlete" || currentUser.id == null) return
+      if (currentUser.id !== athleteId) return
+
+      try {
+        const response = await fetch(`/api/athletes/${athleteId}/check-in-logs`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ checkInLogs: logs }),
+        })
+
+        if (!response.ok) {
+          console.error("Failed to sync check-in logs", response.status)
+          return
+        }
+
+        let payload: { checkInLogs?: unknown } | null = null
+        try {
+          payload = (await response.json()) as { checkInLogs?: unknown }
+        } catch {
+          payload = null
+        }
+
+        const normalized = sanitizeCheckInLogsFromServer(payload?.checkInLogs)
+        setAthletes((prev) =>
+          prev.map((athlete) =>
+            athlete.id === athleteId
+              ? { ...athlete, checkInLogs: normalized }
+              : athlete
+          )
+        )
+      } catch (error) {
+        console.error("Failed to sync check-in logs", error)
+      }
+    },
+    [sqlAuthEnabled, currentUser]
+  )
+
+  const updateCheckInLogs = useCallback(
+    (athleteId: number, updater: (logs: CheckInLog[]) => CheckInLog[]) => {
+      let updatedLogs: CheckInLog[] | null = null
+      setAthletes((prev) =>
+        prev.map((athlete) => {
+          if (athlete.id !== athleteId) return athlete
+          const nextLogs = updater(athlete.checkInLogs ?? [])
+          updatedLogs = nextLogs
+          return {
+            ...athlete,
+            checkInLogs: nextLogs,
+          }
+        })
+      )
+      if (updatedLogs) {
+        void syncCheckInLogsToServer(athleteId, updatedLogs)
+      }
+    },
+    [syncCheckInLogsToServer]
+  )
+
   const updateAthleteProfile = useCallback(
     (athleteId: number, updates: UpdateAthleteInput) => {
       let updated: Athlete | null = null
@@ -1676,6 +1897,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             mealLogs: [],
             mobilityExercises: [],
             mobilityLogs: [],
+            checkInLogs: [],
           }
 
           setAthletes((prev) => {
@@ -1744,6 +1966,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           mealLogs: [],
           mobilityExercises: [],
           mobilityLogs: [],
+          checkInLogs: [],
         }
 
         setAthletes((prev) => {
@@ -1898,6 +2121,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       updateMealLogs,
       updateMobilityExercises,
       updateMobilityLogs,
+      updateCheckInLogs,
       updateAthleteProfile,
       currentUser,
       login,
@@ -1920,6 +2144,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       updateMealLogs,
       updateMobilityExercises,
       updateMobilityLogs,
+      updateCheckInLogs,
       updateAthleteProfile,
       currentUser,
       login,

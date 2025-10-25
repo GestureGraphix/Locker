@@ -10,6 +10,7 @@ import type {
   Session,
   StoredAccount,
   WorkoutPlan,
+  CheckInLog,
 } from "./role-types"
 
 const isFiniteNumber = (value: unknown): value is number =>
@@ -145,6 +146,33 @@ const normalizeMobilityLogs = (value: unknown): MobilityLog[] => {
       date: record.date.trim(),
       durationMin: duration,
       notes,
+    })
+  }
+  return normalized
+}
+
+const normalizeCheckInLogs = (logs: unknown): CheckInLog[] => {
+  if (!Array.isArray(logs)) return []
+  const normalized: CheckInLog[] = []
+  for (const entry of logs) {
+    if (!entry || typeof entry !== "object") continue
+    const record = entry as Record<string, unknown>
+    if (!isFiniteNumber(record.id)) continue
+    if (!isString(record.date) || !record.date.trim()) continue
+    if (!isString(record.createdAt) || !record.createdAt.trim()) continue
+    const mentalState = Number(record.mentalState)
+    const physicalState = Number(record.physicalState)
+    if (!Number.isFinite(mentalState) || !Number.isFinite(physicalState)) continue
+    const mentalNotes = isString(record.mentalNotes) ? record.mentalNotes : undefined
+    const physicalNotes = isString(record.physicalNotes) ? record.physicalNotes : undefined
+    normalized.push({
+      id: record.id,
+      date: record.date.trim(),
+      createdAt: record.createdAt.trim(),
+      mentalState: Math.round(mentalState),
+      physicalState: Math.round(physicalState),
+      ...(mentalNotes ? { mentalNotes } : {}),
+      ...(physicalNotes ? { physicalNotes } : {}),
     })
   }
   return normalized
@@ -298,6 +326,7 @@ const normalizeAthlete = (value: unknown): Athlete | null => {
     mealLogs: normalizeMealLogs(record.mealLogs),
     mobilityExercises: normalizeMobilityExercises(record.mobilityExercises),
     mobilityLogs: normalizeMobilityLogs(record.mobilityLogs),
+    checkInLogs: normalizeCheckInLogs(record.checkInLogs),
     nutritionGoals,
     coachEmail,
     position,

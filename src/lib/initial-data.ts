@@ -4,6 +4,7 @@ import type {
   MealLog,
   MobilityExercise,
   MobilityLog,
+  CheckInLog,
 } from "./role-types"
 
 export const initialHydrationLogs: HydrationLog[] = [
@@ -143,6 +144,8 @@ export const initialMobilityLogs: MobilityLog[] = [
   },
 ]
 
+export const initialCheckInLogs: CheckInLog[] = []
+
 export const initialAthletes: Athlete[] = [
   {
     id: 1,
@@ -191,6 +194,7 @@ export const initialAthletes: Athlete[] = [
     mealLogs: initialMealLogs,
     mobilityExercises: initialMobilityExercises,
     mobilityLogs: initialMobilityLogs,
+    checkInLogs: initialCheckInLogs,
     nutritionGoals: {
       hydrationOuncesPerDay: 110,
       caloriesPerDay: 2800,
