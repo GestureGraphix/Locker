@@ -54,12 +54,12 @@ const baseCoachNavigation: NavigationItem[] = [
 
 export function Navigation() {
   const pathname = usePathname()
-  const { role, setRole, currentUser } = useRole()
+  const { role, setRole, currentUser, primaryAthlete } = useRole()
   const showCoachRoleToggle = !currentUser || currentUser.role === "coach"
   const effectiveRole = showCoachRoleToggle ? role : "athlete"
   const storageKey = useMemo(
-    () => (currentUser ? `locker-academics-${currentUser.email}` : null),
-    [currentUser]
+    () => `locker-academics-${currentUser?.email ?? "guest"}`,
+    [currentUser?.email]
   )
   const [academicCount, setAcademicCount] = useState<number | null>(null)
 
@@ -70,18 +70,21 @@ export function Navigation() {
   }, [showCoachRoleToggle, role, setRole])
 
   useEffect(() => {
+    if (!currentUser) return
+    const items = primaryAthlete?.academicItems ?? []
+    const openCount = items.filter((item) => !item.completed).length
+    setAcademicCount(openCount)
+  }, [currentUser, primaryAthlete?.academicItems])
+
+  useEffect(() => {
+    if (currentUser) return
     if (typeof window === "undefined") return
 
     const loadCount = () => {
-      if (!storageKey) {
-        setAcademicCount(mockAcademicItems.length)
-        return
-      }
-
       try {
         const stored = window.localStorage.getItem(storageKey)
         if (!stored) {
-          setAcademicCount(0)
+          setAcademicCount(mockAcademicItems.length)
           return
         }
 
@@ -90,7 +93,7 @@ export function Navigation() {
         setAcademicCount(items.length)
       } catch (error) {
         console.error("Failed to read academics data", error)
-        setAcademicCount(0)
+        setAcademicCount(mockAcademicItems.length)
       }
     }
 
@@ -110,7 +113,7 @@ export function Navigation() {
     return () => {
       window.removeEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
     }
-  }, [storageKey])
+  }, [currentUser, storageKey])
 
   const badgeValue = academicCount !== null ? academicCount.toString() : null
   const navigationItems = useMemo(() => {

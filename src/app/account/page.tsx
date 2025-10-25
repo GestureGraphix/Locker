@@ -252,12 +252,14 @@ export default function Account() {
       : 0
 
     const mobilityMinutesThisWeek = 0
+    const academicItems = primaryAthlete.academicItems ?? []
+    const academicItemsCompleted = academicItems.filter((item) => item.completed).length
 
     return {
       checkInsCompleted: completedSessions.length,
       sessionsThisMonth: sessionsThisMonth.length,
       hydrationAverage,
-      academicItemsCompleted: 0,
+      academicItemsCompleted,
       prsThisMonth: prsThisMonth.length,
       mobilityMinutesThisWeek,
     }

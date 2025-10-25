@@ -211,7 +211,7 @@ export default function DashboardPage() {
     () => `locker-academics-${currentUser?.email ?? "guest"}`,
     [currentUser?.email]
   )
-  const [academicItems, setAcademicItems] = useState<AcademicItem[] | null>(null)
+  const [guestAcademicItems, setGuestAcademicItems] = useState<AcademicItem[] | null>(null)
   const isGuest = !currentUser
   const checkInLogs = useMemo(
     () => primaryAthlete?.checkInLogs ?? [],
@@ -248,24 +248,24 @@ export default function DashboardPage() {
   const athleteSessions = primaryAthlete?.sessions ?? []
 
   useEffect(() => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined" || !isGuest) return
 
-    const fallbackItems = currentUser ? [] : mockAcademicItems
+    const fallbackItems = mockAcademicItems
 
     const loadAcademicItems = () => {
       try {
         const stored = window.localStorage.getItem(academicStorageKey)
         if (!stored) {
-          setAcademicItems(fallbackItems)
+          setGuestAcademicItems(fallbackItems)
           return
         }
 
         const parsed = JSON.parse(stored) as { academicItems?: AcademicItem[] }
         const items = Array.isArray(parsed.academicItems) ? parsed.academicItems : []
-        setAcademicItems(items)
+        setGuestAcademicItems(items)
       } catch (error) {
         console.error("Failed to load academics data", error)
-        setAcademicItems(fallbackItems)
+        setGuestAcademicItems(fallbackItems)
       }
     }
 
@@ -279,12 +279,14 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener(ACADEMICS_UPDATED_EVENT, handleUpdate)
     }
-  }, [academicStorageKey, currentUser])
+  }, [academicStorageKey, isGuest])
 
-  const academicItemsForDisplay = useMemo(
-    () => academicItems ?? (currentUser ? [] : mockAcademicItems),
-    [academicItems, currentUser]
-  )
+  const academicItemsForDisplay = useMemo(() => {
+    if (!isGuest) {
+      return primaryAthlete?.academicItems ?? []
+    }
+    return guestAcademicItems ?? mockAcademicItems
+  }, [isGuest, guestAcademicItems, primaryAthlete?.academicItems])
 
   const openAcademicItemsCount = useMemo(
     () => academicItemsForDisplay.filter((item) => !item.completed).length,
