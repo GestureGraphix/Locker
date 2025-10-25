@@ -124,6 +124,8 @@ const normalizeMealType = (value: string) => {
   return "lunch"
 }
 
+const getTodayDateString = () => new Date().toISOString().split("T")[0]
+
 const getMealTypeIcon = (type: string) => {
   switch (type) {
     case "breakfast": return <Coffee className="h-4 w-4" />
@@ -206,6 +208,7 @@ export default function Fuel() {
   const [activeTab, setActiveTab] = useState("meals")
   const [isAddHydrationOpen, setIsAddHydrationOpen] = useState(false)
   const [isAddMealOpen, setIsAddMealOpen] = useState(false)
+  const [todayDate, setTodayDate] = useState<string>(() => getTodayDateString())
   const [newHydration, setNewHydration] = useState({ ounces: "", source: "cup" })
   const [newMeal, setNewMeal] = useState({
     mealType: "breakfast",
@@ -323,6 +326,33 @@ export default function Fuel() {
     },
     [menuDate, primaryAthlete]
   )
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const updateDate = () => setTodayDate(getTodayDateString())
+
+    let timerId: ReturnType<typeof window.setTimeout> | undefined
+    const scheduleNextUpdate = () => {
+      const now = new Date()
+      const next = new Date(now)
+      next.setUTCHours(24, 0, 0, 0)
+      const delay = Math.max(next.getTime() - now.getTime(), 0)
+      timerId = window.setTimeout(() => {
+        updateDate()
+        scheduleNextUpdate()
+      }, delay)
+    }
+
+    updateDate()
+    scheduleNextUpdate()
+
+    return () => {
+      if (timerId !== undefined) {
+        window.clearTimeout(timerId)
+      }
+    }
+  }, [])
 
   /* -------- Fetch menu sections (breakfast, lunch, dinner) -------- */
   const fetchMenu = useCallback(async () => {
@@ -513,7 +543,6 @@ export default function Fuel() {
 
   /* -------- Derived totals -------- */
 
-  const todayDate = new Date().toISOString().split("T")[0]
   const todaysHydrationLogs = hydrationLogs.filter((log) => log.date === todayDate)
   const todayHydration = todaysHydrationLogs.reduce((sum, log) => sum + log.ounces, 0)
   const nutritionGoals = primaryAthlete.nutritionGoals ?? undefined
