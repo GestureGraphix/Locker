@@ -224,11 +224,70 @@ const sanitizeMealLogsFromServer = (value: unknown): MealLog[] => {
   )
 }
 
+const sanitizeWorkoutsFromServer = (value: unknown): WorkoutPlan[] => {
+  if (!Array.isArray(value)) return []
+  const workouts: WorkoutPlan[] = []
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+
+    const idNumber = coerceNumber(record.id)
+    if (idNumber == null || !Number.isInteger(idNumber) || idNumber <= 0) continue
+
+    const title = typeof record.title === "string" ? record.title.trim() : ""
+    if (!title) continue
+
+    const focus = typeof record.focus === "string" ? record.focus.trim() : ""
+    if (!focus) continue
+
+    const dueDateRaw = typeof record.dueDate === "string" ? record.dueDate.trim() : ""
+    if (!dueDateRaw) continue
+    const dueDate = new Date(
+      dueDateRaw.includes("T") ? dueDateRaw : `${dueDateRaw}T00:00:00.000Z`
+    )
+    if (Number.isNaN(dueDate.getTime())) continue
+
+    const statusRaw =
+      typeof record.status === "string" ? record.status.trim().toLowerCase() : ""
+    let status: WorkoutPlan["status"] | null = null
+    if (statusRaw === "completed") {
+      status = "Completed"
+    } else if (statusRaw === "scheduled") {
+      status = "Scheduled"
+    }
+    if (!status) continue
+
+    const intensity =
+      typeof record.intensity === "string" ? record.intensity.trim() : ""
+    if (!intensity) continue
+
+    const assignedBy =
+      typeof record.assignedBy === "string" && record.assignedBy.trim()
+        ? record.assignedBy.trim()
+        : undefined
+
+    workouts.push({
+      id: idNumber,
+      title,
+      focus,
+      dueDate: dueDate.toISOString().split("T")[0],
+      status,
+      intensity,
+      ...(assignedBy ? { assignedBy } : {}),
+    })
+  }
+
+  return workouts.sort(
+    (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+  )
+}
+
 const buildAthleteForSqlUser = (
   user: UserAccount,
   options: {
     hydrationLogs?: HydrationLog[]
     mealLogs?: MealLog[]
+    workouts?: WorkoutPlan[]
     previous?: Athlete | null
   } = {}
 ): Athlete => {
@@ -237,6 +296,7 @@ const buildAthleteForSqlUser = (
   const hydrationLogs =
     options.hydrationLogs ?? (baseIsSeed ? [] : base?.hydrationLogs ?? [])
   const mealLogs = options.mealLogs ?? (baseIsSeed ? [] : base?.mealLogs ?? [])
+  const workouts = options.workouts ?? (baseIsSeed ? [] : base?.workouts ?? [])
 
   return {
     id: user.id ?? base?.id ?? Date.now(),
@@ -248,7 +308,7 @@ const buildAthleteForSqlUser = (
     tags: baseIsSeed ? [] : base?.tags ?? [],
     sessions: baseIsSeed ? [] : base?.sessions ?? [],
     calendar: baseIsSeed ? [] : base?.calendar ?? [],
-    workouts: baseIsSeed ? [] : base?.workouts ?? [],
+    workouts,
     hydrationLogs,
     mealLogs,
     nutritionGoals: baseIsSeed ? undefined : base?.nutritionGoals,
@@ -545,11 +605,13 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       const previous = prev.find((athlete) => athlete.id === userId) ?? null
       const hydrationLogs = previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
       const mealLogs = previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
+      const workouts = previous && !previous.isSeedData ? previous.workouts ?? [] : []
       return [
         buildAthleteForSqlUser(currentUser, {
           previous,
           hydrationLogs,
           mealLogs,
+          workouts,
         }),
       ]
     })
@@ -571,11 +633,14 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             const previous = prev.find((athlete) => athlete.id === userId) ?? null
             const mealLogs =
               previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
+            const workouts =
+              previous && !previous.isSeedData ? previous.workouts ?? [] : []
             return [
               buildAthleteForSqlUser(currentUser, {
                 previous,
                 hydrationLogs: [],
                 mealLogs,
+                workouts,
               }),
             ]
           })
@@ -595,11 +660,14 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           const previous = prev.find((athlete) => athlete.id === userId) ?? null
           const mealLogs =
             previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
+          const workouts =
+            previous && !previous.isSeedData ? previous.workouts ?? [] : []
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
               hydrationLogs,
               mealLogs,
+              workouts,
             }),
           ]
         })
@@ -622,11 +690,14 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             const previous = prev.find((athlete) => athlete.id === userId) ?? null
             const hydrationLogs =
               previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
+            const workouts =
+              previous && !previous.isSeedData ? previous.workouts ?? [] : []
             return [
               buildAthleteForSqlUser(currentUser, {
                 previous,
                 hydrationLogs,
                 mealLogs: [],
+                workouts,
               }),
             ]
           })
@@ -646,11 +717,14 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           const previous = prev.find((athlete) => athlete.id === userId) ?? null
           const hydrationLogs =
             previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
+          const workouts =
+            previous && !previous.isSeedData ? previous.workouts ?? [] : []
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
               hydrationLogs,
               mealLogs,
+              workouts,
             }),
           ]
         })
@@ -661,8 +735,68 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const loadWorkouts = async () => {
+      try {
+        const response = await fetch(`/api/athletes/${userId}/workouts`, {
+          cache: "no-store",
+        })
+        if (!response.ok) {
+          if (response.status !== 404) {
+            console.error("Failed to fetch workouts", response.status)
+          }
+          if (cancelled) return
+          setAthletes((prev) => {
+            const previous = prev.find((athlete) => athlete.id === userId) ?? null
+            const hydrationLogs =
+              previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
+            const mealLogs =
+              previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
+            return [
+              buildAthleteForSqlUser(currentUser, {
+                previous,
+                hydrationLogs,
+                mealLogs,
+                workouts: [],
+              }),
+            ]
+          })
+          return
+        }
+
+        let payload: { workouts?: unknown } | null = null
+        try {
+          payload = (await response.json()) as { workouts?: unknown }
+        } catch {
+          payload = null
+        }
+        if (cancelled) return
+
+        const workouts = sanitizeWorkoutsFromServer(payload?.workouts)
+        setAthletes((prev) => {
+          const previous = prev.find((athlete) => athlete.id === userId) ?? null
+          const hydrationLogs =
+            previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
+          const mealLogs =
+            previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
+          return [
+            buildAthleteForSqlUser(currentUser, {
+              previous,
+              hydrationLogs,
+              mealLogs,
+              workouts,
+            }),
+          ]
+        })
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch workouts", error)
+        }
+      }
+    }
+
     void loadHydrationLogs()
     void loadMealLogs()
+    void loadWorkouts()
 
     return () => {
       cancelled = true
@@ -765,20 +899,65 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     [role]
   )
 
+  const syncWorkoutsToServer = useCallback(
+    async (athleteId: number, workouts: WorkoutPlan[]) => {
+      if (!sqlAuthEnabled) return
+      if (!currentUser || currentUser.role !== "athlete" || currentUser.id == null) return
+      if (currentUser.id !== athleteId) return
+
+      try {
+        const response = await fetch(`/api/athletes/${athleteId}/workouts`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workouts }),
+        })
+
+        if (!response.ok) {
+          console.error("Failed to sync workouts", response.status)
+          return
+        }
+
+        let payload: { workouts?: unknown } | null = null
+        try {
+          payload = (await response.json()) as { workouts?: unknown }
+        } catch {
+          payload = null
+        }
+
+        const normalized = sanitizeWorkoutsFromServer(payload?.workouts)
+        setAthletes((prev) =>
+          prev.map((athlete) =>
+            athlete.id === athleteId ? { ...athlete, workouts: normalized } : athlete
+          )
+        )
+      } catch (error) {
+        console.error("Failed to sync workouts", error)
+      }
+    },
+    [sqlAuthEnabled, currentUser]
+  )
+
   const scheduleSession = useCallback(
     (athleteId: number, session: ScheduleSessionInput, options?: ScheduleOptions) => {
+      let updatedWorkouts: WorkoutPlan[] | null = null
       setAthletes((prev) =>
         prev.map((athlete): Athlete => {
           if (athlete.id !== athleteId) return athlete
 
-          return applySessionToAthlete(athlete, session, options)
+          const updated = applySessionToAthlete(athlete, session, options)
+          updatedWorkouts = updated.workouts ?? []
+          return updated
         })
       )
+      if (updatedWorkouts) {
+        void syncWorkoutsToServer(athleteId, updatedWorkouts)
+      }
     },
-    [applySessionToAthlete]
+    [applySessionToAthlete, syncWorkoutsToServer]
   )
 
   const toggleSessionCompletion = useCallback((athleteId: number, sessionId: number) => {
+    let updatedWorkouts: WorkoutPlan[] | null = null
     setAthletes((prev) =>
       prev.map((athlete): Athlete => {
         if (athlete.id !== athleteId) return athlete
@@ -789,7 +968,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
         const completedSession = updatedSessions.find((session) => session.id === sessionId)
 
-        const updatedWorkouts = athlete.workouts.map((workout) =>
+        const nextWorkouts = athlete.workouts.map((workout) =>
           workout.id === sessionId
             ? {
                 ...workout,
@@ -799,15 +978,19 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
               }
             : workout
         )
+        updatedWorkouts = nextWorkouts
 
         return {
           ...athlete,
           sessions: updatedSessions,
-          workouts: updatedWorkouts,
+          workouts: nextWorkouts,
         }
       })
     )
-  }, [])
+    if (updatedWorkouts) {
+      void syncWorkoutsToServer(athleteId, updatedWorkouts)
+    }
+  }, [syncWorkoutsToServer])
 
   const addAthlete = useCallback((input: AddAthleteInput) => {
     const email = input.email.trim().toLowerCase()
@@ -862,14 +1045,21 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       const normalizedTag = normalizeTag(tag)
       if (!normalizedTag) return
 
+      const workoutsToSync: { athleteId: number; workouts: WorkoutPlan[] }[] = []
       setAthletes((prev) =>
         prev.map((athlete) => {
           if (!athlete.tags.includes(normalizedTag)) return athlete
-          return applySessionToAthlete(athlete, session, options)
+          const updated = applySessionToAthlete(athlete, session, options)
+          workoutsToSync.push({ athleteId: updated.id, workouts: updated.workouts ?? [] })
+          return updated
         })
       )
+
+      for (const entry of workoutsToSync) {
+        void syncWorkoutsToServer(entry.athleteId, entry.workouts)
+      }
     },
-    [applySessionToAthlete]
+    [applySessionToAthlete, syncWorkoutsToServer]
   )
 
   const syncHydrationLogsToServer = useCallback(

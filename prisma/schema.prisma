@@ -24,6 +24,7 @@ model User {
   sessionTokens      SessionToken[]
   mealLogs           MealLog[]
   hydrationLogs      HydrationLog[]
+  workoutLogs        WorkoutLog[]
 
   @@map("users")
 }
@@ -104,4 +105,19 @@ model HydrationLog {
 
   @@id([userId, id])
   @@map("hydration_logs")
+}
+
+model WorkoutLog {
+  userId     Int
+  id         Int
+  title      String
+  focus      String
+  dueDate    DateTime
+  status     String
+  intensity  String
+  assignedBy String?
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, id])
+  @@map("workout_logs")
 }
