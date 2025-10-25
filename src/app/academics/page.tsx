@@ -305,7 +305,7 @@ const formatDate = (dateString: string) => {
 }
 
 export default function Academics() {
-  const { currentUser } = useRole()
+  const { currentUser, primaryAthlete, updateAcademics } = useRole()
   const storageKey = useMemo(
     () => `locker-academics-${currentUser?.email ?? "guest"}`,
     [currentUser?.email]
@@ -313,6 +313,7 @@ export default function Academics() {
 
   const [courses, setCourses] = useState<Course[]>([])
   const [academicItems, setAcademicItems] = useState<AcademicItem[]>([])
+  const isGuest = !currentUser
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -327,10 +328,10 @@ export default function Academics() {
   const [editingCourse, setEditingCourse] = useState<EditCourseState | null>(null)
 
   useEffect(() => {
-    if (typeof window === "undefined") return
+    if (typeof window === "undefined" || !isGuest) return
 
-    const fallbackCourses = currentUser ? [] : mockCourses
-    const fallbackItems = currentUser ? [] : mockAcademicItems
+    const fallbackCourses = mockCourses
+    const fallbackItems = mockAcademicItems
 
     try {
       const stored = window.localStorage.getItem(storageKey)
@@ -339,13 +340,11 @@ export default function Academics() {
         setCourses(fallbackCourses)
         setAcademicItems(fallbackItems)
 
-        if (!currentUser) {
-          const payload = JSON.stringify({
-            courses: fallbackCourses,
-            academicItems: fallbackItems
-          })
-          window.localStorage.setItem(storageKey, payload)
-        }
+        const payload = JSON.stringify({
+          courses: fallbackCourses,
+          academicItems: fallbackItems
+        })
+        window.localStorage.setItem(storageKey, payload)
         return
       }
 
@@ -364,18 +363,24 @@ export default function Academics() {
       setCourses(fallbackCourses)
       setAcademicItems(fallbackItems)
     }
-  }, [currentUser, storageKey])
+  }, [isGuest, storageKey])
 
   useEffect(() => {
+    if (!isGuest) {
+      const nextCourses = primaryAthlete?.academicCourses ?? []
+      const nextItems = primaryAthlete?.academicItems ?? []
+      setCourses(nextCourses)
+      setAcademicItems(nextItems)
+      return
+    }
+
     if (typeof window === "undefined") return
 
-    if (storageKey) {
-      try {
-        const payload = JSON.stringify({ courses, academicItems })
-        window.localStorage.setItem(storageKey, payload)
-      } catch (error) {
-        console.error("Failed to save academics data", error)
-      }
+    try {
+      const payload = JSON.stringify({ courses, academicItems })
+      window.localStorage.setItem(storageKey, payload)
+    } catch (error) {
+      console.error("Failed to save academics data", error)
     }
 
     window.dispatchEvent(
@@ -383,7 +388,7 @@ export default function Academics() {
         detail: { count: academicItems.length }
       })
     )
-  }, [courses, academicItems, storageKey])
+  }, [isGuest, courses, academicItems, storageKey, primaryAthlete?.academicCourses, primaryAthlete?.academicItems])
 
   const handleAddItem = () => {
     if (newItem.courseId && newItem.title && newItem.dueAt) {
@@ -401,7 +406,14 @@ export default function Academics() {
           completed: false,
           source: "manual"
         }
-        return [...prev, item]
+        const nextItems = [...prev, item]
+        if (!isGuest && primaryAthlete) {
+          updateAcademics(primaryAthlete.id, (state) => ({
+            courses: state.courses,
+            academicItems: nextItems,
+          }))
+        }
+        return nextItems
       })
       setNewItem({ courseId: "", type: "assignment", title: "", dueAt: "", notes: "" })
       setIsAddDialogOpen(false)
@@ -423,6 +435,12 @@ export default function Academics() {
         setCourses(prev => {
           const { courses: mergedCourses, added } = mergeIcsCourses(rawEvents, prev)
           addedCount = added
+          if (!isGuest && primaryAthlete) {
+            updateAcademics(primaryAthlete.id, (state) => ({
+              courses: mergedCourses,
+              academicItems: state.academicItems,
+            }))
+          }
           return mergedCourses
         })
 
@@ -445,11 +463,18 @@ export default function Academics() {
   }
 
   const toggleComplete = (id: number) => {
-    setAcademicItems(prev =>
-      prev.map(item =>
+    setAcademicItems(prev => {
+      const nextItems = prev.map(item =>
         item.id === id ? { ...item, completed: !item.completed } : item
       )
-    )
+      if (!isGuest && primaryAthlete) {
+        updateAcademics(primaryAthlete.id, (state) => ({
+          courses: state.courses,
+          academicItems: nextItems,
+        }))
+      }
+      return nextItems
+    })
   }
 
   const startEditingItem = (item: AcademicItem) => {
@@ -472,8 +497,8 @@ export default function Academics() {
 
     const selectedCourse = courses.find(course => course.id === Number(editingItem.courseId))
 
-    setAcademicItems(prev =>
-      prev.map(item =>
+    setAcademicItems(prev => {
+      const nextItems = prev.map(item =>
         item.id === editingItem.id
           ? {
               ...item,
@@ -486,7 +511,14 @@ export default function Academics() {
             }
           : item
       )
-    )
+      if (!isGuest && primaryAthlete) {
+        updateAcademics(primaryAthlete.id, (state) => ({
+          courses: state.courses,
+          academicItems: nextItems,
+        }))
+      }
+      return nextItems
+    })
 
     setEditingItem(null)
   }
@@ -511,21 +543,35 @@ export default function Academics() {
       return
     }
 
-    setCourses(prev =>
-      prev.map(course =>
+    setCourses(prev => {
+      const nextCourses = prev.map(course =>
         course.id === editingCourse.id
           ? { ...course, code, name, professor }
           : course
       )
-    )
+      if (!isGuest && primaryAthlete) {
+        updateAcademics(primaryAthlete.id, (state) => ({
+          courses: nextCourses,
+          academicItems: state.academicItems,
+        }))
+      }
+      return nextCourses
+    })
 
-    setAcademicItems(prev =>
-      prev.map(item =>
+    setAcademicItems(prev => {
+      const nextItems = prev.map(item =>
         item.courseId === editingCourse.id
           ? { ...item, course: code }
           : item
       )
-    )
+      if (!isGuest && primaryAthlete) {
+        updateAcademics(primaryAthlete.id, (state) => ({
+          courses: state.courses,
+          academicItems: nextItems,
+        }))
+      }
+      return nextItems
+    })
 
     setEditingCourse(null)
   }

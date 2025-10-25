@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 
 import type {
+  AcademicCourse,
+  AcademicItem,
   Athlete,
   HydrationLog,
   MealLog,
@@ -227,6 +229,112 @@ const sanitizeMealLogsFromServer = (value: unknown): MealLog[] => {
   )
 }
 
+const ACADEMIC_ITEM_TYPES = new Set([
+  "assignment",
+  "exam",
+  "reading",
+  "essay",
+  "calendar",
+])
+
+const ACADEMIC_SOURCE_VALUES = new Set(["manual", "ics"])
+
+const sanitizeAcademicCoursesFromServer = (value: unknown): AcademicCourse[] => {
+  if (!Array.isArray(value)) return []
+  const courses: AcademicCourse[] = []
+  const seen = new Set<number>()
+
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+    const idNumber = coerceNumber(record.id)
+    if (idNumber == null || !Number.isInteger(idNumber) || idNumber <= 0) continue
+    if (seen.has(idNumber)) continue
+    seen.add(idNumber)
+
+    const name = typeof record.name === "string" ? record.name.trim() : ""
+    const code = typeof record.code === "string" ? record.code.trim() : ""
+    const professor = typeof record.professor === "string" ? record.professor.trim() : ""
+    if (!name || !code) continue
+
+    const schedule =
+      typeof record.schedule === "string" && record.schedule.trim()
+        ? record.schedule.trim()
+        : undefined
+    const source =
+      typeof record.source === "string" && ACADEMIC_SOURCE_VALUES.has(record.source)
+        ? (record.source as AcademicCourse["source"])
+        : undefined
+
+    courses.push({
+      id: idNumber,
+      name,
+      code,
+      professor,
+      ...(schedule ? { schedule } : {}),
+      ...(source ? { source } : {}),
+    })
+  }
+
+  return courses.sort((a, b) => a.id - b.id)
+}
+
+const sanitizeAcademicItemsFromServer = (value: unknown): AcademicItem[] => {
+  if (!Array.isArray(value)) return []
+  const items: AcademicItem[] = []
+  const seen = new Set<number>()
+
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue
+    const record = entry as Record<string, unknown>
+    const idNumber = coerceNumber(record.id)
+    if (idNumber == null || !Number.isInteger(idNumber) || idNumber <= 0) continue
+    if (seen.has(idNumber)) continue
+    seen.add(idNumber)
+
+    const course = typeof record.course === "string" ? record.course.trim() : ""
+    const title = typeof record.title === "string" ? record.title.trim() : ""
+    const dueAt = typeof record.dueAt === "string" ? record.dueAt : ""
+    if (!course || !title || !dueAt) continue
+
+    const type = typeof record.type === "string" ? record.type.trim() : ""
+    if (!ACADEMIC_ITEM_TYPES.has(type)) continue
+
+    const courseIdNumber = coerceNumber(record.courseId)
+    const courseId =
+      courseIdNumber != null && Number.isInteger(courseIdNumber) && courseIdNumber > 0
+        ? courseIdNumber
+        : undefined
+    const notes =
+      typeof record.notes === "string" && record.notes.trim()
+        ? record.notes.trim()
+        : undefined
+    const source =
+      typeof record.source === "string" && ACADEMIC_SOURCE_VALUES.has(record.source)
+        ? (record.source as AcademicItem["source"])
+        : "manual"
+    const externalId =
+      typeof record.externalId === "string" && record.externalId.trim()
+        ? record.externalId.trim()
+        : undefined
+
+    items.push({
+      id: idNumber,
+      courseId,
+      course,
+      type: type as AcademicItem["type"],
+      title,
+      dueAt,
+      ...(notes ? { notes } : {}),
+      completed: record.completed === true,
+      source,
+      ...(externalId ? { externalId } : {}),
+    })
+  }
+
+  return items.sort((a, b) => a.id - b.id)
+}
+
 const sanitizeMobilityExercisesFromServer = (value: unknown): MobilityExercise[] => {
   if (!Array.isArray(value)) return []
   const exercises: MobilityExercise[] = []
@@ -410,6 +518,8 @@ const buildAthleteForSqlUser = (
     mobilityExercises?: MobilityExercise[]
     mobilityLogs?: MobilityLog[]
     checkInLogs?: CheckInLog[]
+    academicCourses?: AcademicCourse[]
+    academicItems?: AcademicItem[]
     previous?: Athlete | null
   } = {}
 ): Athlete => {
@@ -425,6 +535,10 @@ const buildAthleteForSqlUser = (
     options.mobilityLogs ?? (baseIsSeed ? [] : base?.mobilityLogs ?? [])
   const checkInLogs =
     options.checkInLogs ?? (baseIsSeed ? [] : base?.checkInLogs ?? [])
+  const academicCourses =
+    options.academicCourses ?? (baseIsSeed ? [] : base?.academicCourses ?? [])
+  const academicItems =
+    options.academicItems ?? (baseIsSeed ? [] : base?.academicItems ?? [])
 
   return {
     id: user.id ?? base?.id ?? Date.now(),
@@ -442,6 +556,8 @@ const buildAthleteForSqlUser = (
     mobilityExercises,
     mobilityLogs,
     checkInLogs,
+    academicCourses,
+    academicItems,
     nutritionGoals: baseIsSeed ? undefined : base?.nutritionGoals,
     coachEmail: baseIsSeed ? undefined : base?.coachEmail,
     position: baseIsSeed ? undefined : base?.position,
@@ -476,6 +592,16 @@ type RoleContextValue = {
   ) => void
   updateMobilityLogs: (athleteId: number, updater: (logs: MobilityLog[]) => MobilityLog[]) => void
   updateCheckInLogs: (athleteId: number, updater: (logs: CheckInLog[]) => CheckInLog[]) => void
+  updateAcademics: (
+    athleteId: number,
+    updater: (state: {
+      courses: AcademicCourse[]
+      academicItems: AcademicItem[]
+    }) => {
+      courses: AcademicCourse[]
+      academicItems: AcademicItem[]
+    }
+  ) => void
   currentUser: UserAccount | null
   login: (input: LoginInput) => AuthResult
   createAccount: (input: CreateAccountInput) => AuthResult
@@ -738,24 +864,27 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
     const userId = currentUser.id
 
+    const readPersistedData = (athlete: Athlete | null) => {
+      const usable = athlete && !athlete.isSeedData ? athlete : null
+      return {
+        hydrationLogs: usable?.hydrationLogs ?? [],
+        mealLogs: usable?.mealLogs ?? [],
+        workouts: usable?.workouts ?? [],
+        mobilityExercises: usable?.mobilityExercises ?? [],
+        mobilityLogs: usable?.mobilityLogs ?? [],
+        checkInLogs: usable?.checkInLogs ?? [],
+        academicCourses: usable?.academicCourses ?? [],
+        academicItems: usable?.academicItems ?? [],
+      }
+    }
+
     setAthletes((prev) => {
       const previous = prev.find((athlete) => athlete.id === userId) ?? null
-      const hydrationLogs = previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-      const mealLogs = previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-      const workouts = previous && !previous.isSeedData ? previous.workouts ?? [] : []
-      const mobilityExercises =
-        previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-      const mobilityLogs = previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-      const checkInLogs = previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+      const persisted = readPersistedData(previous)
       return [
         buildAthleteForSqlUser(currentUser, {
           previous,
-          hydrationLogs,
-          mealLogs,
-          workouts,
-          mobilityExercises,
-          mobilityLogs,
-          checkInLogs,
+          ...persisted,
         }),
       ]
     })
@@ -775,28 +904,15 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           if (cancelled) return
           setAthletes((prev) => {
             const previous = prev.find((athlete) => athlete.id === userId) ?? null
-            const mealLogs =
-              previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-            const workouts =
-              previous && !previous.isSeedData ? previous.workouts ?? [] : []
-            const mobilityExercises =
-              previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-          const mobilityLogs =
-            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-          const checkInLogs =
-            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
-          return [
-            buildAthleteForSqlUser(currentUser, {
-              previous,
-              hydrationLogs: [],
-              mealLogs,
-              workouts,
-              mobilityExercises,
-              mobilityLogs,
-              checkInLogs,
-            }),
-          ]
-        })
+            const persisted = readPersistedData(previous)
+            return [
+              buildAthleteForSqlUser(currentUser, {
+                previous,
+                ...persisted,
+                hydrationLogs: [],
+              }),
+            ]
+          })
           return
         }
 
@@ -811,25 +927,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         const hydrationLogs = sanitizeHydrationLogsFromServer(payload?.hydrationLogs)
         setAthletes((prev) => {
           const previous = prev.find((athlete) => athlete.id === userId) ?? null
-          const mealLogs =
-            previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-          const workouts =
-            previous && !previous.isSeedData ? previous.workouts ?? [] : []
-          const mobilityExercises =
-            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-          const mobilityLogs =
-            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-          const checkInLogs =
-            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+          const persisted = readPersistedData(previous)
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
+              ...persisted,
               hydrationLogs,
-              mealLogs,
-              workouts,
-              mobilityExercises,
-              mobilityLogs,
-              checkInLogs,
             }),
           ]
         })
@@ -850,28 +953,15 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           if (cancelled) return
           setAthletes((prev) => {
             const previous = prev.find((athlete) => athlete.id === userId) ?? null
-            const hydrationLogs =
-              previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-            const workouts =
-              previous && !previous.isSeedData ? previous.workouts ?? [] : []
-          const mobilityExercises =
-            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-          const mobilityLogs =
-            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-          const checkInLogs =
-            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
-          return [
-            buildAthleteForSqlUser(currentUser, {
-              previous,
-              hydrationLogs,
-              mealLogs: [],
-              workouts,
-              mobilityExercises,
-              mobilityLogs,
-              checkInLogs,
-            }),
-          ]
-        })
+            const persisted = readPersistedData(previous)
+            return [
+              buildAthleteForSqlUser(currentUser, {
+                previous,
+                ...persisted,
+                mealLogs: [],
+              }),
+            ]
+          })
           return
         }
 
@@ -886,25 +976,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         const mealLogs = sanitizeMealLogsFromServer(payload?.mealLogs)
         setAthletes((prev) => {
           const previous = prev.find((athlete) => athlete.id === userId) ?? null
-          const hydrationLogs =
-            previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-          const workouts =
-            previous && !previous.isSeedData ? previous.workouts ?? [] : []
-          const mobilityExercises =
-            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-          const mobilityLogs =
-            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-          const checkInLogs =
-            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+          const persisted = readPersistedData(previous)
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
-              hydrationLogs,
+              ...persisted,
               mealLogs,
-              workouts,
-              mobilityExercises,
-              mobilityLogs,
-              checkInLogs,
             }),
           ]
         })
@@ -927,28 +1004,15 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           if (cancelled) return
           setAthletes((prev) => {
             const previous = prev.find((athlete) => athlete.id === userId) ?? null
-            const hydrationLogs =
-              previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-            const mealLogs =
-              previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-          const mobilityExercises =
-            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-          const mobilityLogs =
-            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-          const checkInLogs =
-            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
-          return [
-            buildAthleteForSqlUser(currentUser, {
-              previous,
-              hydrationLogs,
-              mealLogs,
-              workouts: [],
-              mobilityExercises,
-              mobilityLogs,
-              checkInLogs,
-            }),
-          ]
-        })
+            const persisted = readPersistedData(previous)
+            return [
+              buildAthleteForSqlUser(currentUser, {
+                previous,
+                ...persisted,
+                workouts: [],
+              }),
+            ]
+          })
           return
         }
 
@@ -963,25 +1027,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         const workouts = sanitizeWorkoutsFromServer(payload?.workouts)
         setAthletes((prev) => {
           const previous = prev.find((athlete) => athlete.id === userId) ?? null
-          const hydrationLogs =
-            previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-          const mealLogs =
-            previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-          const mobilityExercises =
-            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-          const mobilityLogs =
-            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-          const checkInLogs =
-            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+          const persisted = readPersistedData(previous)
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
-              hydrationLogs,
-              mealLogs,
+              ...persisted,
               workouts,
-              mobilityExercises,
-              mobilityLogs,
-              checkInLogs,
             }),
           ]
         })
@@ -1004,28 +1055,15 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           if (cancelled) return
           setAthletes((prev) => {
             const previous = prev.find((athlete) => athlete.id === userId) ?? null
-            const hydrationLogs =
-              previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-            const mealLogs =
-              previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-            const workouts =
-              previous && !previous.isSeedData ? previous.workouts ?? [] : []
-          const mobilityLogs =
-            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-          const checkInLogs =
-            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
-          return [
-            buildAthleteForSqlUser(currentUser, {
-              previous,
-              hydrationLogs,
-              mealLogs,
-              workouts,
-              mobilityExercises: [],
-              mobilityLogs,
-              checkInLogs,
-            }),
-          ]
-        })
+            const persisted = readPersistedData(previous)
+            return [
+              buildAthleteForSqlUser(currentUser, {
+                previous,
+                ...persisted,
+                mobilityExercises: [],
+              }),
+            ]
+          })
           return
         }
 
@@ -1042,25 +1080,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         )
         setAthletes((prev) => {
           const previous = prev.find((athlete) => athlete.id === userId) ?? null
-          const hydrationLogs =
-            previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-          const mealLogs =
-            previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-          const workouts =
-            previous && !previous.isSeedData ? previous.workouts ?? [] : []
-          const mobilityLogs =
-            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
-          const checkInLogs =
-            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+          const persisted = readPersistedData(previous)
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
-              hydrationLogs,
-              mealLogs,
-              workouts,
+              ...persisted,
               mobilityExercises,
-              mobilityLogs,
-              checkInLogs,
             }),
           ]
         })
@@ -1083,28 +1108,15 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           if (cancelled) return
           setAthletes((prev) => {
             const previous = prev.find((athlete) => athlete.id === userId) ?? null
-            const hydrationLogs =
-              previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-            const mealLogs =
-              previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-            const workouts =
-              previous && !previous.isSeedData ? previous.workouts ?? [] : []
-          const mobilityExercises =
-            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-          const checkInLogs =
-            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
-          return [
-            buildAthleteForSqlUser(currentUser, {
-              previous,
-              hydrationLogs,
-              mealLogs,
-              workouts,
-              mobilityExercises,
-              mobilityLogs: [],
-              checkInLogs,
-            }),
-          ]
-        })
+            const persisted = readPersistedData(previous)
+            return [
+              buildAthleteForSqlUser(currentUser, {
+                previous,
+                ...persisted,
+                mobilityLogs: [],
+              }),
+            ]
+          })
           return
         }
 
@@ -1119,25 +1131,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         const mobilityLogs = sanitizeMobilityLogsFromServer(payload?.mobilityLogs)
         setAthletes((prev) => {
           const previous = prev.find((athlete) => athlete.id === userId) ?? null
-          const hydrationLogs =
-            previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-          const mealLogs =
-            previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-          const workouts =
-            previous && !previous.isSeedData ? previous.workouts ?? [] : []
-          const mobilityExercises =
-            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-          const checkInLogs =
-            previous && !previous.isSeedData ? previous.checkInLogs ?? [] : []
+          const persisted = readPersistedData(previous)
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
-              hydrationLogs,
-              mealLogs,
-              workouts,
-              mobilityExercises,
+              ...persisted,
               mobilityLogs,
-              checkInLogs,
             }),
           ]
         })
@@ -1160,24 +1159,11 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           if (cancelled) return
           setAthletes((prev) => {
             const previous = prev.find((athlete) => athlete.id === userId) ?? null
-            const hydrationLogs =
-              previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-            const mealLogs =
-              previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-            const workouts =
-              previous && !previous.isSeedData ? previous.workouts ?? [] : []
-            const mobilityExercises =
-              previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-            const mobilityLogs =
-              previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+            const persisted = readPersistedData(previous)
             return [
               buildAthleteForSqlUser(currentUser, {
                 previous,
-                hydrationLogs,
-                mealLogs,
-                workouts,
-                mobilityExercises,
-                mobilityLogs,
+                ...persisted,
                 checkInLogs: [],
               }),
             ]
@@ -1196,24 +1182,11 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         const checkInLogs = sanitizeCheckInLogsFromServer(payload?.checkInLogs)
         setAthletes((prev) => {
           const previous = prev.find((athlete) => athlete.id === userId) ?? null
-          const hydrationLogs =
-            previous && !previous.isSeedData ? previous.hydrationLogs ?? [] : []
-          const mealLogs =
-            previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
-          const workouts =
-            previous && !previous.isSeedData ? previous.workouts ?? [] : []
-          const mobilityExercises =
-            previous && !previous.isSeedData ? previous.mobilityExercises ?? [] : []
-          const mobilityLogs =
-            previous && !previous.isSeedData ? previous.mobilityLogs ?? [] : []
+          const persisted = readPersistedData(previous)
           return [
             buildAthleteForSqlUser(currentUser, {
               previous,
-              hydrationLogs,
-              mealLogs,
-              workouts,
-              mobilityExercises,
-              mobilityLogs,
+              ...persisted,
               checkInLogs,
             }),
           ]
@@ -1225,12 +1198,70 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const loadAcademics = async () => {
+      try {
+        const response = await fetch(`/api/athletes/${userId}/academics`, {
+          cache: "no-store",
+        })
+        if (!response.ok) {
+          if (response.status !== 404) {
+            console.error("Failed to fetch academics", response.status)
+          }
+          if (cancelled) return
+          setAthletes((prev) => {
+            const previous = prev.find((athlete) => athlete.id === userId) ?? null
+            const persisted = readPersistedData(previous)
+            return [
+              buildAthleteForSqlUser(currentUser, {
+                previous,
+                ...persisted,
+                academicCourses: [],
+                academicItems: [],
+              }),
+            ]
+          })
+          return
+        }
+
+        let payload: { courses?: unknown; academicItems?: unknown } | null = null
+        try {
+          payload = (await response.json()) as {
+            courses?: unknown
+            academicItems?: unknown
+          }
+        } catch {
+          payload = null
+        }
+        if (cancelled) return
+
+        const courses = sanitizeAcademicCoursesFromServer(payload?.courses)
+        const academicItems = sanitizeAcademicItemsFromServer(payload?.academicItems)
+        setAthletes((prev) => {
+          const previous = prev.find((athlete) => athlete.id === userId) ?? null
+          const persisted = readPersistedData(previous)
+          return [
+            buildAthleteForSqlUser(currentUser, {
+              previous,
+              ...persisted,
+              academicCourses: courses,
+              academicItems,
+            }),
+          ]
+        })
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch academics", error)
+        }
+      }
+    }
+
     void loadHydrationLogs()
     void loadMealLogs()
     void loadWorkouts()
     void loadMobilityExercises()
     void loadMobilityLogs()
     void loadCheckInLogs()
+    void loadAcademics()
 
     return () => {
       cancelled = true
@@ -1470,7 +1501,9 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         mealLogs: [],
         mobilityExercises: [],
         mobilityLogs: [],
-        checkInLogs: []
+        checkInLogs: [],
+        academicCourses: [],
+        academicItems: [],
       }
 
       return [...prev, newAthlete]
@@ -1784,6 +1817,58 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     [sqlAuthEnabled, currentUser]
   )
 
+  const syncAcademicsToServer = useCallback(
+    async (
+      athleteId: number,
+      courses: AcademicCourse[],
+      academicItems: AcademicItem[],
+    ) => {
+      if (!sqlAuthEnabled) return
+      if (!currentUser || currentUser.role !== "athlete" || currentUser.id == null) return
+      if (currentUser.id !== athleteId) return
+
+      try {
+        const response = await fetch(`/api/athletes/${athleteId}/academics`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ courses, academicItems }),
+        })
+
+        if (!response.ok) {
+          console.error("Failed to sync academics", response.status)
+          return
+        }
+
+        let payload: { courses?: unknown; academicItems?: unknown } | null = null
+        try {
+          payload = (await response.json()) as {
+            courses?: unknown
+            academicItems?: unknown
+          }
+        } catch {
+          payload = null
+        }
+
+        const normalizedCourses = sanitizeAcademicCoursesFromServer(payload?.courses)
+        const normalizedItems = sanitizeAcademicItemsFromServer(payload?.academicItems)
+        setAthletes((prev) =>
+          prev.map((athlete) =>
+            athlete.id === athleteId
+              ? {
+                  ...athlete,
+                  academicCourses: normalizedCourses,
+                  academicItems: normalizedItems,
+                }
+              : athlete,
+          ),
+        )
+      } catch (error) {
+        console.error("Failed to sync academics", error)
+      }
+    },
+    [sqlAuthEnabled, currentUser],
+  )
+
   const updateCheckInLogs = useCallback(
     (athleteId: number, updater: (logs: CheckInLog[]) => CheckInLog[]) => {
       let updatedLogs: CheckInLog[] | null = null
@@ -1803,6 +1888,37 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       }
     },
     [syncCheckInLogsToServer]
+  )
+
+  const updateAcademics = useCallback(
+    (
+      athleteId: number,
+      updater: (state: {
+        courses: AcademicCourse[]
+        academicItems: AcademicItem[]
+      }) => { courses: AcademicCourse[]; academicItems: AcademicItem[] },
+    ) => {
+      let nextState: { courses: AcademicCourse[]; academicItems: AcademicItem[] } | null = null
+      setAthletes((prev) =>
+        prev.map((athlete) => {
+          if (athlete.id !== athleteId) return athlete
+          const result = updater({
+            courses: athlete.academicCourses ?? [],
+            academicItems: athlete.academicItems ?? [],
+          })
+          nextState = result
+          return {
+            ...athlete,
+            academicCourses: result.courses,
+            academicItems: result.academicItems,
+          }
+        }),
+      )
+      if (nextState) {
+        void syncAcademicsToServer(athleteId, nextState.courses, nextState.academicItems)
+      }
+    },
+    [syncAcademicsToServer],
   )
 
   const updateAthleteProfile = useCallback(
@@ -2123,6 +2239,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       updateMobilityExercises,
       updateMobilityLogs,
       updateCheckInLogs,
+      updateAcademics,
       updateAthleteProfile,
       currentUser,
       login,
@@ -2146,6 +2263,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       updateMobilityExercises,
       updateMobilityLogs,
       updateCheckInLogs,
+      updateAcademics,
       updateAthleteProfile,
       currentUser,
       login,

@@ -195,6 +195,8 @@ export const initialAthletes: Athlete[] = [
     mobilityExercises: initialMobilityExercises,
     mobilityLogs: initialMobilityLogs,
     checkInLogs: initialCheckInLogs,
+    academicCourses: [],
+    academicItems: [],
     nutritionGoals: {
       hydrationOuncesPerDay: 110,
       caloriesPerDay: 2800,

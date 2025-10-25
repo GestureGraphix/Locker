@@ -1,3 +1,5 @@
+import type { AcademicItem as AcademicsItem, Course as AcademicsCourse } from "./academics"
+
 export type Role = "athlete" | "coach"
 
 export type NutritionFact = {
@@ -52,6 +54,9 @@ export type MobilityLog = {
   durationMin: number
   notes?: string
 }
+
+export type AcademicCourse = AcademicsCourse
+export type AcademicItem = AcademicsItem
 
 export type CheckInLog = {
   id: number
@@ -111,6 +116,8 @@ export type Athlete = {
   mobilityExercises: MobilityExercise[]
   mobilityLogs: MobilityLog[]
   checkInLogs: CheckInLog[]
+  academicCourses: AcademicCourse[]
+  academicItems: AcademicItem[]
   nutritionGoals?: NutritionGoals
   coachEmail?: string
   position?: string

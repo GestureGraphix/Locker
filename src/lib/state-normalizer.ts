@@ -1,4 +1,6 @@
 import type {
+  AcademicCourse,
+  AcademicItem,
   Athlete,
   CalendarEvent,
   HydrationLog,
@@ -287,6 +289,99 @@ const normalizeWorkouts = (workouts: unknown): WorkoutPlan[] => {
   return normalized
 }
 
+const COURSE_SOURCE_VALUES = new Set(["manual", "ics"])
+
+const normalizeAcademicCourses = (courses: unknown): AcademicCourse[] => {
+  if (!Array.isArray(courses)) return []
+  const normalized: AcademicCourse[] = []
+  const seen = new Set<number>()
+
+  for (const course of courses) {
+    if (!course || typeof course !== "object") continue
+    const record = course as Record<string, unknown>
+    if (!isFiniteNumber(record.id)) continue
+    const id = record.id
+    if (seen.has(id)) continue
+    seen.add(id)
+
+    const name = isString(record.name) ? record.name.trim() : ""
+    const code = isString(record.code) ? record.code.trim() : ""
+    const professor = isString(record.professor) ? record.professor.trim() : ""
+    if (!name || !code) continue
+
+    const schedule = isString(record.schedule) ? record.schedule : undefined
+    const source = isString(record.source) ? record.source : undefined
+    const normalizedSource =
+      source && COURSE_SOURCE_VALUES.has(source) ? source : undefined
+
+    normalized.push({
+      id,
+      name,
+      code,
+      professor,
+      ...(schedule ? { schedule } : {}),
+      ...(normalizedSource
+        ? { source: normalizedSource as AcademicCourse["source"] }
+        : {}),
+    })
+  }
+
+  return normalized
+}
+
+const ACADEMIC_ITEM_TYPES = new Set([
+  "assignment",
+  "exam",
+  "reading",
+  "essay",
+  "calendar",
+])
+
+const normalizeAcademicItems = (items: unknown): AcademicItem[] => {
+  if (!Array.isArray(items)) return []
+  const normalized: AcademicItem[] = []
+  const seen = new Set<number>()
+
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+    if (!isFiniteNumber(record.id)) continue
+    const id = record.id
+    if (seen.has(id)) continue
+    seen.add(id)
+
+    const course = isString(record.course) ? record.course.trim() : ""
+    const title = isString(record.title) ? record.title.trim() : ""
+    const dueAt = isString(record.dueAt) ? record.dueAt : ""
+    if (!course || !title || !dueAt) continue
+
+    const type = isString(record.type) ? record.type.trim() : ""
+    if (!ACADEMIC_ITEM_TYPES.has(type)) continue
+
+    const courseId = isFiniteNumber(record.courseId) ? record.courseId : undefined
+    const notes = isString(record.notes) ? record.notes : undefined
+    const source = isString(record.source) ? record.source : undefined
+    const normalizedSource =
+      source && COURSE_SOURCE_VALUES.has(source) ? source : undefined
+    const externalId = isString(record.externalId) ? record.externalId : undefined
+
+    normalized.push({
+      id,
+      courseId,
+      course,
+      type: type as AcademicItem["type"],
+      title,
+      dueAt,
+      ...(notes ? { notes } : {}),
+      completed: record.completed === true,
+      source: normalizedSource ?? "manual",
+      ...(externalId ? { externalId } : {}),
+    })
+  }
+
+  return normalized
+}
+
 const normalizeAthlete = (value: unknown): Athlete | null => {
   if (!value || typeof value !== "object") return null
   const record = value as Record<string, unknown>
@@ -327,6 +422,8 @@ const normalizeAthlete = (value: unknown): Athlete | null => {
     mobilityExercises: normalizeMobilityExercises(record.mobilityExercises),
     mobilityLogs: normalizeMobilityLogs(record.mobilityLogs),
     checkInLogs: normalizeCheckInLogs(record.checkInLogs),
+    academicCourses: normalizeAcademicCourses(record.academicCourses),
+    academicItems: normalizeAcademicItems(record.academicItems),
     nutritionGoals,
     coachEmail,
     position,
