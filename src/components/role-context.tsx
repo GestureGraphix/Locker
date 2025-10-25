@@ -1486,58 +1486,67 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }
   }, [syncWorkoutsToServer])
 
-  const addAthlete = useCallback((input: AddAthleteInput) => {
-    const email = input.email.trim().toLowerCase()
-    if (!email) return
+  const addAthlete = useCallback(
+    (input: AddAthleteInput) => {
+      const email = input.email.trim().toLowerCase()
+      if (!email) return
 
-    const tags = normalizeTags(input.tags)
+      const tags = normalizeTags(input.tags)
+      const normalizedCoachEmail =
+        currentUser?.role === "coach" && currentUser.email
+          ? currentUser.email.trim().toLowerCase()
+          : undefined
 
-    setAthletes((prev) => {
-      const existing = prev.find((athlete) => athlete.email.toLowerCase() === email)
+      setAthletes((prev) => {
+        const existing = prev.find((athlete) => athlete.email.toLowerCase() === email)
 
-      if (existing) {
-        return prev.map((athlete) => {
-          if (athlete.email.toLowerCase() !== email) return athlete
+        if (existing) {
+          return prev.map((athlete) => {
+            if (athlete.email.toLowerCase() !== email) return athlete
 
-          const mergedTags = normalizeTags([...athlete.tags, ...tags])
+            const mergedTags = normalizeTags([...athlete.tags, ...tags])
 
-          return {
-            ...athlete,
-            name: input.name?.trim() || athlete.name,
-            sport: input.sport ?? athlete.sport,
-            level: input.level ?? athlete.level,
-            team: input.team ?? athlete.team,
-            tags: mergedTags,
-          }
-        })
-      }
+            return {
+              ...athlete,
+              name: input.name?.trim() || athlete.name,
+              sport: input.sport ?? athlete.sport,
+              level: input.level ?? athlete.level,
+              team: input.team ?? athlete.team,
+              tags: mergedTags,
+              ...(normalizedCoachEmail ? { coachEmail: normalizedCoachEmail } : {}),
+            }
+          })
+        }
 
-      const id = Date.now() + Math.floor(Math.random() * 1000)
-      const nameFromEmail = input.name?.trim() || email.split("@")[0]
+        const id = Date.now() + Math.floor(Math.random() * 1000)
+        const nameFromEmail = input.name?.trim() || email.split("@")[0]
 
-      const newAthlete: Athlete = {
-        id,
-        name: nameFromEmail,
-        email,
-        sport: input.sport ?? "Unknown Sport",
-        level: input.level ?? "Development",
-        team: input.team ?? "Independent",
-        tags,
-        sessions: [],
-        calendar: [],
-        workouts: [],
-        hydrationLogs: [],
-        mealLogs: [],
-        mobilityExercises: [],
-        mobilityLogs: [],
-        checkInLogs: [],
-        academicCourses: [],
-        academicItems: [],
-      }
+        const newAthlete: Athlete = {
+          id,
+          name: nameFromEmail,
+          email,
+          sport: input.sport ?? "Unknown Sport",
+          level: input.level ?? "Development",
+          team: input.team ?? "Independent",
+          tags,
+          sessions: [],
+          calendar: [],
+          workouts: [],
+          hydrationLogs: [],
+          mealLogs: [],
+          mobilityExercises: [],
+          mobilityLogs: [],
+          checkInLogs: [],
+          academicCourses: [],
+          academicItems: [],
+          ...(normalizedCoachEmail ? { coachEmail: normalizedCoachEmail } : {}),
+        }
 
-      return [...prev, newAthlete]
-    })
-  }, [])
+        return [...prev, newAthlete]
+      })
+    },
+    [currentUser]
+  )
 
   const assignSessionToTag = useCallback(
     (tag: string, session: ScheduleSessionInput, options?: ScheduleOptions) => {
@@ -2076,6 +2085,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         return { success: true }
       }
 
+      setActiveAthleteId(null)
       setCurrentUser(accountWithoutPassword)
       setRoleState("coach")
       return { success: true }
@@ -2154,6 +2164,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
       setAccounts((prev) => [...prev, newAccount])
       setCurrentUser({ email: normalizedEmail, name: coachName, role: "coach" })
+      setActiveAthleteId(null)
       setRoleState("coach")
       return { success: true }
     },
@@ -2253,18 +2264,47 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }
   }, [currentUser])
 
+  const visibleAthletes = useMemo(() => {
+    if (currentUser?.role === "coach") {
+      const normalizedCoachEmail = currentUser.email?.trim().toLowerCase()
+      if (!normalizedCoachEmail) return []
+      return athletes.filter(
+        (athlete) => athlete.coachEmail?.trim().toLowerCase() === normalizedCoachEmail
+      )
+    }
+
+    if (currentUser?.role === "athlete" && currentUser.athleteId != null) {
+      return athletes.filter((athlete) => athlete.id === currentUser.athleteId)
+    }
+
+    return athletes
+  }, [athletes, currentUser])
+
+  useEffect(() => {
+    setActiveAthleteId((prevId) => {
+      if (prevId != null && visibleAthletes.some((athlete) => athlete.id === prevId)) {
+        return prevId
+      }
+      return visibleAthletes[0]?.id ?? null
+    })
+  }, [visibleAthletes])
+
   const primaryAthlete = useMemo(() => {
     if (activeAthleteId != null) {
-      return athletes.find((athlete) => athlete.id === activeAthleteId) ?? athletes[0] ?? null
+      return (
+        visibleAthletes.find((athlete) => athlete.id === activeAthleteId) ??
+        visibleAthletes[0] ??
+        null
+      )
     }
-    return athletes[0] ?? null
-  }, [athletes, activeAthleteId])
+    return visibleAthletes[0] ?? null
+  }, [visibleAthletes, activeAthleteId])
 
   const value = useMemo(
     () => ({
       role,
       setRole,
-      athletes,
+      athletes: visibleAthletes,
       primaryAthlete,
       activeAthleteId,
       setActiveAthleteId,
@@ -2289,7 +2329,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     [
       role,
       setRole,
-      athletes,
+      visibleAthletes,
       primaryAthlete,
       activeAthleteId,
       scheduleSession,
