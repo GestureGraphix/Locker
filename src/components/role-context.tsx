@@ -1898,15 +1898,22 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         academicItems: AcademicItem[]
       }) => { courses: AcademicCourse[]; academicItems: AcademicItem[] },
     ) => {
-      let nextState: { courses: AcademicCourse[]; academicItems: AcademicItem[] } | null = null
       setAthletes((prev) =>
         prev.map((athlete) => {
           if (athlete.id !== athleteId) return athlete
+  
           const result = updater({
             courses: athlete.academicCourses ?? [],
             academicItems: athlete.academicItems ?? [],
           })
-          nextState = result
+  
+          // fire sync right here using result
+          void syncAcademicsToServer(
+            athleteId,
+            result.courses,
+            result.academicItems,
+          )
+  
           return {
             ...athlete,
             academicCourses: result.courses,
@@ -1914,12 +1921,10 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           }
         }),
       )
-      if (nextState) {
-        void syncAcademicsToServer(athleteId, nextState.courses, nextState.academicItems)
-      }
     },
     [syncAcademicsToServer],
   )
+  
 
   const updateAthleteProfile = useCallback(
     (athleteId: number, updates: UpdateAthleteInput) => {
@@ -2015,6 +2020,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             mobilityExercises: [],
             mobilityLogs: [],
             checkInLogs: [],
+            academicCourses: [],
+            academicItems: [],
           }
 
           setAthletes((prev) => {
@@ -2084,6 +2091,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           mobilityExercises: [],
           mobilityLogs: [],
           checkInLogs: [],
+          academicCourses: [],
+          academicItems: [],
         }
 
         setAthletes((prev) => {
