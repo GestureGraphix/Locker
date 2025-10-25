@@ -132,6 +132,36 @@ const coerceNumber = (value: unknown): number | null => {
   return null
 }
 
+const sanitizeHydrationLogsFromServer = (value: unknown): HydrationLog[] => {
+  if (!Array.isArray(value)) return []
+  const logs: HydrationLog[] = []
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue
+    const record = item as Record<string, unknown>
+    const idNumber = coerceNumber(record.id)
+    if (idNumber == null || !Number.isInteger(idNumber) || idNumber <= 0) continue
+    const rawDate = typeof record.date === "string" ? record.date.trim() : ""
+    if (!rawDate) continue
+    const ouncesNumber = coerceNumber(record.ounces)
+    if (ouncesNumber == null || !Number.isFinite(ouncesNumber) || ouncesNumber < 0) continue
+    const source = typeof record.source === "string" ? record.source.trim() : ""
+    if (!source) continue
+    const time = typeof record.time === "string" ? record.time.trim() : ""
+    if (!time) continue
+    logs.push({
+      id: idNumber,
+      date: rawDate,
+      ounces: Math.round(ouncesNumber),
+      source,
+      time,
+    })
+  }
+  return logs.sort((a, b) => {
+    if (a.date === b.date) return a.id - b.id
+    return a.date.localeCompare(b.date)
+  })
+}
+
 const sanitizeNutritionFactsFromServer = (value: unknown): NutritionFact[] => {
   if (!Array.isArray(value)) return []
   const facts: NutritionFact[] = []
@@ -527,6 +557,59 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
 
     let cancelled = false
 
+    const loadHydrationLogs = async () => {
+      try {
+        const response = await fetch(`/api/athletes/${userId}/hydration-logs`, {
+          cache: "no-store",
+        })
+        if (!response.ok) {
+          if (response.status !== 404) {
+            console.error("Failed to fetch hydration logs", response.status)
+          }
+          if (cancelled) return
+          setAthletes((prev) => {
+            const previous = prev.find((athlete) => athlete.id === userId) ?? null
+            const mealLogs =
+              previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
+            return [
+              buildAthleteForSqlUser(currentUser, {
+                previous,
+                hydrationLogs: [],
+                mealLogs,
+              }),
+            ]
+          })
+          return
+        }
+
+        let payload: { hydrationLogs?: unknown } | null = null
+        try {
+          payload = (await response.json()) as { hydrationLogs?: unknown }
+        } catch {
+          payload = null
+        }
+        if (cancelled) return
+
+        const hydrationLogs = sanitizeHydrationLogsFromServer(payload?.hydrationLogs)
+        setAthletes((prev) => {
+          const previous = prev.find((athlete) => athlete.id === userId) ?? null
+          const mealLogs =
+            previous && !previous.isSeedData ? previous.mealLogs ?? [] : []
+          return [
+            buildAthleteForSqlUser(currentUser, {
+              previous,
+              hydrationLogs,
+              mealLogs,
+            }),
+          ]
+        })
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch hydration logs", error)
+        }
+      }
+    }
+
     const loadMealLogs = async () => {
       try {
         const response = await fetch(`/api/athletes/${userId}/meal-logs`, { cache: "no-store" })
@@ -578,6 +661,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    void loadHydrationLogs()
     void loadMealLogs()
 
     return () => {
@@ -788,20 +872,63 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     [applySessionToAthlete]
   )
 
+  const syncHydrationLogsToServer = useCallback(
+    async (athleteId: number, logs: HydrationLog[]) => {
+      if (!sqlAuthEnabled) return
+      if (!currentUser || currentUser.role !== "athlete" || currentUser.id == null) return
+      if (currentUser.id !== athleteId) return
+
+      try {
+        const response = await fetch(`/api/athletes/${athleteId}/hydration-logs`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hydrationLogs: logs }),
+        })
+
+        if (!response.ok) {
+          console.error("Failed to sync hydration logs", response.status)
+          return
+        }
+
+        let payload: { hydrationLogs?: unknown } | null = null
+        try {
+          payload = (await response.json()) as { hydrationLogs?: unknown }
+        } catch {
+          payload = null
+        }
+
+        const normalized = sanitizeHydrationLogsFromServer(payload?.hydrationLogs)
+        setAthletes((prev) =>
+          prev.map((athlete) =>
+            athlete.id === athleteId ? { ...athlete, hydrationLogs: normalized } : athlete
+          )
+        )
+      } catch (error) {
+        console.error("Failed to sync hydration logs", error)
+      }
+    },
+    [sqlAuthEnabled, currentUser]
+  )
+
   const updateHydrationLogs = useCallback(
     (athleteId: number, updater: (logs: HydrationLog[]) => HydrationLog[]) => {
+      let updatedLogs: HydrationLog[] | null = null
       setAthletes((prev) =>
         prev.map((athlete) => {
           if (athlete.id !== athleteId) return athlete
           const nextLogs = updater(athlete.hydrationLogs ?? [])
+          updatedLogs = nextLogs
           return {
             ...athlete,
             hydrationLogs: nextLogs,
           }
         })
       )
+      if (updatedLogs) {
+        void syncHydrationLogsToServer(athleteId, updatedLogs)
+      }
     },
-    []
+    [syncHydrationLogsToServer]
   )
 
   const syncMealLogsToServer = useCallback(
