@@ -495,6 +495,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         mealLogs: [],
         mobilityExercises: [],
         mobilityLogs: [],
+        checkInLogs: [],
       }
 
       return [...prev, newAthlete]
@@ -676,6 +677,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
             mealLogs: [],
             mobilityExercises: [],
             mobilityLogs: [],
+            checkInLogs: [],
           }
 
           setAthletes((prev) => {
@@ -744,6 +746,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           mealLogs: [],
           mobilityExercises: [],
           mobilityLogs: [],
+          checkInLogs: [],
+
         }
 
         setAthletes((prev) => {

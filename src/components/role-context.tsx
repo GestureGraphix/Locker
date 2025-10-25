@@ -1470,6 +1470,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         mealLogs: [],
         mobilityExercises: [],
         mobilityLogs: [],
+        checkInLogs: []
       }
 
       return [...prev, newAthlete]
