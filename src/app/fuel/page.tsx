@@ -332,8 +332,8 @@ export default function Fuel() {
 
     const updateDate = () => setTodayDate(getTodayDateString())
 
-    let timerId: ReturnType<typeof window.setTimeout> | undefined
-    const scheduleNextUpdate = () => {
+    let timerId: number | undefined
+      const scheduleNextUpdate = () => {
       const now = new Date()
       const next = new Date(now)
       next.setUTCHours(24, 0, 0, 0)
