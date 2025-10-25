@@ -19,6 +19,11 @@ const ACADEMIC_ITEM_TYPES = new Set([
   "calendar",
 ])
 
+const isValidSource = (value: unknown): value is "manual" | "ics" => {
+  return value === "manual" || value === "ics"
+}
+
+
 const normalizeCourse = (
   value: unknown,
 ): {
@@ -49,11 +54,11 @@ const normalizeCourse = (
       ? record.schedule.trim()
       : undefined
 
-  const source =
-    typeof record.source === "string" &&
-    COURSE_SOURCE_VALUES.has(record.source)
-      ? record.source
-      : undefined
+  const source: "manual" | "ics" =
+    typeof record.source === "string" && COURSE_SOURCE_VALUES.has(record.source)
+      ? (record.source as "manual" | "ics")
+      : "manual"
+    
 
   return {
     ok: true,
@@ -141,13 +146,14 @@ const normalizeAcademicItem = (
     dueAt: string
     notes?: string
     completed: boolean
-    source: string
+    source: "manual" | "ics"
     externalId?: string
   }
 } => {
   if (!value || typeof value !== "object") return { ok: false }
 
   const record = value as Record<string, unknown>
+
   const id = Number(record.id)
   if (!Number.isInteger(id) || id <= 0) return { ok: false }
 
@@ -171,11 +177,10 @@ const normalizeAcademicItem = (
       ? record.notes.trim()
       : undefined
 
-  const source =
-    typeof record.source === "string" &&
-    COURSE_SOURCE_VALUES.has(record.source)
-      ? record.source
-      : "manual"
+  // ✅ narrow to the literal union "manual" | "ics"
+  const source: "manual" | "ics" = isValidSource(record.source)
+    ? record.source
+    : "manual"
 
   const externalId =
     typeof record.externalId === "string" && record.externalId.trim()
@@ -193,7 +198,7 @@ const normalizeAcademicItem = (
       dueAt,
       ...(notes ? { notes } : {}),
       completed: record.completed === true,
-      source,
+      source, // <-- now typed correctly
       ...(externalId ? { externalId } : {}),
     },
   }
@@ -212,7 +217,7 @@ const normalizeAcademicItems = (
     dueAt: string
     notes?: string
     completed: boolean
-    source: string
+    source: "manual" | "ics"
     externalId?: string
   }[]
   error?: string
@@ -244,7 +249,7 @@ const normalizeAcademicItems = (
     dueAt: string
     notes?: string
     completed: boolean
-    source: string
+    source: "manual" | "ics"
     externalId?: string
   }[] = []
 
@@ -272,6 +277,7 @@ const normalizeAcademicItems = (
 
   return { ok: true, academicItems: items }
 }
+
 
 
 async function ensureAuthorized(athleteId: number) {

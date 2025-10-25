@@ -290,6 +290,9 @@ const normalizeWorkouts = (workouts: unknown): WorkoutPlan[] => {
 }
 
 const COURSE_SOURCE_VALUES = new Set(["manual", "ics"])
+const isValidSource = (value: unknown): value is "manual" | "ics" => {
+  return value === "manual" || value === "ics"
+}
 
 const normalizeAcademicCourses = (courses: unknown): AcademicCourse[] => {
   if (!Array.isArray(courses)) return []
@@ -360,10 +363,15 @@ const normalizeAcademicItems = (items: unknown): AcademicItem[] => {
 
     const courseId = isFiniteNumber(record.courseId) ? record.courseId : undefined
     const notes = isString(record.notes) ? record.notes : undefined
-    const source = isString(record.source) ? record.source : undefined
-    const normalizedSource =
-      source && COURSE_SOURCE_VALUES.has(source) ? source : undefined
-    const externalId = isString(record.externalId) ? record.externalId : undefined
+
+    // ✅ here's the important part
+    const source: "manual" | "ics" = isValidSource(record.source)
+      ? record.source
+      : "manual"
+
+    const externalId = isString(record.externalId)
+      ? record.externalId
+      : undefined
 
     normalized.push({
       id,
@@ -374,7 +382,7 @@ const normalizeAcademicItems = (items: unknown): AcademicItem[] => {
       dueAt,
       ...(notes ? { notes } : {}),
       completed: record.completed === true,
-      source: normalizedSource ?? "manual",
+      source, // ✅ now matches AcademicItem["source"]
       ...(externalId ? { externalId } : {}),
     })
   }
