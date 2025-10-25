@@ -9,6 +9,8 @@ import type {
   Athlete,
   HydrationLog,
   MealLog,
+  MobilityExercise,
+  MobilityLog,
   Role,
   StoredAccount,
   UserAccount,
@@ -103,6 +105,11 @@ type RoleContextValue = {
   assignSessionToTag: (tag: string, session: ScheduleSessionInput, options?: ScheduleOptions) => void
   updateHydrationLogs: (athleteId: number, updater: (logs: HydrationLog[]) => HydrationLog[]) => void
   updateMealLogs: (athleteId: number, updater: (logs: MealLog[]) => MealLog[]) => void
+  updateMobilityExercises: (
+    athleteId: number,
+    updater: (exercises: MobilityExercise[]) => MobilityExercise[]
+  ) => void
+  updateMobilityLogs: (athleteId: number, updater: (logs: MobilityLog[]) => MobilityLog[]) => void
   currentUser: UserAccount | null
   login: (input: LoginInput) => AuthResult
   createAccount: (input: CreateAccountInput) => AuthResult
@@ -486,6 +493,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         workouts: [],
         hydrationLogs: [],
         mealLogs: [],
+        mobilityExercises: [],
+        mobilityLogs: [],
       }
 
       return [...prev, newAthlete]
@@ -532,6 +541,41 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           return {
             ...athlete,
             mealLogs: nextLogs,
+          }
+        })
+      )
+    },
+    []
+  )
+
+  const updateMobilityExercises = useCallback(
+    (
+      athleteId: number,
+      updater: (exercises: MobilityExercise[]) => MobilityExercise[]
+    ) => {
+      setAthletes((prev) =>
+        prev.map((athlete) => {
+          if (athlete.id !== athleteId) return athlete
+          const nextExercises = updater(athlete.mobilityExercises ?? [])
+          return {
+            ...athlete,
+            mobilityExercises: nextExercises,
+          }
+        })
+      )
+    },
+    []
+  )
+
+  const updateMobilityLogs = useCallback(
+    (athleteId: number, updater: (logs: MobilityLog[]) => MobilityLog[]) => {
+      setAthletes((prev) =>
+        prev.map((athlete) => {
+          if (athlete.id !== athleteId) return athlete
+          const nextLogs = updater(athlete.mobilityLogs ?? [])
+          return {
+            ...athlete,
+            mobilityLogs: nextLogs,
           }
         })
       )
@@ -768,6 +812,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       assignSessionToTag,
       updateHydrationLogs,
       updateMealLogs,
+      updateMobilityExercises,
+      updateMobilityLogs,
       updateAthleteProfile,
       currentUser,
       login,
@@ -786,6 +832,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       assignSessionToTag,
       updateHydrationLogs,
       updateMealLogs,
+      updateMobilityExercises,
+      updateMobilityLogs,
       updateAthleteProfile,
       currentUser,
       login,
