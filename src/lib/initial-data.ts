@@ -1,4 +1,10 @@
-import type { Athlete, HydrationLog, MealLog } from "./role-types"
+import type {
+  Athlete,
+  HydrationLog,
+  MealLog,
+  MobilityExercise,
+  MobilityLog,
+} from "./role-types"
 
 export const initialHydrationLogs: HydrationLog[] = [
   { id: 1, date: "2024-01-15", ounces: 8, source: "cup", time: "08:00" },
@@ -51,6 +57,92 @@ export const initialMealLogs: MealLog[] = [
   },
 ]
 
+export const initialMobilityExercises: MobilityExercise[] = [
+  {
+    id: 1,
+    group: "back",
+    name: "Cat-Cow Stretch",
+    youtubeUrl: "https://youtube.com/watch?v=example1",
+    prescription: "10 reps, hold 5 seconds each",
+    thumbnail: "🧘‍♀️",
+  },
+  {
+    id: 2,
+    group: "hips",
+    name: "Hip Flexor Stretch",
+    youtubeUrl: "https://youtube.com/watch?v=example2",
+    prescription: "Hold 30 seconds each side",
+    thumbnail: "🤸‍♂️",
+  },
+  {
+    id: 3,
+    group: "hamstrings",
+    name: "Forward Fold",
+    youtubeUrl: "https://youtube.com/watch?v=example3",
+    prescription: "Hold 45 seconds, 3 sets",
+    thumbnail: "🧘‍♂️",
+  },
+  {
+    id: 4,
+    group: "quads",
+    name: "Quad Stretch",
+    youtubeUrl: "https://youtube.com/watch?v=example4",
+    prescription: "Hold 30 seconds each leg",
+    thumbnail: "🏃‍♂️",
+  },
+  {
+    id: 5,
+    group: "ankles",
+    name: "Ankle Circles",
+    youtubeUrl: "https://youtube.com/watch?v=example5",
+    prescription: "10 circles each direction",
+    thumbnail: "🦶",
+  },
+  {
+    id: 6,
+    group: "back",
+    name: "Thoracic Extension",
+    youtubeUrl: "https://youtube.com/watch?v=example6",
+    prescription: "15 reps, 2 sets",
+    thumbnail: "🧘‍♀️",
+  },
+]
+
+export const initialMobilityLogs: MobilityLog[] = [
+  {
+    id: 1,
+    exerciseId: 1,
+    exerciseName: "Cat-Cow Stretch",
+    date: "2024-01-15",
+    durationMin: 5,
+    notes: "Felt tight in lower back",
+  },
+  {
+    id: 2,
+    exerciseId: 2,
+    exerciseName: "Hip Flexor Stretch",
+    date: "2024-01-15",
+    durationMin: 8,
+    notes: "Right side tighter than left",
+  },
+  {
+    id: 3,
+    exerciseId: 3,
+    exerciseName: "Forward Fold",
+    date: "2024-01-14",
+    durationMin: 10,
+    notes: "Good flexibility today",
+  },
+  {
+    id: 4,
+    exerciseId: 4,
+    exerciseName: "Quad Stretch",
+    date: "2024-01-14",
+    durationMin: 6,
+    notes: "Post-workout stretch",
+  },
+]
+
 export const initialAthletes: Athlete[] = [
   {
     id: 1,
@@ -97,6 +189,8 @@ export const initialAthletes: Athlete[] = [
     ],
     hydrationLogs: initialHydrationLogs,
     mealLogs: initialMealLogs,
+    mobilityExercises: initialMobilityExercises,
+    mobilityLogs: initialMobilityLogs,
     nutritionGoals: {
       hydrationOuncesPerDay: 110,
       caloriesPerDay: 2800,

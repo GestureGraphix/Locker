@@ -25,6 +25,8 @@ model User {
   mealLogs           MealLog[]
   hydrationLogs      HydrationLog[]
   workoutLogs        WorkoutLog[]
+  mobilityExercises  MobilityExercise[]
+  mobilityLogs       MobilityLog[]
 
   @@map("users")
 }
@@ -120,4 +122,32 @@ model WorkoutLog {
 
   @@id([userId, id])
   @@map("workout_logs")
+}
+
+model MobilityExercise {
+  userId         Int
+  id             Int
+  group          String
+  name           String
+  youtubeUrl     String?
+  prescription   String?
+  thumbnail      String?
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, id])
+  @@map("mobility_exercises")
+}
+
+model MobilityLog {
+  userId         Int
+  id             Int
+  exerciseId     Int
+  exerciseName   String
+  date           DateTime
+  durationMinutes Int
+  notes          String?
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, id])
+  @@map("mobility_logs")
 }

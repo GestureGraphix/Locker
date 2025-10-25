@@ -3,6 +3,8 @@ import type {
   CalendarEvent,
   HydrationLog,
   MealLog,
+  MobilityExercise,
+  MobilityLog,
   NutritionFact,
   NutritionGoals,
   Session,
@@ -92,6 +94,57 @@ const normalizeMealLogs = (logs: unknown): MealLog[] => {
       notes,
       completed,
       nutritionFacts: normalizeNutritionFacts(record.nutritionFacts),
+    })
+  }
+  return normalized
+}
+
+const normalizeMobilityExercises = (value: unknown): MobilityExercise[] => {
+  if (!Array.isArray(value)) return []
+  const normalized: MobilityExercise[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue
+    const record = entry as Record<string, unknown>
+    if (!isFiniteNumber(record.id)) continue
+    if (!isString(record.group) || !record.group.trim()) continue
+    if (!isString(record.name) || !record.name.trim()) continue
+    const youtubeUrl = isString(record.youtubeUrl) ? record.youtubeUrl.trim() : undefined
+    const prescription = isString(record.prescription)
+      ? record.prescription.trim()
+      : undefined
+    const thumbnail = isString(record.thumbnail) ? record.thumbnail : undefined
+    normalized.push({
+      id: record.id,
+      group: record.group.trim(),
+      name: record.name.trim(),
+      youtubeUrl: youtubeUrl && youtubeUrl.length > 0 ? youtubeUrl : undefined,
+      prescription: prescription && prescription.length > 0 ? prescription : undefined,
+      thumbnail: thumbnail && thumbnail.length > 0 ? thumbnail : undefined,
+    })
+  }
+  return normalized
+}
+
+const normalizeMobilityLogs = (value: unknown): MobilityLog[] => {
+  if (!Array.isArray(value)) return []
+  const normalized: MobilityLog[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue
+    const record = entry as Record<string, unknown>
+    if (!isFiniteNumber(record.id)) continue
+    if (!isFiniteNumber(record.exerciseId)) continue
+    if (!isString(record.exerciseName) || !record.exerciseName.trim()) continue
+    if (!isString(record.date) || !record.date.trim()) continue
+    const duration = Number(record.durationMin)
+    if (!Number.isFinite(duration) || duration < 0) continue
+    const notes = isString(record.notes) ? record.notes : undefined
+    normalized.push({
+      id: record.id,
+      exerciseId: record.exerciseId,
+      exerciseName: record.exerciseName.trim(),
+      date: record.date.trim(),
+      durationMin: duration,
+      notes,
     })
   }
   return normalized
@@ -243,6 +296,8 @@ const normalizeAthlete = (value: unknown): Athlete | null => {
     workouts: normalizeWorkouts(record.workouts),
     hydrationLogs: normalizeHydrationLogs(record.hydrationLogs),
     mealLogs: normalizeMealLogs(record.mealLogs),
+    mobilityExercises: normalizeMobilityExercises(record.mobilityExercises),
+    mobilityLogs: normalizeMobilityLogs(record.mobilityLogs),
     nutritionGoals,
     coachEmail,
     position,

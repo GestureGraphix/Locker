@@ -35,6 +35,24 @@ export type MealLog = {
   nutritionFacts: NutritionFact[]
 }
 
+export type MobilityExercise = {
+  id: number
+  group: string
+  name: string
+  youtubeUrl?: string
+  prescription?: string
+  thumbnail?: string
+}
+
+export type MobilityLog = {
+  id: number
+  exerciseId: number
+  exerciseName: string
+  date: string
+  durationMin: number
+  notes?: string
+}
+
 export type Session = {
   id: number
   type: string
@@ -80,6 +98,8 @@ export type Athlete = {
   workouts: WorkoutPlan[]
   hydrationLogs: HydrationLog[]
   mealLogs: MealLog[]
+  mobilityExercises: MobilityExercise[]
+  mobilityLogs: MobilityLog[]
   nutritionGoals?: NutritionGoals
   coachEmail?: string
   position?: string
