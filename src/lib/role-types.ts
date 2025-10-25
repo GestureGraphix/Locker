@@ -53,6 +53,16 @@ export type MobilityLog = {
   notes?: string
 }
 
+export type CheckInLog = {
+  id: number
+  date: string
+  createdAt: string
+  mentalState: number
+  physicalState: number
+  mentalNotes?: string
+  physicalNotes?: string
+}
+
 export type Session = {
   id: number
   type: string
@@ -100,6 +110,7 @@ export type Athlete = {
   mealLogs: MealLog[]
   mobilityExercises: MobilityExercise[]
   mobilityLogs: MobilityLog[]
+  checkInLogs: CheckInLog[]
   nutritionGoals?: NutritionGoals
   coachEmail?: string
   position?: string
