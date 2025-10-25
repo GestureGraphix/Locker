@@ -311,6 +311,35 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isHydrated])
 
+  useEffect(() => {
+    if (!isHydrated) return
+
+    if (role === "coach") {
+      const managedAthletes = athletes.filter((athlete) => !athlete.isSeedData)
+      if (managedAthletes.length !== athletes.length) {
+        setAthletes(managedAthletes)
+      }
+
+      const nextActiveId = managedAthletes.some((athlete) => athlete.id === activeAthleteId)
+        ? activeAthleteId
+        : managedAthletes[0]?.id ?? null
+
+      if (nextActiveId !== activeAthleteId) {
+        setActiveAthleteId(nextActiveId)
+      }
+
+      return
+    }
+
+    if (role === "athlete" && athletes.length === 0) {
+      setAthletes(initialAthletes)
+      const nextActiveId = initialAthletes[0]?.id ?? null
+      if (nextActiveId !== activeAthleteId) {
+        setActiveAthleteId(nextActiveId)
+      }
+    }
+  }, [role, isHydrated, athletes, activeAthleteId])
+
   const setRole = useCallback((nextRole: Role) => {
     setRoleState(nextRole)
   }, [])
