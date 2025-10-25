@@ -9,7 +9,6 @@ import { NumberScale } from "@/components/number-scale"
 import { useRole } from "@/components/role-context"
 import { CoachDashboard } from "@/components/coach-dashboard"
 import { ACADEMICS_UPDATED_EVENT, AcademicItem, mockAcademicItems } from "@/lib/academics"
-import isSqlAuth from "@/lib/auth-mode"
 import type { CheckInLog } from "@/lib/role-types"
 import {
   BookOpen,
@@ -37,8 +36,6 @@ type CheckInDiaryEntry = {
   mentalNotes: string
   physicalNotes: string
 }
-
-const diaryStorageKey = "locker.checkInDiary"
 
 const determineGreeting = () => {
   const hour = new Date().getHours()
@@ -187,62 +184,6 @@ const formatDiaryEntryDate = (value: string) => {
   })
 }
 
-const normalizeDiaryEntry = (
-  value: unknown,
-  index: number
-): CheckInDiaryEntry | null => {
-  if (!value || typeof value !== "object") return null
-  const record = value as Record<string, unknown>
-  if (typeof record.date !== "string" || !record.date.trim()) return null
-  const date = record.date.trim()
-  const rawCreatedAt =
-    typeof record.createdAt === "string" && record.createdAt.trim()
-      ? record.createdAt.trim()
-      : null
-  const createdAt = rawCreatedAt && !Number.isNaN(new Date(rawCreatedAt).getTime())
-    ? rawCreatedAt
-    : new Date(`${date}T00:00:00.000Z`).toISOString()
-  const mentalState = Number(record.mentalState)
-  const physicalState = Number(record.physicalState)
-  if (!Number.isFinite(mentalState) || !Number.isFinite(physicalState)) return null
-  const rawId = Number(record.id)
-  const id = Number.isInteger(rawId) && rawId > 0 ? rawId : index + 1
-  const mentalNotes =
-    typeof record.mentalNotes === "string" ? record.mentalNotes : ""
-  const physicalNotes =
-    typeof record.physicalNotes === "string" ? record.physicalNotes : ""
-  return {
-    id,
-    date,
-    createdAt,
-    mentalState: Math.min(10, Math.max(1, Math.round(mentalState))),
-    physicalState: Math.min(10, Math.max(1, Math.round(physicalState))),
-    mentalNotes,
-    physicalNotes,
-  }
-}
-
-const normalizeDiaryEntriesFromStorage = (value: unknown): CheckInDiaryEntry[] => {
-  if (!Array.isArray(value)) return []
-  const seenIds = new Set<number>()
-  let nextId = value.length + 1
-  const normalized: CheckInDiaryEntry[] = []
-  value.forEach((item, index) => {
-    const entry = normalizeDiaryEntry(item, index)
-    if (!entry) return
-    let id = entry.id
-    if (seenIds.has(id)) {
-      id = nextId++
-    }
-    seenIds.add(id)
-    normalized.push({ ...entry, id })
-  })
-  normalized.sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  )
-  return normalized
-}
-
 const mapCheckInLogsToDiaryEntries = (logs: CheckInLog[]): CheckInDiaryEntry[] => {
   return [...logs]
     .map((log) => ({
@@ -265,7 +206,6 @@ export default function DashboardPage() {
   const [checkInCompleted, setCheckInCompleted] = useState(mockData.checkIn.completed)
   const [mentalNotes, setMentalNotes] = useState("")
   const [physicalNotes, setPhysicalNotes] = useState("")
-  const [diaryEntries, setDiaryEntries] = useState<CheckInDiaryEntry[]>([])
   const { role, primaryAthlete, currentUser, updateCheckInLogs } = useRole()
   const academicStorageKey = useMemo(
     () => `locker-academics-${currentUser?.email ?? "guest"}`,
@@ -273,10 +213,12 @@ export default function DashboardPage() {
   )
   const [academicItems, setAcademicItems] = useState<AcademicItem[] | null>(null)
   const isGuest = !currentUser
-  const usesServerData = isSqlAuth() && !!currentUser
   const checkInLogs = useMemo(
     () => primaryAthlete?.checkInLogs ?? [],
     [primaryAthlete?.checkInLogs]
+  )
+  const [diaryEntries, setDiaryEntries] = useState<CheckInDiaryEntry[]>(() =>
+    mapCheckInLogsToDiaryEntries(checkInLogs)
   )
 
   const [greeting, setGreeting] = useState(determineGreeting)
@@ -289,9 +231,8 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
-    if (!usesServerData) return
     setDiaryEntries(mapCheckInLogsToDiaryEntries(checkInLogs))
-  }, [usesServerData, checkInLogs])
+  }, [checkInLogs])
 
   useEffect(() => {
     if (isGuest) {
@@ -349,24 +290,6 @@ export default function DashboardPage() {
     () => academicItemsForDisplay.filter((item) => !item.completed).length,
     [academicItemsForDisplay]
   )
-
-  useEffect(() => {
-    if (typeof window === "undefined" || usesServerData || isGuest) return
-    const stored = window.localStorage.getItem(diaryStorageKey)
-    if (!stored) return
-    try {
-      const parsed = JSON.parse(stored)
-      const entries = normalizeDiaryEntriesFromStorage(parsed)
-      setDiaryEntries(entries)
-    } catch (error) {
-      console.error("Failed to load diary entries", error)
-    }
-  }, [usesServerData, isGuest])
-
-  useEffect(() => {
-    if (typeof window === "undefined" || usesServerData || isGuest) return
-    window.localStorage.setItem(diaryStorageKey, JSON.stringify(diaryEntries))
-  }, [diaryEntries, usesServerData, isGuest])
 
   useEffect(() => {
     if (isGuest) return
@@ -568,11 +491,9 @@ export default function DashboardPage() {
     const trimmedMentalNotes = mentalNotes.trim()
     const trimmedPhysicalNotes = physicalNotes.trim()
     const existingEntry = diaryEntries.find((entry) => entry.date === todayKey)
-    const existingLog = usesServerData
-      ? checkInLogs.find((log) => log.date === todayKey)
-      : undefined
+    const existingLog = checkInLogs.find((log) => log.date === todayKey)
 
-    const baseForId = usesServerData ? checkInLogs : diaryEntries
+    const baseForId = checkInLogs.length > 0 ? checkInLogs : diaryEntries
     const maxId = baseForId.reduce<number>((max, item) => Math.max(max, item.id), 0)
     const nextId = existingEntry?.id ?? existingLog?.id ?? maxId + 1
     const createdAt = existingEntry?.createdAt ?? existingLog?.createdAt ?? now.toISOString()
@@ -598,30 +519,28 @@ export default function DashboardPage() {
       return updated
     }
 
-    if (usesServerData && primaryAthlete) {
-      setDiaryEntries((prev) => applyDiaryUpdate(prev))
-      updateCheckInLogs(primaryAthlete.id, (prevLogs) => {
-        const filtered = prevLogs.filter(
-          (log) => log.id !== updatedEntry.id && log.date !== updatedEntry.date
-        )
-        const nextLog: CheckInLog = {
-          id: updatedEntry.id,
-          date: updatedEntry.date,
-          createdAt: updatedEntry.createdAt,
-          mentalState: updatedEntry.mentalState,
-          physicalState: updatedEntry.physicalState,
-          ...(trimmedMentalNotes ? { mentalNotes: trimmedMentalNotes } : {}),
-          ...(trimmedPhysicalNotes ? { physicalNotes: trimmedPhysicalNotes } : {}),
-        }
-        const updated = [...filtered, nextLog]
-        updated.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        )
-        return updated
-      })
-    } else {
-      setDiaryEntries((prev) => applyDiaryUpdate(prev))
-    }
+    if (!primaryAthlete) return
+
+    setDiaryEntries((prev) => applyDiaryUpdate(prev))
+    updateCheckInLogs(primaryAthlete.id, (prevLogs) => {
+      const filtered = prevLogs.filter(
+        (log) => log.id !== updatedEntry.id && log.date !== updatedEntry.date
+      )
+      const nextLog: CheckInLog = {
+        id: updatedEntry.id,
+        date: updatedEntry.date,
+        createdAt: updatedEntry.createdAt,
+        mentalState: updatedEntry.mentalState,
+        physicalState: updatedEntry.physicalState,
+        ...(trimmedMentalNotes ? { mentalNotes: trimmedMentalNotes } : {}),
+        ...(trimmedPhysicalNotes ? { physicalNotes: trimmedPhysicalNotes } : {}),
+      }
+      const updated = [...filtered, nextLog]
+      updated.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+      return updated
+    })
 
     setCheckInCompleted(true)
   }

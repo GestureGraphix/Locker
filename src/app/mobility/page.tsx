@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Activity, Plus, Play, Clock, TrendingUp } from "lucide-react"
 import { useRole } from "@/components/role-context"
-import { isSqlAuth } from "@/lib/auth-mode"
 
 const mockExercises = [
   {
@@ -119,28 +118,9 @@ const exerciseGroups = [
 ]
 
 export default function Mobility() {
-  const { currentUser, primaryAthlete, updateMobilityExercises, updateMobilityLogs } = useRole()
-  const sqlAuthEnabled = useMemo(() => isSqlAuth(), [])
-  const usesServerData =
-    sqlAuthEnabled &&
-    !!currentUser &&
-    currentUser.role === "athlete" &&
-    currentUser.id != null &&
-    !!primaryAthlete &&
-    !primaryAthlete.isSeedData
-  const storageKey = useMemo(
-    () => (!usesServerData && currentUser ? `locker-mobility-${currentUser.email}` : null),
-    [usesServerData, currentUser]
-  )
-
-  const [localExercises, setLocalExercises] = useState(mockExercises)
-  const [localMobilityLogs, setLocalMobilityLogs] = useState(mockMobilityLogs)
-  const exercises = usesServerData
-    ? primaryAthlete?.mobilityExercises ?? []
-    : localExercises
-  const mobilityLogs = usesServerData
-    ? primaryAthlete?.mobilityLogs ?? []
-    : localMobilityLogs
+  const { primaryAthlete, updateMobilityExercises, updateMobilityLogs } = useRole()
+  const exercises = primaryAthlete?.mobilityExercises ?? mockExercises
+  const mobilityLogs = primaryAthlete?.mobilityLogs ?? mockMobilityLogs
   const [isAddExerciseOpen, setIsAddExerciseOpen] = useState(false)
   const [isLogExerciseOpen, setIsLogExerciseOpen] = useState(false)
   const [newExercise, setNewExercise] = useState({
@@ -155,51 +135,9 @@ export default function Mobility() {
     notes: "",
   })
 
-  useEffect(() => {
-    if (usesServerData) return
-    if (typeof window === "undefined") return
-    if (!currentUser) {
-      setLocalExercises(mockExercises)
-      setLocalMobilityLogs(mockMobilityLogs)
-      return
-    }
-
-    if (!storageKey) return
-
-    try {
-      const stored = window.localStorage.getItem(storageKey)
-      if (!stored) {
-        setLocalExercises([])
-        setLocalMobilityLogs([])
-        return
-      }
-
-      const parsed = JSON.parse(stored) as {
-        exercises?: typeof mockExercises
-        mobilityLogs?: typeof mockMobilityLogs
-      }
-
-      setLocalExercises(Array.isArray(parsed.exercises) ? parsed.exercises : [])
-      setLocalMobilityLogs(Array.isArray(parsed.mobilityLogs) ? parsed.mobilityLogs : [])
-    } catch (error) {
-      console.error("Failed to load mobility data", error)
-      setLocalExercises([])
-      setLocalMobilityLogs([])
-    }
-  }, [usesServerData, currentUser, storageKey])
-
-  useEffect(() => {
-    if (usesServerData) return
-    if (typeof window === "undefined") return
-    if (!storageKey) return
-
-    const payload = JSON.stringify({ exercises: localExercises, mobilityLogs: localMobilityLogs })
-    window.localStorage.setItem(storageKey, payload)
-  }, [usesServerData, storageKey, localExercises, localMobilityLogs])
-
   const handleAddExercise = () => {
     if (!newExercise.name || !newExercise.prescription) return
-
+    if (!primaryAthlete) return
     const nextId = (exercises.length > 0 ? Math.max(...exercises.map((exercise) => exercise.id)) : 0) + 1
     const exercise = {
       id: nextId,
@@ -207,11 +145,7 @@ export default function Mobility() {
       thumbnail: getGroupIcon(newExercise.group),
     }
 
-    if (usesServerData && primaryAthlete) {
-      updateMobilityExercises(primaryAthlete.id, (prev) => [...prev, exercise])
-    } else {
-      setLocalExercises((prev) => [...prev, exercise])
-    }
+    updateMobilityExercises(primaryAthlete.id, (prev) => [...prev, exercise])
 
     setNewExercise({ group: "back", name: "", youtubeUrl: "", prescription: "" })
     setIsAddExerciseOpen(false)
@@ -219,6 +153,7 @@ export default function Mobility() {
 
   const handleLogExercise = () => {
     if (!newLog.exerciseId || !newLog.durationMin) return
+    if (!primaryAthlete) return
 
     const exerciseId = Number.parseInt(newLog.exerciseId, 10)
     if (!Number.isFinite(exerciseId) || exerciseId <= 0) return
@@ -237,11 +172,7 @@ export default function Mobility() {
       notes: newLog.notes,
     }
 
-    if (usesServerData && primaryAthlete) {
-      updateMobilityLogs(primaryAthlete.id, (prev) => [...prev, log])
-    } else {
-      setLocalMobilityLogs((prev) => [...prev, log])
-    }
+    updateMobilityLogs(primaryAthlete.id, (prev) => [...prev, log])
 
     setNewLog({ exerciseId: "", durationMin: "", notes: "" })
     setIsLogExerciseOpen(false)
