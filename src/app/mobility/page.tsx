@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import {
   Activity,
   Plus,
@@ -379,9 +378,9 @@ export default function Mobility() {
         </TabsList>
 
         <TabsContent value="library" className="space-y-4">
-          <div className="space-y-3 md:hidden">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {exercisesByGroup.map(group => (
-              <Card key={group.name}>
+              <Card key={group.name} className="h-full">
                 <button
                   type="button"
                   onClick={() => toggleGroup(group.name)}
@@ -401,103 +400,40 @@ export default function Mobility() {
                   />
                 </button>
                 {expandedGroup === group.name && (
-                  <CardContent className="pt-0">
+                  <CardContent className="space-y-3 border-t pt-4">
                     {group.exercises.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         No exercises yet. Add one to get started.
                       </p>
                     ) : (
-                      <div className="space-y-3">
-                        {group.exercises.map(exercise => (
-                          <div
-                            key={exercise.id}
-                            className="flex flex-col gap-2 rounded-lg border bg-gradient-to-br from-white to-[#f5f7fb] p-3"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex flex-1 items-start gap-3">
-                                <span className="text-2xl">
-                                  {exercise.thumbnail || getGroupIcon(group.name)}
-                                </span>
-                                <div className="space-y-1">
-                                  <h3 className="text-sm font-semibold text-[#0f2f5b]">
-                                    {exercise.name}
-                                  </h3>
-                                  <p className="text-xs text-muted-foreground">
-                                    {exercise.prescription}
-                                  </p>
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openLogDialog(exercise)}
-                                className="h-7 px-2 text-primary"
-                              >
-                                <Play className="h-4 w-4" />
-                                <span className="sr-only">Log session</span>
-                              </Button>
-                            </div>
-                            {exercise.youtubeUrl && (
-                              <a
-                                href={exercise.youtubeUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-[#1c6dd0] hover:underline"
-                              >
-                                Watch demo
-                              </a>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                )}
-              </Card>
-            ))}
-          </div>
-
-          <div className="hidden grid-cols-2 gap-3 md:grid md:grid-cols-3 lg:grid-cols-4">
-            {exercisesByGroup.map(group => (
-              <Card key={group.name} className="h-full">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                      <span className="text-2xl">{group.icon}</span>
-                      {group.label}
-                    </CardTitle>
-                    <Badge variant="secondary">{group.exercises.length} drills</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {group.exercises.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No exercises yet. Add one to get started.</p>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                      {group.exercises.map(exercise => (
+                      group.exercises.map(exercise => (
                         <div
                           key={exercise.id}
-                          className="flex h-full flex-col justify-between rounded-lg border bg-gradient-to-br from-white to-[#f5f7fb] p-3 text-left aspect-square"
+                          className="flex flex-col gap-2 rounded-lg border bg-gradient-to-br from-white to-[#f5f7fb] p-3"
                         >
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-2xl">{exercise.thumbnail || getGroupIcon(group.name)}</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => openLogDialog(exercise)}
-                                className="h-7 px-2 text-primary"
-                              >
-                                <Play className="h-4 w-4" />
-                                <span className="sr-only">Log session</span>
-                              </Button>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex flex-1 items-start gap-3">
+                              <span className="text-2xl">
+                                {exercise.thumbnail || getGroupIcon(group.name)}
+                              </span>
+                              <div className="space-y-1">
+                                <h3 className="text-sm font-semibold text-[#0f2f5b]">
+                                  {exercise.name}
+                                </h3>
+                                <p className="text-xs text-muted-foreground">
+                                  {exercise.prescription}
+                                </p>
+                              </div>
                             </div>
-                            <div className="space-y-1">
-                              <h3 className="text-sm font-semibold text-[#0f2f5b]">{exercise.name}</h3>
-                              <p className="text-xs text-muted-foreground line-clamp-2">
-                                {exercise.prescription}
-                              </p>
-                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openLogDialog(exercise)}
+                              className="h-7 px-2 text-primary"
+                            >
+                              <Play className="h-4 w-4" />
+                              <span className="sr-only">Log session</span>
+                            </Button>
                           </div>
                           {exercise.youtubeUrl && (
                             <a
@@ -510,10 +446,10 @@ export default function Mobility() {
                             </a>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
+                      ))
+                    )}
+                  </CardContent>
+                )}
               </Card>
             ))}
           </div>
