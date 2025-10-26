@@ -50,7 +50,7 @@ const initialForm: AssignExerciseForm = {
 
 type AddAthleteFormState = {
   name: string
-  email: string
+  emails: string
   sport: string
   level: string
   team: string
@@ -59,7 +59,7 @@ type AddAthleteFormState = {
 
 const initialAthleteForm: AddAthleteFormState = {
   name: "",
-  email: "",
+  emails: "",
   sport: "",
   level: "",
   team: "",
@@ -101,6 +101,27 @@ const isUpcoming = (value: string) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return false
   return date.getTime() >= new Date().setHours(0, 0, 0, 0)
+}
+
+const extractEmails = (value: string) => {
+  const tokens = value
+    .split(/[\s,;]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0)
+
+  const valid: string[] = []
+  const invalid: string[] = []
+
+  for (const token of tokens) {
+    const normalized = token.toLowerCase()
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+      valid.push(normalized)
+    } else {
+      invalid.push(token)
+    }
+  }
+
+  return { valid: Array.from(new Set(valid)), invalid }
 }
 
 const typeBadge = (type: string) => {
@@ -465,8 +486,15 @@ export function CoachDashboard() {
   }, [athletes, bulkAssignForm.tag])
 
   const handleAddAthlete = () => {
-    if (!addAthleteForm.email.trim()) {
-      setAddAthleteError("Email is required to add an athlete.")
+    const { valid: emails, invalid } = extractEmails(addAthleteForm.emails)
+
+    if (invalid.length > 0) {
+      setAddAthleteError(`Remove invalid email address${invalid.length > 1 ? "es" : ""}: ${invalid.join(", ")}`)
+      return
+    }
+
+    if (emails.length === 0) {
+      setAddAthleteError("Add at least one valid email address.")
       return
     }
 
@@ -475,14 +503,16 @@ export function CoachDashboard() {
       .map((tag) => tag.trim())
       .filter((tag) => tag.length > 0)
 
-    addAthlete({
-      name: addAthleteForm.name,
-      email: addAthleteForm.email,
-      sport: addAthleteForm.sport || undefined,
-      level: addAthleteForm.level || undefined,
-      team: addAthleteForm.team || undefined,
-      tags: tagValues.length ? tagValues : undefined,
-    })
+    for (const email of emails) {
+      addAthlete({
+        name: emails.length === 1 ? addAthleteForm.name : undefined,
+        email,
+        sport: addAthleteForm.sport || undefined,
+        level: addAthleteForm.level || undefined,
+        team: addAthleteForm.team || undefined,
+        tags: tagValues.length ? tagValues : undefined,
+      })
+    }
 
     setAddAthleteForm(initialAthleteForm)
     setAddAthleteError(null)
@@ -555,18 +585,24 @@ export function CoachDashboard() {
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Add Athlete by Email</DialogTitle>
-              <DialogDescription>Invite a new student-athlete to your roster using their email address.</DialogDescription>
+              <DialogDescription>
+                Invite new student-athletes to your roster using one or more email addresses.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 py-2 sm:space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="md:col-span-2">
-                  <label className="text-xs font-medium text-gray-600">Email Address *</label>
-                  <Input
-                    type="email"
-                    value={addAthleteForm.email}
-                    onChange={(event) => setAddAthleteForm((prev) => ({ ...prev, email: event.target.value }))}
-                    placeholder="athlete@locker.app"
+                  <label className="text-xs font-medium text-gray-600">Athlete Email(s) *</label>
+                  <textarea
+                    value={addAthleteForm.emails}
+                    onChange={(event) => setAddAthleteForm((prev) => ({ ...prev, emails: event.target.value }))}
+                    placeholder="athlete@locker.app, teammate@locker.app"
+                    rows={3}
+                    className="min-h-[4.5rem] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                   />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Separate multiple emails with commas, spaces, or new lines.
+                  </p>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-600">Full Name</label>
@@ -575,6 +611,7 @@ export function CoachDashboard() {
                     onChange={(event) => setAddAthleteForm((prev) => ({ ...prev, name: event.target.value }))}
                     placeholder="Jamie Thompson"
                   />
+                  <p className="mt-1 text-xs text-gray-500">Used when adding a single athlete.</p>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-600">Sport</label>
