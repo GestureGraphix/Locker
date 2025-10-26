@@ -70,6 +70,7 @@ type PlateItem = {
   item: MenuItem
   baseCalories: number
   baseProteinG: number
+  portion: number
 }
 /* ======================== Helpers ======================== */
 
@@ -242,7 +243,8 @@ export default function Fuel() {
     portion: "1",
     baseCalories: undefined as number | undefined,
     baseProteinG: undefined as number | undefined,
-    isFromMenu: false
+    isFromMenu: false,
+    portionEditable: true
   })
   const mealTypeOptions = useMemo(() => {
     const baseOptions = MEAL_TYPE_OPTIONS
@@ -358,8 +360,14 @@ export default function Fuel() {
       }
     }
 
-    const totalCaloriesRaw = plateItems.reduce((sum, item) => sum + item.baseCalories, 0)
-    const totalProteinRaw = plateItems.reduce((sum, item) => sum + item.baseProteinG, 0)
+    const totalCaloriesRaw = plateItems.reduce(
+      (sum, item) => sum + item.baseCalories * item.portion,
+      0
+    )
+    const totalProteinRaw = plateItems.reduce(
+      (sum, item) => sum + item.baseProteinG * item.portion,
+      0
+    )
 
     const mealTypeCounts = new Map<string, number>()
     plateItems.forEach((item) => {
@@ -371,7 +379,8 @@ export default function Fuel() {
 
     const itemDescriptions = plateItems.map((plateItem) => {
       const base = `${plateItem.item.name}${plateItem.item.description ? ` — ${plateItem.item.description}` : ""}`
-      return `${base} (${plateItem.location})`
+      const portionSuffix = plateItem.portion !== 1 ? ` × ${formatTwoDecimalString(plateItem.portion)}` : ""
+      return `${base} (${plateItem.location})${portionSuffix}`
     })
 
     const nutritionFacts = plateItems.flatMap((plateItem) =>
@@ -399,7 +408,8 @@ export default function Fuel() {
       portion: "1",
       baseCalories: undefined,
       baseProteinG: undefined,
-      isFromMenu: false
+      isFromMenu: false,
+      portionEditable: true
     })
   }, [])
 
@@ -413,6 +423,19 @@ export default function Fuel() {
       const baseCalories = calories != null && Number.isFinite(calories) ? calories : 0
       const baseProtein = protein != null && Number.isFinite(protein) ? protein : 0
 
+      let portion = 1
+      if (typeof window !== "undefined") {
+        const promptMessage = `How many portions of ${item.name} are you adding to the plate?`
+        const response = window.prompt(promptMessage, "1")
+        if (response == null) {
+          return
+        }
+        const parsed = Number.parseFloat(response)
+        if (Number.isFinite(parsed) && parsed > 0) {
+          portion = parsed
+        }
+      }
+
       const clonedFacts = (Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []).map((f) => ({ ...f }))
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -425,7 +448,8 @@ export default function Fuel() {
           sectionLabel,
           item: { ...item, nutritionFacts: clonedFacts },
           baseCalories,
-          baseProteinG: baseProtein
+          baseProteinG: baseProtein,
+          portion
         }
       ])
     },
@@ -458,7 +482,8 @@ export default function Fuel() {
       portion: "1",
       baseCalories: plateSummary.totalCalories,
       baseProteinG: plateSummary.totalProteinRaw,
-      isFromMenu: true
+      isFromMenu: true,
+      portionEditable: false
     })
 
     setPendingPlateItemIds(plateItems.map((item) => item.id))
@@ -733,6 +758,10 @@ export default function Fuel() {
     newMeal.isFromMenu && effectiveBaseProtein != null && !Number.isNaN(effectiveBaseProtein)
       ? roundToTwo(effectiveBaseProtein * portionMultiplierPreview)
       : undefined
+  const shouldShowPortionInput =
+    newMeal.isFromMenu &&
+    newMeal.portionEditable &&
+    (effectiveBaseCalories != null || effectiveBaseProtein != null)
 
   /* ======================== UI ======================== */
 
@@ -824,7 +853,7 @@ export default function Fuel() {
                   </select>
                 </div>
 
-                {newMeal.isFromMenu && (effectiveBaseCalories != null || effectiveBaseProtein != null) ? (
+                {shouldShowPortionInput ? (
                   <div className="space-y-3">
                     <div>
                       <label className="text-sm font-medium">Portions</label>
@@ -858,6 +887,22 @@ export default function Fuel() {
                         </p>
                       </div>
                     )}
+                  </div>
+                ) : newMeal.isFromMenu && (effectiveBaseCalories != null || effectiveBaseProtein != null) ? (
+                  <div className="space-y-3">
+                    <div className="rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 p-3">
+                      <p className="text-sm font-medium text-foreground">Plate totals</p>
+                      <p className="text-xs text-muted-foreground">
+                        {effectiveBaseCalories != null ? `${Math.round(effectiveBaseCalories)} cal` : null}
+                        {effectiveBaseCalories != null && effectiveBaseProtein != null ? " · " : null}
+                        {effectiveBaseProtein != null
+                          ? `${formatTwoDecimalString(effectiveBaseProtein)}g protein`
+                          : null}
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Portions were captured when you added each item to your plate.
+                    </p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
@@ -1286,8 +1331,13 @@ export default function Fuel() {
                           </p>
                           {plateItem.item.description ? <p>{plateItem.item.description}</p> : null}
                           <p>
-                            {Math.round(plateItem.baseCalories)} cal · {formatTwoDecimalString(plateItem.baseProteinG)}g protein
+                            {Math.round(plateItem.baseCalories * plateItem.portion)} cal ·
+                            {" "}
+                            {formatTwoDecimalString(plateItem.baseProteinG * plateItem.portion)}g protein
                           </p>
+                          {plateItem.portion !== 1 ? (
+                            <p>Portion: ×{formatTwoDecimalString(plateItem.portion)}</p>
+                          ) : null}
                         </div>
                         <Button
                           size="icon"
