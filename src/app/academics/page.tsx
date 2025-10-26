@@ -587,12 +587,12 @@ export default function Academics() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
           <h1 className="text-3xl font-bold text-foreground">Academics</h1>
           <p className="text-muted-foreground">Track your courses, assignments, and exams</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <Dialog
             open={isImportDialogOpen}
             onOpenChange={(open) => {
@@ -603,12 +603,12 @@ export default function Academics() {
             }}
           >
             <DialogTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" className="w-full sm:w-auto">
                 <Calendar className="h-4 w-4 mr-2" />
                 Import Schedule
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
                 <DialogTitle>Import Schedule (.ics)</DialogTitle>
               </DialogHeader>
@@ -629,12 +629,12 @@ export default function Academics() {
           </Dialog>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Item
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
                 <DialogTitle>Add Academic Item</DialogTitle>
               </DialogHeader>
@@ -701,7 +701,7 @@ export default function Academics() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
@@ -753,16 +753,28 @@ export default function Academics() {
       {/* Courses */}
       <div>
         <h2 className="text-xl font-semibold mb-4">My Courses</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {courses.map(course => (
             <Card key={course.id}>
               <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <CardTitle className="text-lg whitespace-nowrap">{course.code}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{course.name}</p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <CardTitle className="text-lg truncate" title={course.code}>
+                      {course.code}
+                    </CardTitle>
+                    <p
+                      className="text-sm text-muted-foreground truncate"
+                      title={course.name}
+                    >
+                      {course.name}
+                    </p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => startEditingCourse(course)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    onClick={() => startEditingCourse(course)}
+                  >
                     Edit
                   </Button>
                 </div>
@@ -788,7 +800,7 @@ export default function Academics() {
         <h2 className="text-xl font-semibold mb-4">Upcoming Items</h2>
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <Table className="min-w-[680px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Course</TableHead>
@@ -826,10 +838,11 @@ export default function Academics() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                         <Button
                           variant="outline"
                           size="sm"
+                          className="w-full sm:w-auto"
                           onClick={() => startEditingItem(item)}
                         >
                           Edit
@@ -837,6 +850,7 @@ export default function Academics() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="w-full sm:w-auto"
                           onClick={() => toggleComplete(item.id)}
                         >
                           {item.completed ? "Undo" : "Complete"}
@@ -855,7 +869,7 @@ export default function Academics() {
       {overdueItems.length > 0 && (
         <Card className="border-[#b3c7e6] bg-[#eef5ff]">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-[#0f4d92]">
+            <CardTitle className="flex flex-wrap items-center gap-2 text-[#0f4d92]">
               <AlertCircle className="h-5 w-5" />
               Overdue Items
             </CardTitle>
@@ -863,12 +877,15 @@ export default function Academics() {
           <CardContent>
             <div className="space-y-2">
               {overdueItems.map(item => (
-                <div key={item.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-[#c7d7ee]">
-                  <div>
-                    <p className="font-medium">{item.title}</p>
-                    <p className="text-sm text-muted-foreground">{item.course}</p>
+                <div
+                  key={item.id}
+                  className="flex flex-col gap-2 rounded-lg border border-[#c7d7ee] bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="space-y-1">
+                    <p className="font-medium break-words">{item.title}</p>
+                    <p className="text-sm text-muted-foreground break-words">{item.course}</p>
                   </div>
-                  <Badge className="bg-[#d9e3f5] text-[#0f2f5b] border-[#b3c7e6]">
+                  <Badge className="bg-[#d9e3f5] text-[#0f2f5b] border-[#b3c7e6] self-start sm:self-auto">
                     Overdue
                   </Badge>
                 </div>
@@ -879,7 +896,7 @@ export default function Academics() {
       )}
 
       <Dialog open={editingItem !== null} onOpenChange={(open) => !open && setEditingItem(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Edit Item</DialogTitle>
           </DialogHeader>
