@@ -37,20 +37,6 @@ type CheckInDiaryEntry = {
   physicalNotes: string
 }
 
-const determineGreeting = () => {
-  const hour = new Date().getHours()
-
-  if (hour < 12) {
-    return "Hello, good morning"
-  }
-
-  if (hour < 18) {
-    return "Hello, good afternoon"
-  }
-
-  return "Hello, good night"
-}
-
 // Enhanced mock data with more sophisticated metrics
 const mockData = {
   checkIn: {
@@ -220,15 +206,6 @@ export default function DashboardPage() {
   const [diaryEntries, setDiaryEntries] = useState<CheckInDiaryEntry[]>(() =>
     mapCheckInLogsToDiaryEntries(checkInLogs)
   )
-
-  const [greeting, setGreeting] = useState(determineGreeting)
-
-  useEffect(() => {
-    const updateGreeting = () => setGreeting(determineGreeting())
-    const interval = setInterval(updateGreeting, 60 * 1000)
-
-    return () => clearInterval(interval)
-  }, [])
 
   useEffect(() => {
     setDiaryEntries(mapCheckInLogsToDiaryEntries(checkInLogs))
@@ -616,20 +593,18 @@ export default function DashboardPage() {
     <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Hero Section */}
-        <div className="mb-12">
+        <div className="mb-8">
           <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-[#0f4d92]/25 via-[#1c6dd0]/20 to-[#acc4e6]/25 rounded-3xl blur-3xl"></div>
-            <div className="relative glass-card rounded-3xl p-8">
-              <div className="flex items-center justify-between">
+            <div className="absolute inset-0 bg-gradient-to-r from-[#0f4d92]/20 via-[#1c6dd0]/15 to-[#acc4e6]/20 rounded-2xl blur-2xl"></div>
+            <div className="relative glass-card rounded-2xl p-5">
+              <div className="flex items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-4xl font-bold bg-gradient-to-r from-[#0f172a] via-[#0f4d92] to-[#12284b] bg-clip-text text-transparent mb-2">
-                    {greeting} Alex! 👋
-                  </h1>
-                  <p className="text-xl text-gray-600 font-medium">Ready to tackle another day?</p>
+                  <h2 className="text-2xl font-semibold text-gray-900">Dashboard overview</h2>
+                  <p className="text-sm text-gray-600">Quick stats to keep you moving.</p>
                 </div>
                 <div className="hidden md:block">
-                  <div className="w-32 h-32 rounded-full gradient-hero flex items-center justify-center animate-float">
-                    <Sparkles className="h-16 w-16 text-white" />
+                  <div className="w-24 h-24 rounded-full gradient-hero flex items-center justify-center animate-float">
+                    <Sparkles className="h-10 w-10 text-white" />
                   </div>
                 </div>
               </div>
@@ -640,9 +615,9 @@ export default function DashboardPage() {
         {/* Daily Check-in Card */}
         <Card className="mb-12 glass-card border-0 shadow-premium-lg">
           <CardHeader className="pb-6">
-            <CardTitle className="flex items-center gap-4 text-2xl text-gray-900">
-              <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow">
-                <Target className="h-7 w-7 text-white" />
+            <CardTitle className="flex items-center gap-3 text-xl text-gray-900">
+              <div className="w-10 h-10 rounded-2xl gradient-primary flex items-center justify-center shadow-glow">
+                <Target className="h-5 w-5 text-white" />
               </div>
               Daily Check-in
               {checkInCompleted && (
@@ -766,72 +741,72 @@ export default function DashboardPage() {
         </Card>
 
         {/* Today's Progress & Upcoming */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-          <div className="space-y-6">
-            <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-              <Zap className="h-6 w-6 text-[#0f4d92]" />
-              Today&apos;s Progress
-            </h3>
-            
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
+            <div className="space-y-5">
+              <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <Zap className="h-5 w-5 text-[#0f4d92]" />
+                Today&apos;s Progress
+              </h3>
+
+              <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 rounded-2xl gradient-success flex items-center justify-center shadow-glow">
+                        <Droplets className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600">Hydration</p>
+                        <p className="text-2xl font-bold text-gray-900">{hydrationStats.total}oz</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-semibold text-gray-600">{hydrationProgress.toFixed(0)}%</p>
+                      <Progress value={hydrationProgress} className="w-20 h-2" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300">
+                <CardContent className="p-5">
                   <div className="flex items-center space-x-4">
-                    <div className="w-14 h-14 rounded-2xl gradient-success flex items-center justify-center shadow-glow">
-                      <Droplets className="h-7 w-7 text-white" />
+                    <div className="w-12 h-12 rounded-2xl gradient-warning flex items-center justify-center shadow-glow">
+                      <Apple className="h-6 w-6 text-white" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-gray-600">Hydration</p>
-                    <p className="text-3xl font-bold text-gray-900">{hydrationStats.total}oz</p>
+                      <p className="text-xs font-semibold text-gray-600">Meals Logged</p>
+                      <p className="text-2xl font-bold text-gray-900">{todayStats.mealsLogged}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-gray-600">{hydrationProgress.toFixed(0)}%</p>
-                    <Progress value={hydrationProgress} className="w-20 h-3" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300">
-              <CardContent className="p-6">
-                <div className="flex items-center space-x-4">
-                  <div className="w-14 h-14 rounded-2xl gradient-warning flex items-center justify-center shadow-glow">
-                    <Apple className="h-7 w-7 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-600">Meals Logged</p>
-                    <p className="text-3xl font-bold text-gray-900">{todayStats.mealsLogged}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300">
-              <CardContent className="p-6">
-                <div className="flex items-center space-x-4">
-                  <div className="w-14 h-14 rounded-2xl gradient-danger flex items-center justify-center shadow-glow">
-                    <Dumbbell className="h-7 w-7 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-600">Sessions Completed</p>
-                    <p className="text-3xl font-bold text-gray-900">{sessionsCompletedToday}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </CardContent>
+              </Card>
 
-          <div className="lg:col-span-2 space-y-6">
-            <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-              <Calendar className="h-6 w-6 text-[#0f4d92]" />
+              <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300">
+                <CardContent className="p-5">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 rounded-2xl gradient-danger flex items-center justify-center shadow-glow">
+                      <Dumbbell className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600">Sessions Completed</p>
+                      <p className="text-2xl font-bold text-gray-900">{sessionsCompletedToday}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+          <div className="lg:col-span-2 space-y-5">
+            <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-[#0f4d92]" />
               Upcoming
             </h3>
-            
+
             <Card className="glass-card border-0 shadow-premium">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
-                  <BookOpen className="h-6 w-6 text-[#0f4d92]" />
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
+                  <BookOpen className="h-5 w-5 text-[#0f4d92]" />
                   Academics Due
                 </CardTitle>
               </CardHeader>
@@ -840,16 +815,16 @@ export default function DashboardPage() {
                   upcomingItems.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
+                      className="flex items-center justify-between p-4 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
                     >
                       <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center">
-                          <BookOpen className="h-6 w-6 text-white" />
+                        <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
+                          <BookOpen className="h-5 w-5 text-white" />
                         </div>
                         <div>
                           <p className="font-bold text-gray-900">{item.title}</p>
                           <p className="text-sm text-gray-600">{item.course}</p>
-                          <Progress value={item.progress} className="w-32 h-2 mt-2" />
+                          <Progress value={item.progress} className="w-28 h-2 mt-2" />
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -863,16 +838,16 @@ export default function DashboardPage() {
                     You&apos;re all caught up on academic work.
                   </div>
                 )}
-                <Button variant="outline" className="w-full glass-card border-white/20 hover:bg-white/50">
+                <Button variant="outline" className="w-full glass-card border-white/20 hover:bg-white/50 text-sm">
                   View All ({openAcademicItemsCount})
                 </Button>
               </CardContent>
             </Card>
 
             <Card className="glass-card border-0 shadow-premium">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
-                  <Dumbbell className="h-6 w-6 text-[#0f4d92]" />
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
+                  <Dumbbell className="h-5 w-5 text-[#0f4d92]" />
                   Today&apos;s Training
                 </CardTitle>
               </CardHeader>
@@ -881,18 +856,18 @@ export default function DashboardPage() {
                   todaysSessions.map((session) => (
                     <div
                       key={session.id}
-                      className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
+                      className="flex items-center justify-between p-4 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
                     >
                       <div className="flex items-center space-x-4">
                         <div
                           className={cn(
-                            "w-12 h-12 rounded-xl flex items-center justify-center",
+                            "w-10 h-10 rounded-xl flex items-center justify-center",
                             session.completed ? "gradient-success" : "bg-gray-100"
                           )}
                         >
                           <Dumbbell
                             className={cn(
-                              "h-6 w-6",
+                              "h-5 w-5",
                               session.completed ? "text-white" : "text-gray-400"
                             )}
                           />
@@ -917,9 +892,9 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
             <Card className="glass-card border-0 shadow-premium">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
-                  <Calendar className="h-6 w-6 text-[#0f4d92]" />
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-[#0f4d92]" />
                   Personal Calendar
                 </CardTitle>
               </CardHeader>
@@ -928,7 +903,7 @@ export default function DashboardPage() {
                   upcomingCalendar.map((event) => (
                     <div
                       key={event.id}
-                      className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
+                      className="flex items-center justify-between p-4 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
                     >
                       <div>
                         <p className="font-bold text-gray-900">{event.title}</p>
@@ -947,22 +922,22 @@ export default function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-            <Card className="glass-card border-0 shadow-premium">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
-                  <ListChecks className="h-6 w-6 text-[#0f4d92]" />
-                  Workout Assignments
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {workoutAssignments.length > 0 ? (
-                  workoutAssignments.map((workout) => (
-                    <div
-                      key={workout.id}
-                      className="flex items-center justify-between p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
-                    >
-                      <div>
-                        <p className="font-bold text-gray-900">{workout.title}</p>
+              <Card className="glass-card border-0 shadow-premium">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg text-gray-900 flex items-center gap-2">
+                    <ListChecks className="h-5 w-5 text-[#0f4d92]" />
+                    Workout Assignments
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {workoutAssignments.length > 0 ? (
+                    workoutAssignments.map((workout) => (
+                      <div
+                        key={workout.id}
+                        className="flex items-center justify-between p-4 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
+                      >
+                        <div>
+                          <p className="font-bold text-gray-900">{workout.title}</p>
                         <p className="text-sm text-gray-600">
                           Due {formatDateLabel(workout.dueDate)} • {workout.focus}
                         </p>
@@ -993,53 +968,53 @@ export default function DashboardPage() {
         </div>
 
         {/* This Week Stats */}
-        <div className="mb-12">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
-              This Week
-            </h3>
-            <Button variant="outline" className="glass-card border-white/20 hover:bg-white/50">
-              View details <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="mb-10">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-semibold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                This Week
+              </h3>
+              <Button variant="outline" className="glass-card border-white/20 hover:bg-white/50 text-sm">
+                View details <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <Dumbbell className="h-8 w-8 text-white" />
+              <CardContent className="p-5 text-center">
+                <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center mx-auto mb-3 shadow-glow">
+                  <Dumbbell className="h-6 w-6 text-white" />
                 </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Sessions</p>
-                <p className="text-4xl font-bold text-gray-900 mb-2">{weeklyStatsData.sessions}</p>
+                <p className="text-xs font-semibold text-gray-600 mb-1">Sessions</p>
+                <p className="text-3xl font-bold text-gray-900 mb-1">{weeklyStatsData.sessions}</p>
                 <p className="text-xs text-[#1c6dd0] font-semibold">+2 from last week</p>
               </CardContent>
             </Card>
             <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-warning flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <Award className="h-8 w-8 text-white" />
+              <CardContent className="p-5 text-center">
+                <div className="w-12 h-12 rounded-2xl gradient-warning flex items-center justify-center mx-auto mb-3 shadow-glow">
+                  <Award className="h-6 w-6 text-white" />
                 </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">PRs Set</p>
-                <p className="text-4xl font-bold text-gray-900 mb-2">{weeklyStatsData.prsSet}</p>
+                <p className="text-xs font-semibold text-gray-600 mb-1">PRs Set</p>
+                <p className="text-3xl font-bold text-gray-900 mb-1">{weeklyStatsData.prsSet}</p>
                 <p className="text-xs text-[#1c6dd0] font-semibold">New records!</p>
               </CardContent>
             </Card>
             <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-success flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <Droplets className="h-8 w-8 text-white" />
+              <CardContent className="p-5 text-center">
+                <div className="w-12 h-12 rounded-2xl gradient-success flex items-center justify-center mx-auto mb-3 shadow-glow">
+                  <Droplets className="h-6 w-6 text-white" />
                 </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Hydration Avg</p>
-                <p className="text-4xl font-bold text-gray-900 mb-2">{weeklyStatsData.hydrationAvg}%</p>
+                <p className="text-xs font-semibold text-gray-600 mb-1">Hydration Avg</p>
+                <p className="text-3xl font-bold text-gray-900 mb-1">{weeklyStatsData.hydrationAvg}%</p>
                 <p className="text-xs text-[#1c6dd0] font-semibold">Good consistency</p>
               </CardContent>
             </Card>
             <Card className="glass-card border-0 shadow-premium hover:shadow-glow transition-all duration-300 hover:scale-105">
-              <CardContent className="p-6 text-center">
-                <div className="w-16 h-16 rounded-2xl gradient-secondary flex items-center justify-center mx-auto mb-4 shadow-glow">
-                  <BookOpen className="h-8 w-8 text-white" />
+              <CardContent className="p-5 text-center">
+                <div className="w-12 h-12 rounded-2xl gradient-secondary flex items-center justify-center mx-auto mb-3 shadow-glow">
+                  <BookOpen className="h-6 w-6 text-white" />
                 </div>
-                <p className="text-sm font-semibold text-gray-600 mb-2">Assignments</p>
-                <p className="text-4xl font-bold text-gray-900 mb-2">{weeklyStatsData.assignments}</p>
+                <p className="text-xs font-semibold text-gray-600 mb-1">Assignments</p>
+                <p className="text-3xl font-bold text-gray-900 mb-1">{weeklyStatsData.assignments}</p>
                 <p className="text-xs text-[#1c6dd0] font-semibold">5 completed</p>
               </CardContent>
             </Card>
@@ -1048,29 +1023,29 @@ export default function DashboardPage() {
 
         {/* Hydration Progress Card */}
         <Card className="glass-card border-0 shadow-premium-lg">
-          <CardHeader className="pb-6">
-            <CardTitle className="flex items-center gap-4 text-2xl text-gray-900">
-              <div className="w-12 h-12 rounded-2xl gradient-success flex items-center justify-center shadow-glow">
-                <Droplets className="h-7 w-7 text-white" />
+          <CardHeader className="pb-5">
+            <CardTitle className="flex items-center gap-3 text-xl text-gray-900">
+              <div className="w-10 h-10 rounded-2xl gradient-success flex items-center justify-center shadow-glow">
+                <Droplets className="h-5 w-5 text-white" />
               </div>
               Hydration Progress
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-8">
-              <div className="flex justify-between text-lg">
+            <div className="space-y-6">
+              <div className="flex justify-between text-base">
                 <span className="font-bold text-gray-900">{hydrationStats.total}oz consumed</span>
                 <span className="text-gray-600">{hydrationStats.goal}oz goal</span>
               </div>
-              <Progress value={hydrationProgress} className="w-full h-4" />
-              <div className="flex gap-4">
-                <Button variant="outline" className="flex-1 glass-card border-white/20 hover:bg-white/50 h-12">
+              <Progress value={hydrationProgress} className="w-full h-3" />
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1 glass-card border-white/20 hover:bg-white/50 h-10 text-sm">
                   <Plus className="h-5 w-5 mr-2" />+8oz
                 </Button>
-                <Button variant="outline" className="flex-1 glass-card border-white/20 hover:bg-white/50 h-12">
+                <Button variant="outline" className="flex-1 glass-card border-white/20 hover:bg-white/50 h-10 text-sm">
                   <Plus className="h-5 w-5 mr-2" />+12oz
                 </Button>
-                <Button variant="outline" className="flex-1 glass-card border-white/20 hover:bg-white/50 h-12">
+                <Button variant="outline" className="flex-1 glass-card border-white/20 hover:bg-white/50 h-10 text-sm">
                   <Plus className="h-5 w-5 mr-2" />+17oz
                 </Button>
               </div>
