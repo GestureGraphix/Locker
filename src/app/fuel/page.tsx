@@ -22,7 +22,7 @@ import {
   CalendarDays,
   Loader2,
   RefreshCcw,
-  ChevronDown
+  Search
 } from "lucide-react"
 
 /* ======================== Types ======================== */
@@ -50,6 +50,14 @@ type MenuMealSection = {
   locations: MenuLocation[]
   source: "live" | "fallback" | null
   error: string | null
+}
+
+type MenuSearchResult = {
+  sectionType: string
+  sectionLabel: string
+  location: string
+  mealType: string
+  item: MenuItem
 }
 /* ======================== Helpers ======================== */
 
@@ -235,18 +243,9 @@ export default function Fuel() {
   const [menuLoading, setMenuLoading] = useState(false)
   const [menuError, setMenuError] = useState<string | null>(null)
   const [menuSource, setMenuSource] = useState<"live" | "fallback" | "mixed" | null>(null)
-  const [openMealSections, setOpenMealSections] = useState<Record<string, boolean>>({
-    breakfast: false,
-    lunch: false,
-    dinner: true
-  })
-
-  const toggleMealSection = useCallback((type: string) => {
-    setOpenMealSections((prev) => ({
-      ...prev,
-      [type]: !prev[type]
-    }))
-  }, [])
+  const [menuSearch, setMenuSearch] = useState("")
+  const normalizedMenuSearch = useMemo(() => menuSearch.trim().toLowerCase(), [menuSearch])
+  const isMenuSearching = normalizedMenuSearch.length > 0
 
   const menuDateStrings = useMemo(() => {
     const baseDate = menuDate ? new Date(`${menuDate}T00:00:00`) : new Date()
@@ -266,6 +265,10 @@ export default function Fuel() {
     }
   }, [menuDate])
 
+  useEffect(() => {
+    setMenuSearch("")
+  }, [menuDate])
+
   const hasMenuItems = useMemo(
     () =>
       menuData.some((section) =>
@@ -275,6 +278,59 @@ export default function Fuel() {
       ),
     [menuData]
   )
+
+  const menuSearchResults = useMemo<MenuSearchResult[]>(() => {
+    if (!isMenuSearching) return []
+
+    const query = normalizedMenuSearch
+    const matchesQuery = (value?: string) => safeLower(value).includes(query)
+    const results: MenuSearchResult[] = []
+
+    menuData.forEach((section) => {
+      const locations = Array.isArray(section.locations) ? section.locations : []
+      locations.forEach((location) => {
+        const meals = Array.isArray(location.meals) ? location.meals : []
+        meals.forEach((meal) => {
+          const items = Array.isArray(meal.items) ? meal.items : []
+          items.forEach((item) => {
+            const facts = Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []
+            const matchesItem =
+              matchesQuery(item.name) ||
+              matchesQuery(item.description) ||
+              matchesQuery(location.location) ||
+              matchesQuery(meal.mealType) ||
+              matchesQuery(section.label) ||
+              matchesQuery(section.type) ||
+              facts.some((fact) => matchesQuery(fact.name) || matchesQuery(fact.display))
+
+            if (matchesItem) {
+              results.push({
+                sectionType: section.type,
+                sectionLabel: section.label,
+                location: location.location,
+                mealType: meal.mealType,
+                item: { ...item, nutritionFacts: facts }
+              })
+            }
+          })
+        })
+      })
+    })
+
+    results.sort((a, b) => {
+      const locationCompare = safeLower(a.location).localeCompare(safeLower(b.location))
+      if (locationCompare !== 0) return locationCompare
+
+      const mealCompare = safeLower(a.mealType).localeCompare(safeLower(b.mealType))
+      if (mealCompare !== 0) return mealCompare
+
+      return safeLower(a.item.name).localeCompare(safeLower(b.item.name))
+    })
+
+    return results
+  }, [isMenuSearching, menuData, normalizedMenuSearch])
+
+  const hasMenuSearchResults = menuSearchResults.length > 0
 
   const resetMealForm = useCallback(() => {
     setNewMeal({
@@ -1046,20 +1102,41 @@ export default function Fuel() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-end">
-                <div className="flex-1">
-                  <label className="text-sm font-medium" htmlFor="menu-date">
-                    Select a day
-                  </label>
-                  <Input
-                    id="menu-date"
-                    type="date"
-                    value={menuDate}
-                    onChange={(e) => setMenuDate(e.target.value)}
-                    className="mt-1"
-                  />
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:gap-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-4 lg:flex-1">
+                  <div className="w-full md:w-48">
+                    <label className="text-sm font-medium" htmlFor="menu-date">
+                      Select a day
+                    </label>
+                    <Input
+                      id="menu-date"
+                      type="date"
+                      value={menuDate}
+                      onChange={(e) => setMenuDate(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-sm font-medium" htmlFor="menu-search">
+                      Search the menu
+                    </label>
+                    <div className="relative mt-1">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="menu-search"
+                        type="search"
+                        value={menuSearch}
+                        onChange={(e) => setMenuSearch(e.target.value)}
+                        placeholder="Search for dishes, locations, or nutrition facts"
+                        className="pl-9"
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Start typing to quickly find menu items without scrolling through every listing.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 md:self-end">
                   <Button onClick={fetchMenu} disabled={menuLoading} variant="outline">
                     {menuLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
                     Refresh menu
@@ -1090,154 +1167,86 @@ export default function Fuel() {
                 <div className="py-10 text-center text-muted-foreground">
                   No dining menu items found for {menuDateStrings.long}.
                 </div>
+              ) : !isMenuSearching ? (
+                <div className="rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                  Use the search box above to look up specific dishes, dining halls, or nutrition facts without scrolling through the full menu.
+                </div>
+              ) : !hasMenuSearchResults ? (
+                <div className="py-10 text-center text-muted-foreground">
+                  No menu items matched “{menuSearch}” for {menuDateStrings.long}.
+                </div>
               ) : (
-                <div className="space-y-4">
-                  {menuData.map((section) => {
-                    const isOpen = openMealSections[section.type] ?? false
-                    const sectionItemCount = section.locations.reduce((total, location) => {
-                      const meals = Array.isArray(location.meals) ? location.meals : []
-                      return (
-                        total +
-                        meals.reduce((mealTotal, meal) => {
-                          if (normalizeMealType(meal.mealType) !== section.type) return mealTotal
-                          const items = Array.isArray(meal.items) ? meal.items : []
-                          return mealTotal + items.length
-                        }, 0)
-                      )
-                    }, 0)
+                <div className="space-y-3">
+                  {menuSearchResults.map((result, index) => {
+                    const calories = getCaloriesFromItem(result.item)
+                    const normalizedType = normalizeMealType(result.mealType)
+                    const mealTypeLabel = formatMealTypeLabel(normalizedType)
+                    const shouldShowSectionLabel = safeLower(result.sectionLabel) !== safeLower(mealTypeLabel)
+                    const resultKey = `${result.location}-${result.mealType}-${result.item.name}-${index}`
 
                     return (
-                      <Card key={section.type} className="overflow-hidden border-primary/10">
-                        <CardHeader className="p-0">
-                          <Button
-                            variant="ghost"
-                            className="flex w-full items-center justify-between px-4 py-3 text-left text-base font-semibold"
-                            onClick={() => toggleMealSection(section.type)}
-                          >
-                            <span className="flex items-center gap-2">
-                              {getMealTypeIcon(section.type)}
-                              {section.label}
-                            </span>
-                            <span className="flex items-center gap-3">
-                              <Badge variant="secondary">
-                                {sectionItemCount} item{sectionItemCount === 1 ? "" : "s"}
+                      <div
+                        key={resultKey}
+                        className="rounded-lg border border-border/50 p-4"
+                      >
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="space-y-3">
+                            <div className="flex items-start gap-3">
+                              <div className="rounded-md border border-border/40 bg-muted/40 p-2 text-muted-foreground">
+                                {getMealTypeIcon(normalizedType)}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-foreground">{result.item.name}</p>
+                                {result.item.description && (
+                                  <p className="text-xs text-muted-foreground">{result.item.description}</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-[0.65rem] text-muted-foreground">
+                              <Badge variant="outline" className="border-dashed px-2 py-0">
+                                {mealTypeLabel}
                               </Badge>
-                              <ChevronDown
-                                className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                              />
-                            </span>
-                          </Button>
-                        </CardHeader>
-                        {section.error && (
-                          <div className="px-4 pt-2 text-xs text-muted-foreground">{section.error}</div>
-                        )}
-                        {isOpen && (
-                          <CardContent className="space-y-6 pt-0 pb-4">
-                            {section.locations.map((location) => {
-                              const relevantMeals = (location.meals || []).filter(
-                                (meal) => normalizeMealType(meal.mealType) === section.type
-                              )
-                              const totalLocationItems = relevantMeals.reduce(
-                                (count, meal) => count + (meal.items?.length ?? 0),
-                                0
-                              )
-
-                              if (!totalLocationItems) {
-                                return (
-                                  <div
-                                    key={`${section.type}-${location.location}`}
-                                    className="rounded-md border border-border/40 p-4 text-sm text-muted-foreground"
-                                  >
-                                    No {section.label.toLowerCase()} items listed for {location.location}.
-                                  </div>
-                                )
-                              }
-
-                              return (
-                                <div
-                                  key={`${section.type}-${location.location}`}
-                                  className="space-y-3"
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-semibold text-foreground">
-                                      {location.location}
-                                    </h4>
-                                    <Badge variant="outline">
-                                      {totalLocationItems} item{totalLocationItems === 1 ? "" : "s"}
-                                    </Badge>
-                                  </div>
-
-                                  {relevantMeals.map((meal) => (
-                                    <div
-                                      key={`${location.location}-${meal.mealType}`}
-                                      className="space-y-2 rounded-lg border border-border/50 p-3"
+                              {shouldShowSectionLabel && (
+                                <Badge variant="outline" className="border-dashed px-2 py-0">
+                                  {result.sectionLabel}
+                                </Badge>
+                              )}
+                              <Badge variant="secondary" className="px-2 py-0">
+                                {result.location}
+                              </Badge>
+                            </div>
+                            {result.item.nutritionFacts.length > 0 && (
+                              <div className="flex flex-wrap gap-2 text-[0.65rem] text-muted-foreground">
+                                {getFeaturedNutritionFacts(result.item.nutritionFacts).map((fact) => {
+                                  const value = formatNutritionFactValue(fact)
+                                  if (!value) return null
+                                  return (
+                                    <Badge
+                                      key={`${result.item.name}-${fact.name}`}
+                                      variant="outline"
+                                      className="border-dashed px-2 py-0"
                                     >
-                                      <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                          {getMealTypeIcon(section.type)}
-                                          <span className="font-medium">{meal.mealType}</span>
-                                        </div>
-                                        <Badge variant="outline">
-                                          {meal.items.length} item{meal.items.length === 1 ? "" : "s"}
-                                        </Badge>
-                                      </div>
-
-                                      <div className="grid gap-2 md:grid-cols-2">
-                                        {meal.items.map((item, idx) => {
-                                          const calories = getCaloriesFromItem(item)
-                                          return (
-                                            <div
-                                              key={`${section.type}-${location.location}-${meal.mealType}-${item.name}-${idx}`}
-                                              className="flex items-start justify-between gap-3 rounded-md border border-border/40 p-3"
-                                            >
-                                              <div>
-                                                <p className="text-sm font-medium text-foreground">{item.name}</p>
-                                                {item.description && (
-                                                  <p className="text-xs text-muted-foreground">{item.description}</p>
-                                                )}
-                                                {item.nutritionFacts.length > 0 && (
-                                                  <div className="mt-2 flex flex-wrap gap-2 text-[0.65rem] text-muted-foreground">
-                                                    {getFeaturedNutritionFacts(item.nutritionFacts).map((fact) => {
-                                                      const value = formatNutritionFactValue(fact)
-                                                      if (!value) return null
-                                                      return (
-                                                        <Badge
-                                                          key={`${item.name}-${fact.name}`}
-                                                          variant="outline"
-                                                          className="border-dashed px-2 py-0"
-                                                        >
-                                                          {fact.name}: {value}
-                                                        </Badge>
-                                                      )
-                                                    })}
-                                                  </div>
-                                                )}
-                                              </div>
-
-                                              <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
-                                                <Badge variant="secondary" className="whitespace-nowrap">
-                                                  {calories != null && Number.isFinite(calories) ? Math.round(calories) : 0} cal
-                                                </Badge>
-                                                <Button
-                                                  size="sm"
-                                                  variant="outline"
-                                                  onClick={() => handleAddFromMenu(meal.mealType, item, location.location)}
-                                                >
-                                                  Add Meal
-                                                </Button>
-                                              </div>
-                                            </div>
-                                          )
-                                        })}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )
-                            })}
-                          </CardContent>
-                        )}
-                      </Card>
+                                      {fact.name}: {value}
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                            <Badge variant="secondary" className="whitespace-nowrap">
+                              {calories != null && Number.isFinite(calories) ? Math.round(calories) : 0} cal
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAddFromMenu(result.mealType, result.item, result.location)}
+                            >
+                              Add Meal
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     )
                   })}
                 </div>
