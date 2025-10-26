@@ -12,8 +12,8 @@ interface NumberScaleProps {
 
 export function NumberScale({ value, onChange, label, className }: NumberScaleProps) {
   return (
-    <div className={cn("space-y-3 sm:space-y-4", className)}>
-      <h3 className="text-base font-semibold text-gray-800">{label}</h3>
+    <div className={cn("space-y-2.5 sm:space-y-4", className)}>
+      <h3 className="text-sm font-semibold text-gray-800 sm:text-base">{label}</h3>
       <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
         {[1, 2, 3, 4, 5].map((num) => (
           <Button
@@ -21,7 +21,7 @@ export function NumberScale({ value, onChange, label, className }: NumberScalePr
             variant={value === num ? "default" : "outline"}
             size="sm"
             className={cn(
-              "h-10 w-10 rounded-xl text-base font-bold transition-all duration-300 relative overflow-hidden sm:h-11 sm:w-11 sm:text-lg",
+              "h-9 w-9 rounded-xl text-base font-bold transition-all duration-300 relative overflow-hidden sm:h-10 sm:w-10 sm:text-lg lg:h-11 lg:w-11",
               value === num
                 ? "gradient-primary text-white shadow-glow scale-105 border-0"
                 : "glass-card border-white/20 hover:bg-white/50 hover:scale-105 text-gray-700 hover:text-gray-900"
