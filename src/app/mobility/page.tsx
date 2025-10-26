@@ -16,6 +16,7 @@ import {
   TrendingUp,
   ListChecks,
   Dumbbell,
+  ChevronDown,
 } from "lucide-react"
 import { useRole } from "@/components/role-context"
 
@@ -131,6 +132,7 @@ export default function Mobility() {
   const mobilityLogs = primaryAthlete?.mobilityLogs ?? mockMobilityLogs
   const [isAddExerciseOpen, setIsAddExerciseOpen] = useState(false)
   const [isLogExerciseOpen, setIsLogExerciseOpen] = useState(false)
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
   const [newExercise, setNewExercise] = useState({
     group: "back",
     name: "",
@@ -199,6 +201,10 @@ export default function Mobility() {
   const totalMinutes = mobilityLogs.reduce((sum, log) => sum + (log.durationMin || 0), 0)
   const sessionsLogged = mobilityLogs.length
   const activeGroups = exercisesByGroup.filter(group => group.exercises.length > 0).length
+
+  const toggleGroup = (groupName: string) => {
+    setExpandedGroup(prev => (prev === groupName ? null : groupName))
+  }
 
   return (
     <div className="space-y-6">
@@ -318,7 +324,7 @@ export default function Mobility() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center space-x-2">
@@ -373,7 +379,85 @@ export default function Mobility() {
         </TabsList>
 
         <TabsContent value="library" className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+          <div className="space-y-3 md:hidden">
+            {exercisesByGroup.map(group => (
+              <Card key={group.name}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.name)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{group.icon}</span>
+                    <div>
+                      <p className="text-sm font-semibold text-[#0f2f5b]">{group.label}</p>
+                      <p className="text-xs text-muted-foreground">{group.exercises.length} drills</p>
+                    </div>
+                  </div>
+                  <ChevronDown
+                    className={`h-4 w-4 text-muted-foreground transition-transform ${
+                      expandedGroup === group.name ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+                {expandedGroup === group.name && (
+                  <CardContent className="pt-0">
+                    {group.exercises.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No exercises yet. Add one to get started.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        {group.exercises.map(exercise => (
+                          <div
+                            key={exercise.id}
+                            className="flex flex-col gap-2 rounded-lg border bg-gradient-to-br from-white to-[#f5f7fb] p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex flex-1 items-start gap-3">
+                                <span className="text-2xl">
+                                  {exercise.thumbnail || getGroupIcon(group.name)}
+                                </span>
+                                <div className="space-y-1">
+                                  <h3 className="text-sm font-semibold text-[#0f2f5b]">
+                                    {exercise.name}
+                                  </h3>
+                                  <p className="text-xs text-muted-foreground">
+                                    {exercise.prescription}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openLogDialog(exercise)}
+                                className="h-7 px-2 text-primary"
+                              >
+                                <Play className="h-4 w-4" />
+                                <span className="sr-only">Log session</span>
+                              </Button>
+                            </div>
+                            {exercise.youtubeUrl && (
+                              <a
+                                href={exercise.youtubeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-[#1c6dd0] hover:underline"
+                              >
+                                Watch demo
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+            ))}
+          </div>
+
+          <div className="hidden grid-cols-2 gap-3 md:grid md:grid-cols-3 lg:grid-cols-4">
             {exercisesByGroup.map(group => (
               <Card key={group.name} className="h-full">
                 <CardHeader className="pb-2">
