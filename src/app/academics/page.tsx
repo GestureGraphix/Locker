@@ -753,13 +753,13 @@ export default function Academics() {
       {/* Courses */}
       <div>
         <h2 className="text-xl font-semibold mb-4">My Courses</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {courses.map(course => (
-            <Card key={course.id}>
-              <CardHeader className="pb-2">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <Card key={course.id} className="border-muted">
+              <CardHeader className="px-4 pt-3 pb-2">
+                <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 space-y-1">
-                    <CardTitle className="text-lg truncate" title={course.code}>
+                    <CardTitle className="text-base truncate" title={course.code}>
                       {course.code}
                     </CardTitle>
                     <p
@@ -772,23 +772,19 @@ export default function Academics() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full sm:w-auto"
+                    className="h-8 w-full px-2 text-xs sm:w-auto"
                     onClick={() => startEditingCourse(course)}
                   >
                     Edit
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">{course.professor}</p>
-                {course.schedule && (
-                  <p className="text-xs text-muted-foreground mt-1">{course.schedule}</p>
-                )}
-                <div className="mt-2">
-                  <Badge variant="outline" className="text-xs">
-                    {academicItems.filter(item => item.courseId === course.id).length} items
-                  </Badge>
-                </div>
+              <CardContent className="px-4 pt-0 pb-3 text-xs text-muted-foreground space-y-1">
+                {course.professor && <p className="truncate">{course.professor}</p>}
+                {course.schedule && <p className="truncate">{course.schedule}</p>}
+                <Badge variant="outline" className="mt-1 w-fit text-[10px] uppercase tracking-wide">
+                  {academicItems.filter(item => item.courseId === course.id).length} items
+                </Badge>
               </CardContent>
             </Card>
           ))}
