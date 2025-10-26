@@ -297,17 +297,6 @@ export default function DashboardPage() {
   const todaysSessions = athleteSessions.filter((session) => isSameDay(session.startAt, todayDate))
   const sessionsCompletedToday = todaysSessions.filter((session) => session.completed).length
 
-  const upcomingCalendar = useMemo(() => {
-    const calendar = primaryAthlete?.calendar ?? []
-    return calendar
-      .filter((event) => {
-        const eventDate = new Date(event.date)
-        if (Number.isNaN(eventDate.getTime())) return true
-        return eventDate.getTime() >= startOfToday
-      })
-      .slice(0, 5)
-  }, [primaryAthlete, startOfToday])
-
   const workoutAssignments = useMemo(() => {
     const workouts = primaryAthlete?.workouts ?? []
     return workouts.slice(0, 5)
@@ -867,37 +856,6 @@ export default function DashboardPage() {
                 ) : (
                   <div className="p-4 sm:p-6 text-center rounded-2xl border border-dashed border-gray-300 bg-white/60 text-sm text-gray-500">
                     No training sessions scheduled for today yet.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <Card className="glass-card border-0 shadow-premium">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl text-gray-900 flex items-center gap-3">
-                  <Calendar className="h-6 w-6 text-[#0f4d92]" />
-                  Personal Calendar
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 sm:space-y-4">
-                {upcomingCalendar.length > 0 ? (
-                  upcomingCalendar.map((event) => (
-                    <div
-                      key={event.id}
-                      className="flex items-center justify-between p-4 sm:p-5 rounded-2xl glass-card border border-white/20 hover:bg-white/50 transition-all duration-300"
-                    >
-                      <div>
-                        <p className="font-bold text-gray-900">{event.title}</p>
-                        <p className="text-sm text-gray-600">
-                          {formatDateLabel(event.date)} • {event.timeRange}
-                        </p>
-                        {event.focus && <p className="text-xs text-gray-500 mt-1">{event.focus}</p>}
-                      </div>
-                      <Badge className="capitalize bg-[#e8f0fb] text-[#123a70] border border-[#c7d7ee]">{event.type}</Badge>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-4 sm:p-6 text-center rounded-2xl border border-dashed border-gray-300 bg-white/60 text-sm text-gray-500">
-                    No upcoming events on the calendar.
                   </div>
                 )}
               </CardContent>
