@@ -755,7 +755,19 @@ export default function Academics() {
         <h2 className="text-xl font-semibold mb-4">My Courses</h2>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {courses.map(course => (
-            <Card key={course.id} className="border-muted">
+            <Card
+              key={course.id}
+              className="border-muted cursor-pointer transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 hover:border-primary/40"
+              onClick={() => startEditingCourse(course)}
+              onKeyDown={event => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault()
+                  startEditingCourse(course)
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            >
               <CardHeader className="px-3 pt-2 pb-1 sm:px-4 sm:pt-3 sm:pb-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 space-y-1">
@@ -769,14 +781,6 @@ export default function Academics() {
                       {course.name}
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 w-full px-2 text-[11px] sm:h-8 sm:w-auto sm:text-xs"
-                    onClick={() => startEditingCourse(course)}
-                  >
-                    Edit
-                  </Button>
                 </div>
               </CardHeader>
               <CardContent className="px-3 pt-0 pb-2 text-[11px] text-muted-foreground space-y-1 sm:px-4 sm:pb-3 sm:text-xs">
