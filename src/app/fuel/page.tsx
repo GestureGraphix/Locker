@@ -85,6 +85,20 @@ const toNumber = (value?: number | string): number | undefined => {
 
 const safeLower = (s?: string) => (typeof s === "string" ? s.toLowerCase() : "")
 
+const LOCATION_GROUPS: { key: string; label: string; members: string[] }[] = [
+  {
+    key: "branford-jonathan-edwards",
+    label: "Branford & Jonathan Edwards",
+    members: ["branford college", "jonathan edwards college"]
+  }
+]
+
+const LOCATION_GROUP_LOOKUP = new Map<string, { key: string; label: string }>(
+  LOCATION_GROUPS.flatMap((group) =>
+    group.members.map((member) => [member, { key: group.key, label: group.label }] as const)
+  )
+)
+
 const factValue = (fact?: NutritionFact): number | undefined => {
   if (!fact) return undefined
   return toNumber(fact.amount ?? fact.display)
@@ -300,7 +314,7 @@ export default function Fuel() {
 
     const query = normalizedMenuSearch
     const matchesQuery = (value?: string) => safeLower(value).includes(query)
-    const results: MenuSearchResult[] = []
+    const dedupedResults = new Map<string, MenuSearchResult>()
 
     menuData.forEach((section) => {
       const locations = Array.isArray(section.locations) ? section.locations : []
@@ -310,6 +324,11 @@ export default function Fuel() {
           const items = Array.isArray(meal.items) ? meal.items : []
           items.forEach((item) => {
             const facts = Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []
+            const rawLocationLabel = location.location ?? ""
+            const normalizedLocation = safeLower(rawLocationLabel)
+            const locationGroup = LOCATION_GROUP_LOOKUP.get(normalizedLocation)
+            const locationKey = locationGroup?.key ?? normalizedLocation
+            const displayLocation = locationGroup?.label ?? rawLocationLabel
             const matchesItem =
               matchesQuery(item.name) ||
               matchesQuery(item.description) ||
@@ -320,18 +339,29 @@ export default function Fuel() {
               facts.some((fact) => matchesQuery(fact.name) || matchesQuery(fact.display))
 
             if (matchesItem) {
-              results.push({
-                sectionType: section.type,
-                sectionLabel: section.label,
-                location: location.location,
-                mealType: meal.mealType,
-                item: { ...item, nutritionFacts: facts }
-              })
+              const dedupeKey = [
+                locationKey,
+                safeLower(meal.mealType),
+                safeLower(item.name),
+                safeLower(item.description)
+              ].join("|")
+
+              if (!dedupedResults.has(dedupeKey)) {
+                dedupedResults.set(dedupeKey, {
+                  sectionType: section.type,
+                  sectionLabel: section.label,
+                  location: displayLocation,
+                  mealType: meal.mealType,
+                  item: { ...item, nutritionFacts: facts }
+                })
+              }
             }
           })
         })
       })
     })
+
+    const results = Array.from(dedupedResults.values())
 
     results.sort((a, b) => {
       const locationCompare = safeLower(a.location).localeCompare(safeLower(b.location))
