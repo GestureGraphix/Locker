@@ -8,11 +8,12 @@ type DiningLocationConfig = {
   slug: string
   label: string
   defaultLocationId?: string
+  slugAliases?: string[]
 }
 
 const DINING_LOCATIONS: DiningLocationConfig[] = [
   { slug: "jonathan-edwards-college", label: "Jonathan Edwards College", defaultLocationId: "57753" },
-  { slug: "branford-college", label: "Branford College" }
+  { slug: "branford-college", label: "Branford College", slugAliases: ["branford"] }
 ]
 
 /* ---------------- Types ---------------- */
@@ -416,15 +417,31 @@ async function resolveLocationId(config: DiningLocationConfig): Promise<string |
   }
 
   const directory = await fetchLocationDirectory()
-  const targetSlug = normalizeSlug(config.slug)
-  if (!targetSlug) {
+  const targetSlugs = new Set<string>()
+  const pushNormalized = (value: string | undefined) => {
+    const normalized = normalizeSlug(value)
+    if (normalized) targetSlugs.add(normalized)
+  }
+
+  pushNormalized(config.slug)
+  if (Array.isArray(config.slugAliases)) for (const alias of config.slugAliases) pushNormalized(alias)
+
+  if (!targetSlugs.size) {
     locationIdCache.set(config.slug, null)
     return null
   }
 
+  const matchesTargetSlug = (candidate: string) => {
+    for (const target of targetSlugs) {
+      if (candidate === target) return true
+      if (candidate.includes(target) || target.includes(candidate)) return true
+    }
+    return false
+  }
+
   for (const entry of directory) {
     const candidates = extractCandidateSlugs(entry)
-    if (candidates.includes(targetSlug)) {
+    if (candidates.some((candidate) => matchesTargetSlug(candidate))) {
       const idValue = entry?.["id"]
       let id: number | null = null
       if (typeof idValue === "number" && Number.isFinite(idValue)) id = idValue
