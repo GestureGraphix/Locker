@@ -701,47 +701,47 @@ export default function Academics() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-4">
         <Card>
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center space-x-2">
+          <CardContent className="p-2 sm:p-4">
+            <div className="flex items-center gap-2">
               <GraduationCap className="h-5 w-5 text-primary" />
               <div className="space-y-0.5">
-                <p className="text-xs font-medium sm:text-sm">Courses</p>
-                <p className="text-xl font-bold sm:text-2xl">{courses.length}</p>
+                <p className="text-[11px] font-medium text-muted-foreground sm:text-xs">Courses</p>
+                <p className="text-lg font-bold sm:text-2xl">{courses.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center space-x-2">
+          <CardContent className="p-2 sm:p-4">
+            <div className="flex items-center gap-2">
               <BookOpen className="h-5 w-5 text-[#0f4d92]" />
               <div className="space-y-0.5">
-                <p className="text-xs font-medium sm:text-sm">Total Items</p>
-                <p className="text-xl font-bold sm:text-2xl">{academicItems.length}</p>
+                <p className="text-[11px] font-medium text-muted-foreground sm:text-xs">Total Items</p>
+                <p className="text-lg font-bold sm:text-2xl">{academicItems.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center space-x-2">
+          <CardContent className="p-2 sm:p-4">
+            <div className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-[#123d73]" />
               <div className="space-y-0.5">
-                <p className="text-xs font-medium sm:text-sm">Overdue</p>
-                <p className="text-xl font-bold sm:text-2xl">{overdueItems.length}</p>
+                <p className="text-[11px] font-medium text-muted-foreground sm:text-xs">Overdue</p>
+                <p className="text-lg font-bold sm:text-2xl">{overdueItems.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center space-x-2">
+          <CardContent className="p-2 sm:p-4">
+            <div className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-[#1c6dd0]" />
               <div className="space-y-0.5">
-                <p className="text-xs font-medium sm:text-sm">Completed</p>
-                <p className="text-xl font-bold sm:text-2xl">
+                <p className="text-[11px] font-medium text-muted-foreground sm:text-xs">Completed</p>
+                <p className="text-lg font-bold sm:text-2xl">
                   {academicItems.filter(item => item.completed).length}
                 </p>
               </div>
@@ -753,7 +753,7 @@ export default function Academics() {
       {/* Courses */}
       <div>
         <h2 className="text-xl font-semibold mb-4">My Courses</h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {courses.map(course => (
             <Card key={course.id} className="border-muted">
               <CardHeader className="px-3 pt-2 pb-1 sm:px-4 sm:pt-3 sm:pb-2">
@@ -796,67 +796,72 @@ export default function Academics() {
         <h2 className="text-xl font-semibold mb-4">Upcoming Items</h2>
         <Card>
           <CardContent className="p-0">
-            <Table className="min-w-[680px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Course</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {upcomingItems.map(item => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.course}</TableCell>
-                    <TableCell>
-                      <Badge className={getTypeColor(item.type)}>
-                        <span className="flex items-center gap-1">
-                          {getTypeIcon(item.type)}
-                          {item.type}
-                        </span>
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{item.title}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span className={formatDate(item.dueAt) === "Overdue" ? "text-[#123d73] font-semibold" : ""}>
-                          {formatDate(item.dueAt)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={item.completed ? "default" : "secondary"}>
-                        {item.completed ? "Completed" : "Pending"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full sm:w-auto"
-                          onClick={() => startEditingItem(item)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full sm:w-auto"
-                          onClick={() => toggleComplete(item.id)}
-                        >
-                          {item.completed ? "Undo" : "Complete"}
-                        </Button>
-                      </div>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table className="min-w-[560px] text-xs sm:min-w-full sm:text-sm">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-[11px] uppercase tracking-wide text-muted-foreground sm:text-xs">Course</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wide text-muted-foreground sm:text-xs">Type</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wide text-muted-foreground sm:text-xs">Title</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wide text-muted-foreground sm:text-xs">Due Date</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wide text-muted-foreground sm:text-xs">Status</TableHead>
+                    <TableHead className="text-[11px] uppercase tracking-wide text-muted-foreground sm:text-xs">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {upcomingItems.map(item => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">{item.course}</TableCell>
+                      <TableCell>
+                        <Badge className={`${getTypeColor(item.type)} text-[10px] sm:text-xs`}>
+                          <span className="flex items-center gap-1 capitalize">
+                            {getTypeIcon(item.type)}
+                            {item.type}
+                          </span>
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-[180px] truncate sm:max-w-none">{item.title}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1 sm:gap-2">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground sm:h-4 sm:w-4" />
+                          <span className={formatDate(item.dueAt) === "Overdue" ? "text-[#123d73] font-semibold" : ""}>
+                            {formatDate(item.dueAt)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className="text-[10px] sm:text-xs"
+                          variant={item.completed ? "default" : "secondary"}
+                        >
+                          {item.completed ? "Completed" : "Pending"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-full text-xs sm:h-9 sm:w-auto"
+                            onClick={() => startEditingItem(item)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-full text-xs sm:h-9 sm:w-auto"
+                            onClick={() => toggleComplete(item.id)}
+                          >
+                            {item.completed ? "Undo" : "Complete"}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -864,14 +869,14 @@ export default function Academics() {
       {/* Overdue Items Alert */}
       {overdueItems.length > 0 && (
         <Card className="border-[#b3c7e6] bg-[#eef5ff]">
-          <CardHeader>
-            <CardTitle className="flex flex-wrap items-center gap-2 text-[#0f4d92]">
+          <CardHeader className="space-y-2 py-3 sm:py-4">
+            <CardTitle className="flex flex-wrap items-center gap-2 text-sm text-[#0f4d92] sm:text-base">
               <AlertCircle className="h-5 w-5" />
               Overdue Items
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
+          <CardContent className="pt-0">
+            <div className="space-y-2 text-sm">
               {overdueItems.map(item => (
                 <div
                   key={item.id}
