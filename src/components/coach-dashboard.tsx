@@ -26,6 +26,235 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+const daysOfWeek = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const
+
+type DayName = (typeof daysOfWeek)[number]
+
+type GeneratedScheduleSession = {
+  key: string
+  day: DayName
+  group: string
+  tag: string
+  title: string
+  type: "practice" | "lift"
+  intensity: "low" | "medium" | "high"
+  focus: string
+  notes: string
+  startAt: string
+  endAt: string
+}
+
+const dayIndexMap = new Map(daysOfWeek.map((day, index) => [day.toLowerCase(), index]))
+
+const nextMonday = () => {
+  const now = new Date()
+  const day = now.getDay()
+  const daysUntilMonday = (1 - day + 7) % 7
+  const candidate = new Date(now)
+  candidate.setHours(0, 0, 0, 0)
+  candidate.setDate(candidate.getDate() + daysUntilMonday)
+  return candidate
+}
+
+const formatDateForInput = (date: Date) => {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, "0")
+  const day = `${date.getDate()}`.padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+const slugifyTag = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+
+const toLocalDateTime = (date: Date) => {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, "0")
+  const day = `${date.getDate()}`.padStart(2, "0")
+  const hours = `${date.getHours()}`.padStart(2, "0")
+  const minutes = `${date.getMinutes()}`.padStart(2, "0")
+  return `${year}-${month}-${day}T${hours}:${minutes}:00`
+}
+
+const inferIntensity = (notes: string) => {
+  if (/test|max|time trial|plyo/i.test(notes)) return "high"
+  if (/recovery|mobility|off/i.test(notes)) return "low"
+  return "medium"
+}
+
+const parseScheduleTemplate = (
+  template: string,
+  startDate: string,
+  durationMinutes: number
+): { sessions: GeneratedScheduleSession[]; errors: string[] } => {
+  const errors: string[] = []
+  const trimmedTemplate = template.trim()
+  if (!trimmedTemplate) {
+    errors.push("Paste a schedule template to generate sessions.")
+    return { sessions: [], errors }
+  }
+
+  const startDateObj = new Date(`${startDate}T00:00:00`)
+  if (Number.isNaN(startDateObj.getTime())) {
+    errors.push("Enter a valid week starting date.")
+    return { sessions: [], errors }
+  }
+
+  if (startDateObj.getDay() !== 1) {
+    errors.push("Select a Monday to keep the schedule aligned with each day.")
+  }
+
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+    errors.push("Session duration must be a positive number of minutes.")
+    return { sessions: [], errors }
+  }
+
+  const practiceLines: Partial<Record<DayName, string>> = {}
+  const planLines: Partial<Record<DayName, string[]>> = {}
+
+  let section: "none" | "practice" | "plan" = "none"
+  let currentPlanDay: DayName | null = null
+
+  for (const rawLine of template.split(/\r?\n/)) {
+    const trimmed = rawLine.trim()
+    if (!trimmed) continue
+
+    if (/^practice schedule/i.test(trimmed)) {
+      section = "practice"
+      continue
+    }
+
+    if (/^training plan/i.test(trimmed)) {
+      section = "plan"
+      currentPlanDay = null
+      continue
+    }
+
+    if (section === "practice") {
+      const match = rawLine.match(/^\s*([A-Za-z]+)\s*:\s*(.+)$/)
+      if (match) {
+        const dayName = match[1].trim().toLowerCase()
+        const resolvedDay = (dayName.charAt(0).toUpperCase() + dayName.slice(1)) as DayName
+        if (dayIndexMap.has(resolvedDay.toLowerCase())) {
+          practiceLines[resolvedDay] = match[2].trim()
+        } else {
+          errors.push(`Unrecognized day "${match[1].trim()}" in practice schedule.`)
+        }
+      }
+      continue
+    }
+
+    if (section === "plan") {
+      const dayMatch = trimmed.match(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i)
+      if (dayMatch && dayMatch[0].length === trimmed.length) {
+        const normalized = (dayMatch[0].charAt(0).toUpperCase() + dayMatch[0].slice(1).toLowerCase()) as DayName
+        currentPlanDay = normalized
+        if (!planLines[currentPlanDay]) planLines[currentPlanDay] = []
+        continue
+      }
+      if (currentPlanDay) {
+        const cleaned = trimmed.replace(/^[\-*\u2022]+\s*/, "")
+        if (cleaned.length > 0) {
+          planLines[currentPlanDay]?.push(cleaned)
+        }
+      }
+    }
+  }
+
+  const sessions: GeneratedScheduleSession[] = []
+
+  for (const day of daysOfWeek) {
+    const entries = practiceLines[day]
+    if (!entries) continue
+
+    const dayPlan = planLines[day] ?? []
+
+    for (const entryRaw of entries.split(",")) {
+      const entry = entryRaw.trim()
+      if (!entry) continue
+
+      if (/off|on your own/i.test(entry)) continue
+
+      const match = entry.match(/(.+?)\s+(\d{1,2}:\d{2})\s*([ap]m)?$/i)
+      if (!match) {
+        errors.push(`Unable to parse "${entry}" for ${day}.`)
+        continue
+      }
+
+      const group = match[1].trim()
+      const time = match[2]
+      const meridiem = match[3]?.toLowerCase()
+
+      const [hourStr, minuteStr] = time.split(":")
+      let hour = Number.parseInt(hourStr, 10)
+      const minute = Number.parseInt(minuteStr, 10)
+
+      if (Number.isNaN(hour) || Number.isNaN(minute)) {
+        errors.push(`Invalid time "${time}" for ${group} on ${day}.`)
+        continue
+      }
+
+      if (meridiem === "pm" && hour < 12) {
+        hour += 12
+      } else if (meridiem === "am" && hour === 12) {
+        hour = 0
+      } else if (!meridiem) {
+        if (hour < 8) {
+          hour += 12
+        }
+      }
+
+      const offset = dayIndexMap.get(day.toLowerCase()) ?? 0
+      const sessionDate = new Date(startDateObj)
+      sessionDate.setDate(sessionDate.getDate() + offset)
+      sessionDate.setHours(hour, minute, 0, 0)
+
+      const endDate = new Date(sessionDate.getTime() + durationMinutes * 60 * 1000)
+
+      const notes = dayPlan.join("\n")
+      const focus = dayPlan[0] ?? group
+      const type = /lift/i.test(group) ? "lift" : "practice"
+      const intensity = inferIntensity(notes)
+      const tag = slugifyTag(group)
+
+      sessions.push({
+        key: `${day}-${group}-${time}`,
+        day,
+        group,
+        tag,
+        title: `${group} – ${day}`,
+        type,
+        intensity,
+        focus,
+        notes,
+        startAt: toLocalDateTime(sessionDate),
+        endAt: toLocalDateTime(endDate),
+      })
+    }
+  }
+
+  return { sessions, errors }
+}
+
+const formatPreviewTime = (value: string) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
 type AssignExerciseForm = {
   title: string
   type: string
@@ -439,13 +668,19 @@ function CoachAthleteCard({
 }
 
 export function CoachDashboard() {
-  const { athletes, addAthlete, assignSessionToTag, currentUser } = useRole()
+  const { athletes, addAthlete, assignSessionToTag, currentUser, scheduleSession } = useRole()
   const [isAddAthleteOpen, setIsAddAthleteOpen] = useState(false)
   const [addAthleteForm, setAddAthleteForm] = useState(initialAthleteForm)
   const [addAthleteError, setAddAthleteError] = useState<string | null>(null)
   const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false)
   const [bulkAssignForm, setBulkAssignForm] = useState(initialBulkForm)
   const [bulkAssignError, setBulkAssignError] = useState<string | null>(null)
+  const [isSchedulePasteOpen, setIsSchedulePasteOpen] = useState(false)
+  const [scheduleText, setScheduleText] = useState("")
+  const [scheduleDuration, setScheduleDuration] = useState(75)
+  const [schedulePreview, setSchedulePreview] = useState<GeneratedScheduleSession[]>([])
+  const [scheduleErrors, setScheduleErrors] = useState<string[]>([])
+  const [scheduleStartDate, setScheduleStartDate] = useState(() => formatDateForInput(nextMonday()))
 
   const coachDisplayName = currentUser?.name ?? "Coaching Staff"
 
@@ -484,6 +719,21 @@ export function CoachDashboard() {
     if (!normalizedTag) return 0
     return athletes.filter((athlete) => athlete.tags.includes(normalizedTag)).length
   }, [athletes, bulkAssignForm.tag])
+
+  const previewAssignments = useMemo(() => {
+    return schedulePreview.map((session) => {
+      const normalizedTag = session.tag
+      const matchingAthletes = normalizedTag
+        ? athletes.filter((athlete) => athlete.tags.includes(normalizedTag))
+        : []
+      const recipients = matchingAthletes.length > 0 ? matchingAthletes : athletes
+      return {
+        session,
+        assignedCount: recipients.length,
+        assignedLabel: matchingAthletes.length > 0 ? `Tag: ${normalizedTag}` : "All Athletes",
+      }
+    })
+  }, [schedulePreview, athletes])
 
   const handleAddAthlete = () => {
     const { valid: emails, invalid } = extractEmails(addAthleteForm.emails)
@@ -559,6 +809,56 @@ export function CoachDashboard() {
     setBulkAssignForm(initialBulkForm)
     setBulkAssignError(null)
     setIsBulkAssignOpen(false)
+  }
+
+  const resetScheduleImport = () => {
+    setScheduleText("")
+    setSchedulePreview([])
+    setScheduleErrors([])
+    setScheduleDuration(75)
+    setScheduleStartDate(formatDateForInput(nextMonday()))
+  }
+
+  const handleGenerateSchedulePreview = () => {
+    const { sessions, errors } = parseScheduleTemplate(scheduleText, scheduleStartDate, scheduleDuration)
+    setSchedulePreview(sessions)
+    setScheduleErrors(errors)
+  }
+
+  const handleApplySchedule = () => {
+    if (schedulePreview.length === 0) {
+      setScheduleErrors(["Generate a preview before assigning workouts."])
+      return
+    }
+
+    for (const session of schedulePreview) {
+      const normalizedTag = session.tag
+      const targetedAthletes = normalizedTag
+        ? athletes.filter((athlete) => athlete.tags.includes(normalizedTag))
+        : []
+      const recipients = targetedAthletes.length > 0 ? targetedAthletes : athletes
+
+      for (const athlete of recipients) {
+        scheduleSession(
+          athlete.id,
+          {
+            type: session.type,
+            title: session.title,
+            startAt: session.startAt,
+            endAt: session.endAt,
+            intensity: session.intensity,
+            notes: session.notes || undefined,
+          },
+          {
+            focus: session.focus,
+            assignedBy: coachDisplayName,
+          }
+        )
+      }
+    }
+
+    resetScheduleImport()
+    setIsSchedulePasteOpen(false)
   }
 
   return (
@@ -794,6 +1094,128 @@ export function CoachDashboard() {
               </Button>
               <Button onClick={handleBulkAssign} className="gradient-secondary text-white">
                 Assign to Group
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={isSchedulePasteOpen}
+          onOpenChange={(open) => {
+            setIsSchedulePasteOpen(open)
+            if (!open) {
+              resetScheduleImport()
+            }
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button variant="outline" className="shadow-sm">
+              <ListChecks className="mr-2 h-4 w-4" /> Paste Weekly Plan
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Auto-Fill Workouts from Coach Template</DialogTitle>
+              <DialogDescription>
+                Paste your weekly practice schedule and training plan to generate athlete sessions automatically.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Week Starting (Monday) *</label>
+                  <Input
+                    type="date"
+                    value={scheduleStartDate}
+                    onChange={(event) => setScheduleStartDate(event.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Session Duration (minutes)</label>
+                  <Input
+                    type="number"
+                    min={15}
+                    value={scheduleDuration}
+                    onChange={(event) => setScheduleDuration(Number(event.target.value))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Coach Schedule Template *</label>
+                <textarea
+                  value={scheduleText}
+                  onChange={(event) => setScheduleText(event.target.value)}
+                  rows={10}
+                  className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  placeholder="Paste the Practice Schedule and Training Plan text here."
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Works best with the weekly format your coaching staff already uses.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <Button onClick={handleGenerateSchedulePreview} variant="secondary" className="w-full sm:w-auto">
+                  Generate Preview
+                </Button>
+                {scheduleErrors.length > 0 && (
+                  <ul className="space-y-1 text-xs font-medium text-red-600 sm:text-sm">
+                    {scheduleErrors.map((error) => (
+                      <li key={error}>{error}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {previewAssignments.length > 0 && (
+                <div className="rounded-md border border-gray-200">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead className="text-xs font-semibold text-gray-600">Day</TableHead>
+                        <TableHead className="text-xs font-semibold text-gray-600">Group</TableHead>
+                        <TableHead className="text-xs font-semibold text-gray-600">Start</TableHead>
+                        <TableHead className="text-xs font-semibold text-gray-600">End</TableHead>
+                        <TableHead className="text-xs font-semibold text-gray-600">Assigned</TableHead>
+                        <TableHead className="text-xs font-semibold text-gray-600">Focus</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {previewAssignments.map(({ session, assignedCount, assignedLabel }) => (
+                        <TableRow key={session.key}>
+                          <TableCell className="text-sm font-medium text-gray-900">{session.day}</TableCell>
+                          <TableCell className="text-sm text-gray-700">{session.group}</TableCell>
+                          <TableCell className="text-sm text-gray-700">{formatPreviewTime(session.startAt)}</TableCell>
+                          <TableCell className="text-sm text-gray-700">{formatPreviewTime(session.endAt)}</TableCell>
+                          <TableCell className="text-sm text-gray-700">
+                            {assignedLabel}
+                            <span className="ml-1 text-xs text-gray-500">({assignedCount})</span>
+                          </TableCell>
+                          <TableCell className="text-sm text-gray-700">
+                            <span className="block max-w-[12rem] truncate" title={session.focus}>
+                              {session.focus}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="border-t border-gray-200 bg-gray-50 px-4 py-2 text-xs text-gray-600">
+                    Sessions default to medium intensity unless tests are detected in the plan notes.
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsSchedulePasteOpen(false)
+                  resetScheduleImport()
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleApplySchedule} className="gradient-secondary text-white" disabled={schedulePreview.length === 0}>
+                Assign Workouts
               </Button>
             </DialogFooter>
           </DialogContent>
