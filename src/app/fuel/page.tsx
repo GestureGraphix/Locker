@@ -22,7 +22,9 @@ import {
   CalendarDays,
   Loader2,
   RefreshCcw,
-  Search
+  Search,
+  UtensilsCrossed,
+  X
 } from "lucide-react"
 
 /* ======================== Types ======================== */
@@ -58,6 +60,16 @@ type MenuSearchResult = {
   location: string
   mealType: string
   item: MenuItem
+}
+
+type PlateItem = {
+  id: string
+  mealType: string
+  location: string
+  sectionLabel: string
+  item: MenuItem
+  baseCalories: number
+  baseProteinG: number
 }
 /* ======================== Helpers ======================== */
 
@@ -218,6 +230,8 @@ export default function Fuel() {
   const [isAddMealOpen, setIsAddMealOpen] = useState(false)
   const [todayDate, setTodayDate] = useState<string>(() => getTodayDateString())
   const [newHydration, setNewHydration] = useState({ ounces: "", source: "cup" })
+  const [plateItems, setPlateItems] = useState<PlateItem[]>([])
+  const [pendingPlateItemIds, setPendingPlateItemIds] = useState<string[]>([])
   const [newMeal, setNewMeal] = useState({
     mealType: "breakfast",
     calories: "",
@@ -332,6 +346,48 @@ export default function Fuel() {
 
   const hasMenuSearchResults = menuSearchResults.length > 0
 
+  const plateSummary = useMemo(() => {
+    if (plateItems.length === 0) {
+      return {
+        totalCalories: 0,
+        totalProtein: 0,
+        totalProteinRaw: 0,
+        dominantMealType: "lunch",
+        notes: "",
+        nutritionFacts: [] as NutritionFact[]
+      }
+    }
+
+    const totalCaloriesRaw = plateItems.reduce((sum, item) => sum + item.baseCalories, 0)
+    const totalProteinRaw = plateItems.reduce((sum, item) => sum + item.baseProteinG, 0)
+
+    const mealTypeCounts = new Map<string, number>()
+    plateItems.forEach((item) => {
+      mealTypeCounts.set(item.mealType, (mealTypeCounts.get(item.mealType) ?? 0) + 1)
+    })
+
+    const dominantMealType =
+      Array.from(mealTypeCounts.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? plateItems[0]?.mealType ?? "lunch"
+
+    const itemDescriptions = plateItems.map((plateItem) => {
+      const base = `${plateItem.item.name}${plateItem.item.description ? ` — ${plateItem.item.description}` : ""}`
+      return `${base} (${plateItem.location})`
+    })
+
+    const nutritionFacts = plateItems.flatMap((plateItem) =>
+      (plateItem.item.nutritionFacts ?? []).map((fact) => ({ ...fact }))
+    )
+
+    return {
+      totalCalories: Math.round(totalCaloriesRaw),
+      totalProtein: roundToTwo(totalProteinRaw),
+      totalProteinRaw,
+      dominantMealType,
+      notes: itemDescriptions.join("; "),
+      nutritionFacts
+    }
+  }, [plateItems])
+
   const resetMealForm = useCallback(() => {
     setNewMeal({
       mealType: "breakfast",
@@ -349,39 +405,66 @@ export default function Fuel() {
 
   /* -------- Add meal from menu (now guarantees non-zero if available) -------- */
   const handleAddFromMenu = useCallback(
-    (mealTypeLabel: string, item: MenuItem, location: string) => {
-      if (!primaryAthlete) return
+    (mealTypeLabel: string, item: MenuItem, location: string, sectionLabel: string) => {
       const normalizedType = normalizeMealType(mealTypeLabel)
-      const scheduledDate = new Date(`${menuDate}T12:00:00`)
-      const dateTime = Number.isNaN(scheduledDate.getTime()) ? new Date() : scheduledDate
-
       const calories = getCaloriesFromItem(item)
       const protein = getProteinFromItem(item)
 
       const baseCalories = calories != null && Number.isFinite(calories) ? calories : 0
       const baseProtein = protein != null && Number.isFinite(protein) ? protein : 0
 
-      const notes = `${item.name}${item.description ? ` — ${item.description}` : ""} (${location})`
       const clonedFacts = (Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []).map((f) => ({ ...f }))
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-      setNewMeal({
-        mealType: normalizedType,
-        calories: "",
-        proteinG: "",
-        notes,
-        dateTime: dateTime.toISOString(),
-        nutritionFacts: clonedFacts,
-        portion: "1",
-        baseCalories,
-        baseProteinG: baseProtein,
-        isFromMenu: true
-      })
-
-      setActiveTab("meals")
-      setIsAddMealOpen(true)
+      setPlateItems((prev) => [
+        ...prev,
+        {
+          id,
+          mealType: normalizedType,
+          location,
+          sectionLabel,
+          item: { ...item, nutritionFacts: clonedFacts },
+          baseCalories,
+          baseProteinG: baseProtein
+        }
+      ])
     },
-    [menuDate, primaryAthlete]
+    []
   )
+
+  const handleRemovePlateItem = useCallback((id: string) => {
+    setPlateItems((prev) => prev.filter((item) => item.id !== id))
+    setPendingPlateItemIds((prev) => prev.filter((pendingId) => pendingId !== id))
+  }, [])
+
+  const handleClearPlate = useCallback(() => {
+    setPlateItems([])
+    setPendingPlateItemIds([])
+  }, [])
+
+  const handleCheckoutPlate = useCallback(() => {
+    if (!primaryAthlete || plateItems.length === 0) return
+
+    const scheduledDate = new Date(`${menuDate}T12:00:00`)
+    const dateTime = Number.isNaN(scheduledDate.getTime()) ? new Date() : scheduledDate
+
+    setNewMeal({
+      mealType: plateSummary.dominantMealType,
+      calories: "",
+      proteinG: "",
+      notes: plateSummary.notes,
+      dateTime: dateTime.toISOString(),
+      nutritionFacts: plateSummary.nutritionFacts,
+      portion: "1",
+      baseCalories: plateSummary.totalCalories,
+      baseProteinG: plateSummary.totalProteinRaw,
+      isFromMenu: true
+    })
+
+    setPendingPlateItemIds(plateItems.map((item) => item.id))
+    setActiveTab("meals")
+    setIsAddMealOpen(true)
+  }, [menuDate, plateItems, plateSummary, primaryAthlete])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -510,8 +593,11 @@ export default function Fuel() {
   }, [activeTab, fetchMenu])
 
   useEffect(() => {
-    if (!isAddMealOpen) resetMealForm()
-  }, [isAddMealOpen, resetMealForm])
+    if (!isAddMealOpen) {
+      resetMealForm()
+      setPendingPlateItemIds([])
+    }
+  }, [isAddMealOpen, resetMealForm, setPendingPlateItemIds])
 
   /* -------- Logging hydration & manual meals -------- */
 
@@ -586,6 +672,10 @@ export default function Fuel() {
         completed: true
       }
     ])
+    if (pendingPlateItemIds.length > 0) {
+      setPlateItems((prev) => prev.filter((item) => !pendingPlateItemIds.includes(item.id)))
+    }
+    setPendingPlateItemIds([])
     resetMealForm()
     setIsAddMealOpen(false)
   }
@@ -1158,6 +1248,62 @@ export default function Fuel() {
                 </div>
               )}
 
+              {plateItems.length > 0 && (
+                <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-md bg-primary/10 p-2 text-primary">
+                        <UtensilsCrossed className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">
+                          Plate ready for {formatMealTypeLabel(plateSummary.dominantMealType)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {plateSummary.totalCalories} cal · {formatTwoDecimalString(plateSummary.totalProtein)}g protein
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button variant="outline" size="sm" onClick={handleClearPlate}>
+                        Clear Plate
+                      </Button>
+                      <Button size="sm" onClick={handleCheckoutPlate} disabled={!primaryAthlete}>
+                        Checkout Plate
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {plateItems.map((plateItem) => (
+                      <div
+                        key={plateItem.id}
+                        className="flex items-start justify-between gap-3 rounded-md border border-dashed border-muted-foreground/30 bg-background/60 p-2 text-xs text-muted-foreground"
+                      >
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-foreground">{plateItem.item.name}</p>
+                          <p>
+                            {formatMealTypeLabel(plateItem.mealType)} · {plateItem.location}
+                          </p>
+                          {plateItem.item.description ? <p>{plateItem.item.description}</p> : null}
+                          <p>
+                            {Math.round(plateItem.baseCalories)} cal · {formatTwoDecimalString(plateItem.baseProteinG)}g protein
+                          </p>
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleRemovePlateItem(plateItem.id)}
+                          aria-label="Remove from plate"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {menuLoading ? (
                 <div className="flex items-center justify-center py-10 text-muted-foreground">
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -1240,9 +1386,16 @@ export default function Fuel() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleAddFromMenu(result.mealType, result.item, result.location)}
+                              onClick={() =>
+                                handleAddFromMenu(
+                                  result.mealType,
+                                  result.item,
+                                  result.location,
+                                  result.sectionLabel
+                                )
+                              }
                             >
-                              Add Meal
+                              Add to Plate
                             </Button>
                           </div>
                         </div>
