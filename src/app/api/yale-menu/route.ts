@@ -123,13 +123,10 @@ async function fetchOrderSettings(
   servingSize: string | undefined
   facts: NutritionFact[]
 }> {
-  if (!locationId) {
-    return { calories: 0, proteinG: 0, sodiumMg: 0, fatG: 0, carbsG: 0, servingSize: undefined, facts: [] }
-  }
+  const params = new URLSearchParams({ "menu-date": date })
+  if (locationId) params.set("location-id", locationId)
 
-  const url = `${NUTRISLICE_BASE_URL}/menu-items/${menuItemId}/order-settings/?location-id=${encodeURIComponent(
-    locationId
-  )}&menu-date=${encodeURIComponent(date)}`
+  const url = `${NUTRISLICE_BASE_URL}/menu-items/${menuItemId}/order-settings/?${params.toString()}`
 
   const json = await safeFetchJSON<Record<string, unknown>>(url, {
     headers: {
@@ -407,6 +404,30 @@ async function fetchLocationDirectory(): Promise<RawLocation[]> {
   return locationDirectoryCache
 }
 
+const parseLocationId = (value: unknown): string | null => {
+  if (typeof value === "number" && Number.isFinite(value)) return `${value}`
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const parsed = Number.parseInt(trimmed, 10)
+    if (!Number.isNaN(parsed)) return `${parsed}`
+  }
+  return null
+}
+
+const slugLooselyMatches = (candidate: string, target: string) => {
+  if (candidate === target) return true
+  if (candidate.startsWith(`${target}-`) || target.startsWith(`${candidate}-`)) return true
+
+  const candidateParts = candidate.split("-")
+  const targetParts = target.split("-")
+  const minLen = Math.min(candidateParts.length, targetParts.length)
+  for (let i = 0; i < minLen; i += 1) {
+    if (candidateParts[i] !== targetParts[i]) return false
+  }
+  return true
+}
+
 async function resolveLocationId(config: DiningLocationConfig): Promise<string | null> {
   if (locationIdCache.has(config.slug)) return locationIdCache.get(config.slug) ?? null
 
@@ -422,22 +443,30 @@ async function resolveLocationId(config: DiningLocationConfig): Promise<string |
     return null
   }
 
+  let looseMatchId: string | null = null
+
   for (const entry of directory) {
     const candidates = extractCandidateSlugs(entry)
+    if (candidates.length === 0) continue
+
     if (candidates.includes(targetSlug)) {
-      const idValue = entry?.["id"]
-      let id: number | null = null
-      if (typeof idValue === "number" && Number.isFinite(idValue)) id = idValue
-      else if (typeof idValue === "string") {
-        const parsed = Number.parseInt(idValue, 10)
-        if (!Number.isNaN(parsed)) id = parsed
-      }
-      if (id !== null) {
-        const resolved = `${id}`
+      const resolved = parseLocationId(entry?.["id"])
+      if (resolved) {
         locationIdCache.set(config.slug, resolved)
         return resolved
       }
+      continue
     }
+
+    if (!looseMatchId) {
+      const hasLooseMatch = candidates.some((candidate) => slugLooselyMatches(candidate, targetSlug))
+      if (hasLooseMatch) looseMatchId = parseLocationId(entry?.["id"])
+    }
+  }
+
+  if (looseMatchId) {
+    locationIdCache.set(config.slug, looseMatchId)
+    return looseMatchId
   }
 
   locationIdCache.set(config.slug, null)
