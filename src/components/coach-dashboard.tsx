@@ -106,11 +106,23 @@ const isUpcoming = (value: string) => {
 const typeBadge = (type: string) => {
   switch (type) {
     case "lift":
-      return <Badge className="bg-[#d9e3f5] text-[#0f4d92] border-[#b3c7e6]">Strength</Badge>
+      return (
+        <Badge className="border-[#b3c7e6] bg-[#d9e3f5] px-2 py-0.5 text-[0.7rem] text-[#0f4d92] sm:text-xs">
+          Strength
+        </Badge>
+      )
     case "rehab":
-      return <Badge className="bg-[#e4f1ff] text-[#12467f] border-[#c5ddf5]">Recovery</Badge>
+      return (
+        <Badge className="border-[#c5ddf5] bg-[#e4f1ff] px-2 py-0.5 text-[0.7rem] text-[#12467f] sm:text-xs">
+          Recovery
+        </Badge>
+      )
     default:
-      return <Badge className="bg-[#edf2fa] text-[#123a70] border-[#c7d7ee]">Practice</Badge>
+      return (
+        <Badge className="border-[#c7d7ee] bg-[#edf2fa] px-2 py-0.5 text-[0.7rem] text-[#123a70] sm:text-xs">
+          Practice
+        </Badge>
+      )
   }
 }
 
@@ -185,65 +197,72 @@ function CoachAthleteCard({
 
   return (
     <Card className="glass-card border-0 shadow-lg">
-      <CardHeader className="flex flex-row items-start justify-between">
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <CardTitle className="text-xl text-gray-900">{name}</CardTitle>
-          <p className="text-sm text-gray-500 font-medium">{sport} • {team}</p>
-          <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
-            <Mail className="h-3 w-3" />
+          <CardTitle className="text-lg font-semibold text-gray-900 sm:text-xl">{name}</CardTitle>
+          <p className="text-xs font-medium text-gray-500 sm:text-sm">{sport} • {team}</p>
+          <div className="mt-1 flex items-center gap-2 text-[0.7rem] text-gray-500 sm:text-xs">
+            <Mail className="h-3 w-3 shrink-0" />
             <span className="font-medium text-gray-600">{email}</span>
           </div>
         </div>
-        <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] text-white border-0">{level}</Badge>
+        <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] border-0 px-2 py-1 text-xs font-medium text-white sm:text-sm">
+          {level}
+        </Badge>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="p-4 rounded-2xl bg-white/80 border border-white/60 shadow-sm">
-          <div className="flex items-center justify-between">
+      <CardContent className="space-y-3 sm:space-y-4">
+        <div className="rounded-2xl border border-white/60 bg-white/80 p-3 shadow-sm sm:p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-xs uppercase text-gray-500 tracking-wide">Next Session</p>
+              <p className="text-[0.65rem] uppercase tracking-wide text-gray-500 sm:text-xs">Next Session</p>
               {nextSession ? (
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">{nextSession.title}</p>
-                  <p className="text-xs text-gray-500">{formatDateTime(nextSession.startAt)}</p>
+                  <p className="text-sm font-semibold text-gray-900 sm:text-base">{nextSession.title}</p>
+                  <p className="text-xs text-gray-500 sm:text-sm">{formatDateTime(nextSession.startAt)}</p>
                 </div>
               ) : (
-                <p className="text-sm text-gray-500">No upcoming session scheduled</p>
+                <p className="text-xs text-gray-500 sm:text-sm">No upcoming session scheduled</p>
               )}
             </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-500">Intensity</p>
-              <p className="text-sm font-semibold capitalize">{nextSession ? nextSession.intensity : "TBD"}</p>
+            <div className="text-left sm:text-right">
+              <p className="text-[0.7rem] text-gray-500 sm:text-xs">Intensity</p>
+              <p className="text-sm font-semibold capitalize sm:text-base">
+                {nextSession ? nextSession.intensity : "TBD"}
+              </p>
             </div>
           </div>
         </div>
 
         {tags.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <div className="flex flex-wrap items-center gap-1.5 text-[0.7rem] text-gray-500 sm:gap-2 sm:text-xs">
             <Tag className="h-3 w-3 text-[#0f4d92]" />
             {tags.map((tagValue) => {
               const label = tagValue.charAt(0).toUpperCase() + tagValue.slice(1)
               return (
-              <Badge
-                key={tagValue}
-                className="bg-[#edf2fa] text-[#123a70] border-[#c7d7ee] capitalize"
-              >
-                {label}
-              </Badge>
+                <Badge
+                  key={tagValue}
+                  className="border-[#c7d7ee] bg-[#edf2fa] px-2 py-1 text-[0.7rem] capitalize text-[#123a70] sm:text-xs"
+                >
+                  {label}
+                </Badge>
               )
             })}
           </div>
         )}
 
         <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-900 sm:mb-3 sm:text-sm">
             <CalendarIcon className="h-4 w-4 text-[#0f4d92]" /> Calendar Highlights
           </h4>
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:space-y-2">
             {calendarHighlights.map((event) => (
-              <div key={event.id} className="flex items-center justify-between rounded-xl border border-white/60 bg-white/80 px-3 py-2 text-sm">
-                <div>
-                  <p className="font-semibold text-gray-900">{event.title}</p>
-                  <p className="text-xs text-gray-500">
+              <div
+                key={event.id}
+                className="flex items-center justify-between rounded-xl border border-white/60 bg-white/80 px-3 py-2 text-xs sm:text-sm"
+              >
+                <div className="max-w-[70%] sm:max-w-none">
+                  <p className="font-semibold text-gray-900 sm:text-base">{event.title}</p>
+                  <p className="text-[0.7rem] text-gray-500 sm:text-xs">
                     {formatDate(event.date)} • {event.timeRange}
                   </p>
                 </div>
@@ -251,27 +270,30 @@ function CoachAthleteCard({
               </div>
             ))}
             {calendarHighlights.length === 0 && (
-              <p className="text-sm text-gray-500">No events on the calendar yet.</p>
+              <p className="text-xs text-gray-500 sm:text-sm">No events on the calendar yet.</p>
             )}
           </div>
         </div>
 
         <div>
-          <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-900 sm:mb-3 sm:text-sm">
             <ListChecks className="h-4 w-4 text-[#1c6dd0]" /> Workout Plan
           </h4>
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:space-y-2">
             {activeWorkouts.map((workout) => (
-              <div key={workout.id} className="flex items-center justify-between rounded-xl border border-white/60 bg-white/80 px-3 py-2 text-sm">
-                <div>
-                  <p className="font-semibold text-gray-900">{workout.title}</p>
-                  <p className="text-xs text-gray-500">
+              <div
+                key={workout.id}
+                className="flex items-center justify-between rounded-xl border border-white/60 bg-white/80 px-3 py-2 text-xs sm:text-sm"
+              >
+                <div className="max-w-[70%] sm:max-w-none">
+                  <p className="font-semibold text-gray-900 sm:text-base">{workout.title}</p>
+                  <p className="text-[0.7rem] text-gray-500 sm:text-xs">
                     Due {formatDate(workout.dueDate)} • {workout.focus}
                   </p>
                 </div>
                 <Badge
                   className={cn(
-                    "capitalize border-0",
+                    "border-0 px-2 py-1 text-[0.7rem] capitalize sm:text-xs",
                     workout.status === "Completed"
                       ? "bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white"
                       : "bg-[#e2ebf9] text-[#0f2f5b]"
@@ -282,7 +304,7 @@ function CoachAthleteCard({
               </div>
             ))}
             {activeWorkouts.length === 0 && (
-              <p className="text-sm text-gray-500">No workouts assigned yet.</p>
+              <p className="text-xs text-gray-500 sm:text-sm">No workouts assigned yet.</p>
             )}
           </div>
         </div>
@@ -290,7 +312,7 @@ function CoachAthleteCard({
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="w-full gradient-secondary text-white shadow-glow">
-              <Plus className="h-4 w-4 mr-2" /> Assign Exercise
+              <Plus className="mr-2 h-4 w-4" /> Assign Exercise
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
@@ -298,8 +320,8 @@ function CoachAthleteCard({
               <DialogTitle>Assign Exercise for {name}</DialogTitle>
               <DialogDescription>Schedule a new training block that updates their calendar and workouts instantly.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3 py-2 sm:space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="text-xs font-medium text-gray-600">Title</label>
                   <Input
@@ -329,7 +351,7 @@ function CoachAthleteCard({
                   placeholder="Speed mechanics"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="text-xs font-medium text-gray-600">Date</label>
                   <Input
@@ -351,7 +373,7 @@ function CoachAthleteCard({
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="text-xs font-medium text-gray-600">Start Time</label>
                   <Input
@@ -376,7 +398,7 @@ function CoachAthleteCard({
                   onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
                   placeholder="Key coaching points, equipment needs, etc."
                   rows={3}
-                  className="w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c7dbf3]"
+                  className="min-h-[5rem] w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c7dbf3] sm:min-h-[6.5rem]"
                 />
               </div>
             </div>
@@ -510,24 +532,24 @@ export function CoachDashboard() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="space-y-6 sm:space-y-8">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Coach Control Center</h1>
-          <p className="text-sm text-gray-600 font-medium">
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Coach Control Center</h1>
+          <p className="text-xs font-medium text-gray-600 sm:text-sm">
             Monitor athlete readiness, assign sessions, and keep calendars in sync.
           </p>
         </div>
-        <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] text-white border-0">
-          <Users className="h-4 w-4 mr-2" /> {athletes.length} Athletes
+        <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] border-0 px-3 py-1 text-xs font-semibold text-white sm:text-sm">
+          <Users className="mr-2 h-4 w-4" /> {athletes.length} Athletes
         </Badge>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="flex flex-wrap items-center justify-start gap-2.5 sm:justify-end sm:gap-3">
         <Dialog open={isAddAthleteOpen} onOpenChange={setIsAddAthleteOpen}>
           <DialogTrigger asChild>
             <Button className="gradient-primary text-white shadow-glow">
-              <UserPlus className="h-4 w-4 mr-2" /> Add Athlete
+              <UserPlus className="mr-2 h-4 w-4" /> Add Athlete
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
@@ -535,8 +557,8 @@ export function CoachDashboard() {
               <DialogTitle>Add Athlete by Email</DialogTitle>
               <DialogDescription>Invite a new student-athlete to your roster using their email address.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="space-y-3 py-2 sm:space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="md:col-span-2">
                   <label className="text-xs font-medium text-gray-600">Email Address *</label>
                   <Input
@@ -588,7 +610,9 @@ export function CoachDashboard() {
                   <p className="mt-1 text-xs text-gray-500">Use tags to group athletes (e.g. track, distance, rehab).</p>
                 </div>
               </div>
-              {addAthleteError && <p className="text-sm font-medium text-red-600">{addAthleteError}</p>}
+              {addAthleteError && (
+                <p className="text-xs font-medium text-red-600 sm:text-sm">{addAthleteError}</p>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddAthleteOpen(false)}>
@@ -604,7 +628,7 @@ export function CoachDashboard() {
         <Dialog open={isBulkAssignOpen} onOpenChange={setIsBulkAssignOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" className="shadow-sm">
-              <Share2 className="h-4 w-4 mr-2" /> Assign by Tag
+              <Share2 className="mr-2 h-4 w-4" /> Assign by Tag
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
@@ -615,9 +639,9 @@ export function CoachDashboard() {
                 every athlete in that group.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
+            <div className="space-y-3 py-2 sm:space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-gray-600">Target Tag *</label>
                   <Input
                     value={bulkAssignForm.tag}
@@ -710,7 +734,7 @@ export function CoachDashboard() {
                     }
                   />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-gray-600">Coaching Notes</label>
                   <textarea
                     value={bulkAssignForm.notes}
@@ -719,11 +743,13 @@ export function CoachDashboard() {
                     }
                     placeholder="Shared context, goals, or equipment needs."
                     rows={3}
-                    className="w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c7dbf3]"
+                    className="min-h-[5rem] w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c7dbf3] sm:min-h-[6.5rem]"
                   />
                 </div>
               </div>
-              {bulkAssignError && <p className="text-sm font-medium text-red-600">{bulkAssignError}</p>}
+              {bulkAssignError && (
+                <p className="text-xs font-medium text-red-600 sm:text-sm">{bulkAssignError}</p>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsBulkAssignOpen(false)}>
@@ -737,77 +763,78 @@ export function CoachDashboard() {
         </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="glass-card border-0 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-wide text-gray-500">Team Sessions</p>
-                <p className="text-2xl font-bold text-gray-900">{totalSessions}</p>
+                <p className="text-xl font-bold text-gray-900 sm:text-2xl">{totalSessions}</p>
               </div>
-              <Dumbbell className="h-8 w-8 text-[#0f4d92]" />
+              <Dumbbell className="h-7 w-7 text-[#0f4d92] sm:h-8 sm:w-8" />
             </div>
           </CardContent>
         </Card>
         <Card className="glass-card border-0 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-wide text-gray-500">Completion Rate</p>
-                <p className="text-2xl font-bold text-gray-900">{completionRate}%</p>
+                <p className="text-xl font-bold text-gray-900 sm:text-2xl">{completionRate}%</p>
               </div>
-              <CheckCircle2 className="h-8 w-8 text-[#1c6dd0]" />
+              <CheckCircle2 className="h-7 w-7 text-[#1c6dd0] sm:h-8 sm:w-8" />
             </div>
           </CardContent>
         </Card>
         <Card className="glass-card border-0 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-wide text-gray-500">Sessions Today</p>
-                <p className="text-2xl font-bold text-gray-900">{sessionsToday}</p>
+                <p className="text-xl font-bold text-gray-900 sm:text-2xl">{sessionsToday}</p>
               </div>
-              <Clock className="h-8 w-8 text-[#87a8d0]" />
+              <Clock className="h-7 w-7 text-[#87a8d0] sm:h-8 sm:w-8" />
             </div>
           </CardContent>
         </Card>
         <Card className="glass-card border-0 shadow-lg">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-wide text-gray-500">Open Assignments</p>
-                <p className="text-2xl font-bold text-gray-900">{upcomingAssignments}</p>
+                <p className="text-xl font-bold text-gray-900 sm:text-2xl">{upcomingAssignments}</p>
               </div>
-              <Target className="h-8 w-8 text-[#123d73]" />
+              <Target className="h-7 w-7 text-[#123d73] sm:h-8 sm:w-8" />
             </div>
           </CardContent>
         </Card>
       </div>
 
       <Card className="glass-card border-0 shadow-lg">
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle className="text-xl text-gray-900">Upcoming Team Schedule</CardTitle>
-            <p className="text-sm text-gray-500">Automated calendar view of all scheduled training blocks.</p>
+            <CardTitle className="text-lg text-gray-900 sm:text-xl">Upcoming Team Schedule</CardTitle>
+            <p className="text-xs text-gray-500 sm:text-sm">Automated calendar view of all scheduled training blocks.</p>
           </div>
-          <Badge className="bg-[#edf2fa] text-[#123a70] border-[#c7d7ee]">Next 5</Badge>
+          <Badge className="border-[#c7d7ee] bg-[#edf2fa] px-3 py-1 text-xs font-medium text-[#123a70] sm:text-sm">Next 5</Badge>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow className="border-transparent">
-                <TableHead className="text-gray-500">Session</TableHead>
-                <TableHead className="text-gray-500">Athlete</TableHead>
-                <TableHead className="text-gray-500">Start</TableHead>
-                <TableHead className="text-gray-500">Intensity</TableHead>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-transparent">
+                  <TableHead className="text-xs font-medium text-gray-500 sm:text-sm">Session</TableHead>
+                  <TableHead className="text-xs font-medium text-gray-500 sm:text-sm">Athlete</TableHead>
+                  <TableHead className="text-xs font-medium text-gray-500 sm:text-sm">Start</TableHead>
+                  <TableHead className="text-xs font-medium text-gray-500 sm:text-sm">Intensity</TableHead>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {upcomingSessions.map((session) => {
+              </TableHeader>
+              <TableBody>
+                {upcomingSessions.map((session) => {
                 const athlete = athletes.find((item) => item.sessions.some((s) => s.id === session.id))
                 return (
                   <TableRow key={session.id} className="border-transparent hover:bg-white/60">
-                    <TableCell>
+                    <TableCell className="text-xs sm:text-sm">
                       <div className="flex items-center gap-2">
                         {session.type === "lift" ? (
                           <Dumbbell className="h-4 w-4 text-[#0f4d92]" />
@@ -818,14 +845,14 @@ export function CoachDashboard() {
                         )}
                         <div>
                           <p className="font-semibold text-gray-900">{session.title}</p>
-                          <p className="text-xs text-gray-500">{session.focus}</p>
+                          <p className="text-[0.7rem] text-gray-500 sm:text-xs">{session.focus}</p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-gray-600">{athlete?.name ?? "Team"}</TableCell>
-                    <TableCell className="text-sm text-gray-600">{formatDateTime(session.startAt)}</TableCell>
+                    <TableCell className="text-xs text-gray-600 sm:text-sm">{athlete?.name ?? "Team"}</TableCell>
+                    <TableCell className="text-xs text-gray-600 sm:text-sm">{formatDateTime(session.startAt)}</TableCell>
                     <TableCell>
-                      <Badge className="capitalize bg-[#e8f0fb] text-[#0f2f5b] border border-[#c7d7ee]">
+                      <Badge className="border border-[#c7d7ee] bg-[#e8f0fb] px-2 py-1 text-[0.7rem] capitalize text-[#0f2f5b] sm:text-xs">
                         {session.intensity}
                       </Badge>
                     </TableCell>
@@ -834,21 +861,22 @@ export function CoachDashboard() {
               })}
               {upcomingSessions.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-sm text-gray-500">
+                  <TableCell colSpan={4} className="text-center text-xs text-gray-500 sm:text-sm">
                     No upcoming sessions scheduled.
                   </TableCell>
                 </TableRow>
               )}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <h2 className="mb-3 flex items-center gap-2 text-xl font-semibold text-gray-900 sm:mb-4 sm:text-2xl">
           <Users className="h-5 w-5 text-[#0f4d92]" /> Athlete Roster
         </h2>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
           {athletes.map((athlete) => (
             <CoachAthleteCard
               key={athlete.id}
