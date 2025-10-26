@@ -323,7 +323,7 @@ export default function Mobility() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center space-x-2">
