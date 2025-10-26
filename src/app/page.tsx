@@ -19,10 +19,8 @@ import {
   Target,
   CheckCircle2,
   ArrowRight,
-  Plus,
   Zap,
   Award,
-  Sparkles,
   ListChecks
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -35,20 +33,6 @@ type CheckInDiaryEntry = {
   physicalState: number
   mentalNotes: string
   physicalNotes: string
-}
-
-const determineGreeting = () => {
-  const hour = new Date().getHours()
-
-  if (hour < 12) {
-    return "Hello, good morning"
-  }
-
-  if (hour < 18) {
-    return "Hello, good afternoon"
-  }
-
-  return "Hello, good night"
 }
 
 // Enhanced mock data with more sophisticated metrics
@@ -220,15 +204,6 @@ export default function DashboardPage() {
   const [diaryEntries, setDiaryEntries] = useState<CheckInDiaryEntry[]>(() =>
     mapCheckInLogsToDiaryEntries(checkInLogs)
   )
-
-  const [greeting, setGreeting] = useState(determineGreeting)
-
-  useEffect(() => {
-    const updateGreeting = () => setGreeting(determineGreeting())
-    const interval = setInterval(updateGreeting, 60 * 1000)
-
-    return () => clearInterval(interval)
-  }, [])
 
   useEffect(() => {
     setDiaryEntries(mapCheckInLogsToDiaryEntries(checkInLogs))
@@ -614,29 +589,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Hero Section */}
-        <div className="mb-12">
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-[#0f4d92]/25 via-[#1c6dd0]/20 to-[#acc4e6]/25 rounded-3xl blur-3xl"></div>
-            <div className="relative glass-card rounded-3xl p-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-4xl font-bold bg-gradient-to-r from-[#0f172a] via-[#0f4d92] to-[#12284b] bg-clip-text text-transparent mb-2">
-                    {greeting} Alex! 👋
-                  </h1>
-                  <p className="text-xl text-gray-600 font-medium">Ready to tackle another day?</p>
-                </div>
-                <div className="hidden md:block">
-                  <div className="w-32 h-32 rounded-full gradient-hero flex items-center justify-center animate-float">
-                    <Sparkles className="h-16 w-16 text-white" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Daily Check-in Card */}
         <Card className="mb-12 glass-card border-0 shadow-premium-lg">
           <CardHeader className="pb-6">
@@ -1046,37 +999,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Hydration Progress Card */}
-        <Card className="glass-card border-0 shadow-premium-lg">
-          <CardHeader className="pb-6">
-            <CardTitle className="flex items-center gap-4 text-2xl text-gray-900">
-              <div className="w-12 h-12 rounded-2xl gradient-success flex items-center justify-center shadow-glow">
-                <Droplets className="h-7 w-7 text-white" />
-              </div>
-              Hydration Progress
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-8">
-              <div className="flex justify-between text-lg">
-                <span className="font-bold text-gray-900">{hydrationStats.total}oz consumed</span>
-                <span className="text-gray-600">{hydrationStats.goal}oz goal</span>
-              </div>
-              <Progress value={hydrationProgress} className="w-full h-4" />
-              <div className="flex gap-4">
-                <Button variant="outline" className="flex-1 glass-card border-white/20 hover:bg-white/50 h-12">
-                  <Plus className="h-5 w-5 mr-2" />+8oz
-                </Button>
-                <Button variant="outline" className="flex-1 glass-card border-white/20 hover:bg-white/50 h-12">
-                  <Plus className="h-5 w-5 mr-2" />+12oz
-                </Button>
-                <Button variant="outline" className="flex-1 glass-card border-white/20 hover:bg-white/50 h-12">
-                  <Plus className="h-5 w-5 mr-2" />+17oz
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   )
