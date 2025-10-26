@@ -4,8 +4,16 @@ const NUTRISLICE_BASE_URL = "https://yaledining.api.nutrislice.com/menu/api"
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
-const SCHOOL_SLUG = "jonathan-edwards-college"
-const LOCATION_ID = "57753"
+type DiningLocationConfig = {
+  slug: string
+  label: string
+  defaultLocationId?: string
+}
+
+const DINING_LOCATIONS: DiningLocationConfig[] = [
+  { slug: "jonathan-edwards-college", label: "Jonathan Edwards College", defaultLocationId: "57753" },
+  { slug: "branford-college", label: "Branford College" }
+]
 
 /* ---------------- Types ---------------- */
 type WeeksFood = {
@@ -104,7 +112,8 @@ async function fetchWeeksMenuByMeal(school: string, meal: string, date: string):
 
 async function fetchOrderSettings(
   menuItemId: number,
-  date: string
+  date: string,
+  locationId: string | null
 ): Promise<{
   calories: number
   proteinG: number
@@ -114,8 +123,12 @@ async function fetchOrderSettings(
   servingSize: string | undefined
   facts: NutritionFact[]
 }> {
+  if (!locationId) {
+    return { calories: 0, proteinG: 0, sodiumMg: 0, fatG: 0, carbsG: 0, servingSize: undefined, facts: [] }
+  }
+
   const url = `${NUTRISLICE_BASE_URL}/menu-items/${menuItemId}/order-settings/?location-id=${encodeURIComponent(
-    LOCATION_ID
+    locationId
   )}&menu-date=${encodeURIComponent(date)}`
 
   const json = await safeFetchJSON<Record<string, unknown>>(url, {
@@ -249,7 +262,7 @@ async function resolveItemMeta(
 }
 
 /* ---------------- Build meals ---------------- */
-async function buildMenuItemsFromWeeks(day: WeeksDay, date: string): Promise<MenuItem[]> {
+async function buildMenuItemsFromWeeks(day: WeeksDay, date: string, locationId: string | null): Promise<MenuItem[]> {
   const menuItems = Array.isArray(day.menu_items) ? day.menu_items : []
 
   const settled = await Promise.allSettled(
@@ -290,10 +303,10 @@ async function buildMenuItemsFromWeeks(day: WeeksDay, date: string): Promise<Men
 
       // MUST use menu-item id for order-settings
       if (menuItemId) {
-        enrich = await fetchOrderSettings(menuItemId, date)
+        enrich = await fetchOrderSettings(menuItemId, date, locationId)
       } else if (foodId) {
         // last-resort fallback (some deployments accept foodId)
-        enrich = await fetchOrderSettings(foodId, date)
+        enrich = await fetchOrderSettings(foodId, date, locationId)
       }
 
       return {
@@ -323,15 +336,113 @@ const buildFallbackResponse = (date: string, mealLabel: string, error: string) =
     date,
     source: "fallback" as const,
     menu: [
-      {
-        location: "Jonathan Edwards College",
+      ...DINING_LOCATIONS.map((loc) => ({
+        location: loc.label,
         meals: [
           { mealType: mealLabel, items: [] }
         ]
-      }
+      }))
     ],
     error
   })
+
+/* ---------------- Location metadata ---------------- */
+type RawLocation = Record<string, unknown>
+
+const locationIdCache = new Map<string, string | null>()
+let locationDirectoryCache: RawLocation[] | null = null
+
+const normalizeSlug = (value: unknown): string | null => {
+  if (typeof value !== "string") return null
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+  return normalized.length ? normalized : null
+}
+
+const extractCandidateSlugs = (raw: RawLocation): string[] => {
+  const candidates = new Set<string>()
+  const keysToNormalize = ["slug", "school_slug", "menu_group_slug", "school"]
+  for (const key of keysToNormalize) {
+    const normalized = normalizeSlug(raw[key])
+    if (normalized) candidates.add(normalized)
+  }
+
+  const pathValue = normalizeSlug(raw["path"])
+  if (pathValue) candidates.add(pathValue)
+
+  const arrayKeys = ["slugs", "school_slugs", "schools"]
+  for (const key of arrayKeys) {
+    const arr = raw[key]
+    if (Array.isArray(arr)) {
+      for (const value of arr) {
+        const normalized = normalizeSlug(value)
+        if (normalized) candidates.add(normalized)
+      }
+    }
+  }
+
+  return Array.from(candidates)
+}
+
+async function fetchLocationDirectory(): Promise<RawLocation[]> {
+  if (locationDirectoryCache) return locationDirectoryCache
+
+  const url = `${NUTRISLICE_BASE_URL}/locations/?format=json`
+  const json = await safeFetchJSON<unknown>(url, {
+    headers: {
+      "User-Agent": USER_AGENT,
+      Accept: "application/json",
+      Origin: "https://yaledining.nutrislice.com",
+      Referer: "https://yaledining.nutrislice.com/"
+    },
+    cache: "no-store",
+    timeoutMs: 9000
+  })
+
+  locationDirectoryCache = Array.isArray(json) ? (json as RawLocation[]) : []
+  return locationDirectoryCache
+}
+
+async function resolveLocationId(config: DiningLocationConfig): Promise<string | null> {
+  if (locationIdCache.has(config.slug)) return locationIdCache.get(config.slug) ?? null
+
+  if (config.defaultLocationId) {
+    locationIdCache.set(config.slug, config.defaultLocationId)
+    return config.defaultLocationId
+  }
+
+  const directory = await fetchLocationDirectory()
+  const targetSlug = normalizeSlug(config.slug)
+  if (!targetSlug) {
+    locationIdCache.set(config.slug, null)
+    return null
+  }
+
+  for (const entry of directory) {
+    const candidates = extractCandidateSlugs(entry)
+    if (candidates.includes(targetSlug)) {
+      const idValue = entry?.["id"]
+      let id: number | null = null
+      if (typeof idValue === "number" && Number.isFinite(idValue)) id = idValue
+      else if (typeof idValue === "string") {
+        const parsed = Number.parseInt(idValue, 10)
+        if (!Number.isNaN(parsed)) id = parsed
+      }
+      if (id !== null) {
+        const resolved = `${id}`
+        locationIdCache.set(config.slug, resolved)
+        return resolved
+      }
+    }
+  }
+
+  locationIdCache.set(config.slug, null)
+  return null
+}
 
 /* ---------------- Route ---------------- */
 export async function GET(request: NextRequest) {
@@ -342,44 +453,62 @@ export async function GET(request: NextRequest) {
   const mealConfig = MEAL_SLUG_CONFIG[meal] ?? { label: normalizeMealName(meal), slugs: [meal] }
 
   try {
-    const aggregatedItems = new Map<number, MenuItem>()
-    let successful = false
+    const locationResults: {
+      config: DiningLocationConfig
+      items: MenuItem[]
+      successful: boolean
+    }[] = []
 
-    for (const slug of mealConfig.slugs) {
-      const weeks = await fetchWeeksMenuByMeal(SCHOOL_SLUG, slug, date)
-      if (!weeks) continue
+    const errorMessages: string[] = []
+    let successfulLocations = 0
 
-      const day: WeeksDay | undefined = weeks?.days?.find((d) => d?.date === date)
-      if (!day) continue
+    for (const locationConfig of DINING_LOCATIONS) {
+      const aggregatedItems = new Map<number, MenuItem>()
+      let successful = false
+      const locationId = await resolveLocationId(locationConfig)
 
-      successful = true
-      const items = await buildMenuItemsFromWeeks(day, date)
-      for (const item of items) if (!aggregatedItems.has(item.id)) aggregatedItems.set(item.id, item)
+      for (const slug of mealConfig.slugs) {
+        const weeks = await fetchWeeksMenuByMeal(locationConfig.slug, slug, date)
+        if (!weeks) continue
+
+        const day: WeeksDay | undefined = weeks?.days?.find((d) => d?.date === date)
+        if (!day) continue
+
+        successful = true
+        const items = await buildMenuItemsFromWeeks(day, date, locationId)
+        for (const item of items) if (!aggregatedItems.has(item.id)) aggregatedItems.set(item.id, item)
+      }
+
+      if (successful) successfulLocations += 1
+      else errorMessages.push(`No menu found for ${locationConfig.label} ${meal} on ${date}`)
+
+      locationResults.push({
+        config: locationConfig,
+        items: Array.from(aggregatedItems.values()),
+        successful
+      })
     }
 
-    if (!successful) {
-      return buildFallbackResponse(
-        date,
-        mealConfig.label,
-        `No menu found for ${SCHOOL_SLUG} ${meal} on ${date}`
-      )
+    if (successfulLocations === 0) {
+      const combinedError =
+        errorMessages.join("; ") || `No menu found for requested meal on ${date}`
+      return buildFallbackResponse(date, mealConfig.label, combinedError)
     }
 
-    const items = Array.from(aggregatedItems.values())
+    const combinedError = errorMessages.length ? errorMessages.join("; ") : undefined
     return NextResponse.json({
       date,
       source: "live" as const,
-      menu: [
-        {
-          location: "Jonathan Edwards College",
-          meals: [
-            {
-              mealType: mealConfig.label,
-              items
-            }
-          ]
-        }
-      ]
+      menu: locationResults.map((result) => ({
+        location: result.config.label,
+        meals: [
+          {
+            mealType: mealConfig.label,
+            items: result.items
+          }
+        ]
+      })),
+      ...(combinedError ? { error: combinedError } : {})
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
