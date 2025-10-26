@@ -8,7 +8,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Activity, Plus, Play, Clock, TrendingUp } from "lucide-react"
+import {
+  Activity,
+  Plus,
+  Play,
+  Clock,
+  TrendingUp,
+  ListChecks,
+  Dumbbell,
+} from "lucide-react"
 import { useRole } from "@/components/role-context"
 
 const mockExercises = [
@@ -189,15 +197,17 @@ export default function Mobility() {
   }))
 
   const totalMinutes = mobilityLogs.reduce((sum, log) => sum + (log.durationMin || 0), 0)
+  const sessionsLogged = mobilityLogs.length
+  const activeGroups = exercisesByGroup.filter(group => group.exercises.length > 0).length
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
           <h1 className="text-3xl font-bold text-foreground">Mobility</h1>
           <p className="text-muted-foreground">Build your custom mobility routines and log recovery work</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Dialog open={isAddExerciseOpen} onOpenChange={setIsAddExerciseOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -257,7 +267,7 @@ export default function Mobility() {
 
           <Dialog open={isLogExerciseOpen} onOpenChange={setIsLogExerciseOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto">
                 <Activity className="h-4 w-4 mr-2" />
                 Log Session
               </Button>
@@ -308,6 +318,53 @@ export default function Mobility() {
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center space-x-2">
+              <Clock className="h-5 w-5 text-primary" />
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">Mobility Minutes</p>
+                <p className="text-xl font-bold sm:text-2xl">{totalMinutes}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center space-x-2">
+              <Activity className="h-5 w-5 text-[#0f4d92]" />
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">Sessions Logged</p>
+                <p className="text-xl font-bold sm:text-2xl">{sessionsLogged}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center space-x-2">
+              <ListChecks className="h-5 w-5 text-[#123d73]" />
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">Library Exercises</p>
+                <p className="text-xl font-bold sm:text-2xl">{exercises.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex items-center space-x-2">
+              <Dumbbell className="h-5 w-5 text-[#1c6dd0]" />
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">Active Groups</p>
+                <p className="text-xl font-bold sm:text-2xl">{activeGroups}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Tabs defaultValue="library" className="space-y-4">
         <TabsList>
           <TabsTrigger value="library">Exercise Library</TabsTrigger>
@@ -316,9 +373,9 @@ export default function Mobility() {
         </TabsList>
 
         <TabsContent value="library" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
             {exercisesByGroup.map(group => (
-              <Card key={group.name}>
+              <Card key={group.name} className="h-full">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -328,44 +385,49 @@ export default function Mobility() {
                     <Badge variant="secondary">{group.exercises.length} drills</Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent>
                   {group.exercises.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No exercises yet. Add one to get started.</p>
                   ) : (
-                    group.exercises.map(exercise => (
-                      <div
-                        key={exercise.id}
-                        className="border rounded-lg p-3 bg-gradient-to-br from-white to-[#f5f7fb]"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <span className="text-2xl">{exercise.thumbnail || getGroupIcon(group.name)}</span>
-                            <div>
-                              <h3 className="font-semibold text-[#0f2f5b]">{exercise.name}</h3>
-                              <p className="text-xs text-muted-foreground">{exercise.prescription}</p>
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                      {group.exercises.map(exercise => (
+                        <div
+                          key={exercise.id}
+                          className="flex h-full flex-col justify-between rounded-lg border bg-gradient-to-br from-white to-[#f5f7fb] p-3 text-left aspect-square"
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-2xl">{exercise.thumbnail || getGroupIcon(group.name)}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openLogDialog(exercise)}
+                                className="h-7 px-2 text-primary"
+                              >
+                                <Play className="h-4 w-4" />
+                                <span className="sr-only">Log session</span>
+                              </Button>
+                            </div>
+                            <div className="space-y-1">
+                              <h3 className="text-sm font-semibold text-[#0f2f5b]">{exercise.name}</h3>
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {exercise.prescription}
+                              </p>
                             </div>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openLogDialog(exercise)}
-                            className="text-primary"
-                          >
-                            <Play className="h-4 w-4 mr-1" /> Log
-                          </Button>
+                          {exercise.youtubeUrl && (
+                            <a
+                              href={exercise.youtubeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-[#1c6dd0] hover:underline"
+                            >
+                              Watch demo
+                            </a>
+                          )}
                         </div>
-                        {exercise.youtubeUrl && (
-                          <a
-                            href={exercise.youtubeUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-[#1c6dd0] hover:underline"
-                          >
-                            Watch demo
-                          </a>
-                        )}
-                      </div>
-                    ))
+                      ))}
+                    </div>
                   )}
                 </CardContent>
               </Card>
