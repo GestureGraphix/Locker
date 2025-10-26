@@ -20,7 +20,9 @@ import {
   Activity,
   Zap,
   Award,
-  Timer
+  Timer,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react"
 
 const mockPRs = [
@@ -72,6 +74,7 @@ export default function Training() {
   const [prs, setPRs] = useState(currentUser ? [] : mockPRs)
   const [isAddSessionOpen, setIsAddSessionOpen] = useState(false)
   const [isAddPROpen, setIsAddPROpen] = useState(false)
+  const [isAnalyzerOpen, setIsAnalyzerOpen] = useState(false)
   const [newSession, setNewSession] = useState({
     type: "practice",
     title: "",
@@ -370,8 +373,6 @@ export default function Training() {
         </Card>
       </div>
 
-      <VideoAnalyzer />
-
       {/* Main Content */}
       <Tabs defaultValue="sessions" className="space-y-4">
         <TabsList>
@@ -520,6 +521,22 @@ export default function Training() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <div className="space-y-4">
+        <Button
+          variant="outline"
+          className="flex w-full items-center justify-between"
+          onClick={() => setIsAnalyzerOpen(prev => !prev)}
+        >
+          <span>Technique Analyzer (beta)</span>
+          {isAnalyzerOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </Button>
+        {isAnalyzerOpen && (
+          <div className="space-y-4">
+            <VideoAnalyzer />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
