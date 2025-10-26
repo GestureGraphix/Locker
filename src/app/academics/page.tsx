@@ -701,47 +701,47 @@ export default function Academics() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center space-x-2">
               <GraduationCap className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-sm font-medium">Courses</p>
-                <p className="text-2xl font-bold">{courses.length}</p>
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">Courses</p>
+                <p className="text-xl font-bold sm:text-2xl">{courses.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center space-x-2">
               <BookOpen className="h-5 w-5 text-[#0f4d92]" />
-              <div>
-                <p className="text-sm font-medium">Total Items</p>
-                <p className="text-2xl font-bold">{academicItems.length}</p>
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">Total Items</p>
+                <p className="text-xl font-bold sm:text-2xl">{academicItems.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center space-x-2">
               <AlertCircle className="h-5 w-5 text-[#123d73]" />
-              <div>
-                <p className="text-sm font-medium">Overdue</p>
-                <p className="text-2xl font-bold">{overdueItems.length}</p>
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">Overdue</p>
+                <p className="text-xl font-bold sm:text-2xl">{overdueItems.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center space-x-2">
               <CheckCircle className="h-5 w-5 text-[#1c6dd0]" />
-              <div>
-                <p className="text-sm font-medium">Completed</p>
-                <p className="text-2xl font-bold">
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">Completed</p>
+                <p className="text-xl font-bold sm:text-2xl">
                   {academicItems.filter(item => item.completed).length}
                 </p>
               </div>
@@ -753,17 +753,17 @@ export default function Academics() {
       {/* Courses */}
       <div>
         <h2 className="text-xl font-semibold mb-4">My Courses</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {courses.map(course => (
             <Card key={course.id} className="border-muted">
-              <CardHeader className="px-4 pt-3 pb-2">
+              <CardHeader className="px-3 pt-2 pb-1 sm:px-4 sm:pt-3 sm:pb-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 space-y-1">
-                    <CardTitle className="text-base truncate" title={course.code}>
+                    <CardTitle className="text-sm truncate sm:text-base" title={course.code}>
                       {course.code}
                     </CardTitle>
                     <p
-                      className="text-sm text-muted-foreground truncate"
+                      className="text-xs text-muted-foreground truncate sm:text-sm"
                       title={course.name}
                     >
                       {course.name}
@@ -772,17 +772,17 @@ export default function Academics() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 w-full px-2 text-xs sm:w-auto"
+                    className="h-7 w-full px-2 text-[11px] sm:h-8 sm:w-auto sm:text-xs"
                     onClick={() => startEditingCourse(course)}
                   >
                     Edit
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="px-4 pt-0 pb-3 text-xs text-muted-foreground space-y-1">
+              <CardContent className="px-3 pt-0 pb-2 text-[11px] text-muted-foreground space-y-1 sm:px-4 sm:pb-3 sm:text-xs">
                 {course.professor && <p className="truncate">{course.professor}</p>}
                 {course.schedule && <p className="truncate">{course.schedule}</p>}
-                <Badge variant="outline" className="mt-1 w-fit text-[10px] uppercase tracking-wide">
+                <Badge variant="outline" className="mt-1 w-fit text-[9px] uppercase tracking-wide sm:text-[10px]">
                   {academicItems.filter(item => item.courseId === course.id).length} items
                 </Badge>
               </CardContent>
