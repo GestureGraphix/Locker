@@ -169,15 +169,15 @@ export default function Training() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
           <h1 className="text-3xl font-bold text-foreground">Training</h1>
           <p className="text-muted-foreground">Track your sessions and personal records</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <Dialog open={isAddSessionOpen} onOpenChange={setIsAddSessionOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Session
               </Button>
@@ -253,7 +253,7 @@ export default function Training() {
           </Dialog>
           <Dialog open={isAddPROpen} onOpenChange={setIsAddPROpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
                 Log PR
               </Button>
@@ -321,47 +321,47 @@ export default function Training() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center space-x-2">
               <Activity className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-sm font-medium">Sessions This Week</p>
-                <p className="text-2xl font-bold">{sessions.length}</p>
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">Sessions This Week</p>
+                <p className="text-xl font-bold sm:text-2xl">{sessions.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center space-x-2">
               <Award className="h-5 w-5 text-[#0f2f5b]" />
-              <div>
-                <p className="text-sm font-medium">PRs This Month</p>
-                <p className="text-2xl font-bold">{prs.length}</p>
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">PRs This Month</p>
+                <p className="text-xl font-bold sm:text-2xl">{prs.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center space-x-2">
               <Timer className="h-5 w-5 text-[#1c6dd0]" />
-              <div>
-                <p className="text-sm font-medium">Avg Session Time</p>
-                <p className="text-2xl font-bold">1.5h</p>
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">Avg Session Time</p>
+                <p className="text-xl font-bold sm:text-2xl">1.5h</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <div className="flex items-center space-x-2">
               <Zap className="h-5 w-5 text-[#123d73]" />
-              <div>
-                <p className="text-sm font-medium">High Intensity</p>
-                <p className="text-2xl font-bold">
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium sm:text-sm">High Intensity</p>
+                <p className="text-xl font-bold sm:text-2xl">
                   {sessions.filter(s => s.intensity === "high").length}
                 </p>
               </div>
@@ -387,14 +387,14 @@ export default function Training() {
               {upcomingSessions.map(session => (
                 <Card key={session.id}>
                   <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-3 sm:items-center sm:gap-4">
                         <div className="p-2 rounded-lg bg-primary/10">
                           {getTypeIcon(session.type)}
                         </div>
                         <div>
                           <h3 className="font-semibold">{session.title}</h3>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <Calendar className="h-4 w-4" />
                               {new Date(session.startAt).toLocaleDateString()}
@@ -413,13 +413,14 @@ export default function Training() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
                         <Badge className={getIntensityColor(session.intensity)}>
                           {session.intensity}
                         </Badge>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
+                          className="w-full sm:w-auto"
                           onClick={() => toggleSessionComplete(session.id)}
                         >
                           Complete
@@ -437,18 +438,19 @@ export default function Training() {
             <h2 className="text-xl font-semibold mb-4">Recent Sessions</h2>
             <Card>
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Duration</TableHead>
-                      <TableHead>Intensity</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Duration</TableHead>
+                        <TableHead>Intensity</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                     {completedSessions.map(session => (
                       <TableRow key={session.id}>
                         <TableCell>
@@ -472,8 +474,9 @@ export default function Training() {
                         </TableCell>
                       </TableRow>
                     ))}
-                  </TableBody>
-                </Table>
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -484,17 +487,18 @@ export default function Training() {
             <h2 className="text-xl font-semibold mb-4">Personal Records</h2>
             <Card>
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Exercise</TableHead>
-                      <TableHead>Weight</TableHead>
-                      <TableHead>Reps</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Intensity</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Exercise</TableHead>
+                        <TableHead>Weight</TableHead>
+                        <TableHead>Reps</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Intensity</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                     {recentPRs.map(pr => (
                       <TableRow key={pr.id}>
                         <TableCell className="font-medium">{pr.exercise}</TableCell>
@@ -508,8 +512,9 @@ export default function Training() {
                         </TableCell>
                       </TableRow>
                     ))}
-                  </TableBody>
-                </Table>
+                    </TableBody>
+                  </Table>
+                </div>
               </CardContent>
             </Card>
           </div>
