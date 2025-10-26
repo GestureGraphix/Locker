@@ -5,7 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
@@ -33,6 +40,7 @@ type MenuItem = {
   name: string
   description?: string
   calories?: number
+  servingSize?: string
   nutritionFacts: NutritionFact[]
 }
 
@@ -71,6 +79,13 @@ type PlateItem = {
   baseCalories: number
   baseProteinG: number
   portion: number
+}
+
+type PendingMenuSelection = {
+  mealTypeLabel: string
+  item: MenuItem
+  location: string
+  sectionLabel: string
 }
 /* ======================== Helpers ======================== */
 
@@ -247,6 +262,9 @@ export default function Fuel() {
   const [newHydration, setNewHydration] = useState({ ounces: "", source: "cup" })
   const [plateItems, setPlateItems] = useState<PlateItem[]>([])
   const [pendingPlateItemIds, setPendingPlateItemIds] = useState<string[]>([])
+  const [portionDialogOpen, setPortionDialogOpen] = useState(false)
+  const [portionDialogSelection, setPortionDialogSelection] = useState<PendingMenuSelection | null>(null)
+  const [portionInput, setPortionInput] = useState("1")
   const [newMeal, setNewMeal] = useState({
     mealType: "breakfast",
     calories: "",
@@ -298,6 +316,13 @@ export default function Fuel() {
   useEffect(() => {
     setMenuSearch("")
   }, [menuDate])
+
+  useEffect(() => {
+    if (!portionDialogOpen) {
+      setPortionDialogSelection(null)
+      setPortionInput("1")
+    }
+  }, [portionDialogOpen])
 
   const hasMenuItems = useMemo(
     () =>
@@ -378,6 +403,38 @@ export default function Fuel() {
 
   const hasMenuSearchResults = menuSearchResults.length > 0
 
+  const parsedPortionInput = Number.parseFloat(portionInput)
+  const isValidPortionInput = Number.isFinite(parsedPortionInput) && parsedPortionInput > 0
+  const portionMultiplier = isValidPortionInput ? parsedPortionInput : 1
+
+  const portionDialogBaseCalories = portionDialogSelection
+    ? (() => {
+        const calories = getCaloriesFromItem(portionDialogSelection.item)
+        return calories != null && Number.isFinite(calories) ? calories : 0
+      })()
+    : 0
+
+  const portionDialogBaseProtein = portionDialogSelection
+    ? (() => {
+        const protein = getProteinFromItem(portionDialogSelection.item)
+        return protein != null && Number.isFinite(protein) ? protein : 0
+      })()
+    : 0
+
+  const portionDialogCaloriesPreview = portionDialogSelection
+    ? Math.round(portionDialogBaseCalories * portionMultiplier)
+    : null
+
+  const portionDialogProteinPreview = portionDialogSelection
+    ? roundToTwo(portionDialogBaseProtein * portionMultiplier)
+    : null
+
+  const portionDialogMealTypeLabel = portionDialogSelection
+    ? formatMealTypeLabel(normalizeMealType(portionDialogSelection.mealTypeLabel))
+    : ""
+
+  const portionDialogServingSize = portionDialogSelection?.item.servingSize
+
   const plateSummary = useMemo(() => {
     if (plateItems.length === 0) {
       return {
@@ -443,28 +500,14 @@ export default function Fuel() {
     })
   }, [])
 
-  /* -------- Add meal from menu (now guarantees non-zero if available) -------- */
-  const handleAddFromMenu = useCallback(
-    (mealTypeLabel: string, item: MenuItem, location: string, sectionLabel: string) => {
+  const addMenuItemToPlate = useCallback(
+    ({ mealTypeLabel, item, location, sectionLabel, portion }: PendingMenuSelection & { portion: number }) => {
       const normalizedType = normalizeMealType(mealTypeLabel)
       const calories = getCaloriesFromItem(item)
       const protein = getProteinFromItem(item)
 
       const baseCalories = calories != null && Number.isFinite(calories) ? calories : 0
       const baseProtein = protein != null && Number.isFinite(protein) ? protein : 0
-
-      let portion = 1
-      if (typeof window !== "undefined") {
-        const promptMessage = `How many portions of ${item.name} are you adding to the plate?`
-        const response = window.prompt(promptMessage, "1")
-        if (response == null) {
-          return
-        }
-        const parsed = Number.parseFloat(response)
-        if (Number.isFinite(parsed) && parsed > 0) {
-          portion = parsed
-        }
-      }
 
       const clonedFacts = (Array.isArray(item.nutritionFacts) ? item.nutritionFacts : []).map((f) => ({ ...f }))
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -485,6 +528,25 @@ export default function Fuel() {
     },
     []
   )
+
+  /* -------- Add meal from menu (now guarantees non-zero if available) -------- */
+  const handleAddFromMenu = useCallback(
+    (mealTypeLabel: string, item: MenuItem, location: string, sectionLabel: string) => {
+      setPortionDialogSelection({ mealTypeLabel, item, location, sectionLabel })
+      setPortionInput("1")
+      setPortionDialogOpen(true)
+    },
+    []
+  )
+
+  const handleConfirmPortion = useCallback(() => {
+    if (!portionDialogSelection) return
+    const parsed = Number.parseFloat(portionInput)
+    if (!Number.isFinite(parsed) || parsed <= 0) return
+
+    addMenuItemToPlate({ ...portionDialogSelection, portion: parsed })
+    setPortionDialogOpen(false)
+  }, [addMenuItemToPlate, portionDialogSelection, portionInput])
 
   const handleRemovePlateItem = useCallback((id: string) => {
     setPlateItems((prev) => prev.filter((item) => item.id !== id))
@@ -797,6 +859,104 @@ export default function Fuel() {
 
   return (
     <div className="space-y-6">
+      <Dialog open={portionDialogOpen} onOpenChange={setPortionDialogOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Add to Plate</DialogTitle>
+            {portionDialogSelection ? (
+              <p className="text-sm text-muted-foreground">
+                Choose how many portions you’d like to add from this menu item.
+              </p>
+            ) : null}
+          </DialogHeader>
+          <div className="space-y-4">
+            {portionDialogSelection ? (
+              <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {portionDialogSelection.item.name}
+                  </p>
+                  {portionDialogSelection.item.description ? (
+                    <p className="text-xs text-muted-foreground">
+                      {portionDialogSelection.item.description}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2 text-[0.65rem] text-muted-foreground">
+                  {portionDialogMealTypeLabel ? (
+                    <Badge variant="outline" className="border-dashed px-2 py-0">
+                      {portionDialogMealTypeLabel}
+                    </Badge>
+                  ) : null}
+                  {portionDialogSelection.location ? (
+                    <Badge variant="secondary" className="px-2 py-0">
+                      {portionDialogSelection.location}
+                    </Badge>
+                  ) : null}
+                  {portionDialogSelection.sectionLabel ? (
+                    <Badge variant="outline" className="border-dashed px-2 py-0">
+                      {portionDialogSelection.sectionLabel}
+                    </Badge>
+                  ) : null}
+                </div>
+                {portionDialogServingSize ? (
+                  <p className="text-xs text-muted-foreground">
+                    Serving size: {portionDialogServingSize}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="space-y-2">
+              <label
+                className="text-xs font-medium text-muted-foreground"
+                htmlFor="portion-multiplier-input"
+              >
+                Portion multiplier
+              </label>
+              <Input
+                id="portion-multiplier-input"
+                type="number"
+                min="0"
+                step="0.25"
+                value={portionInput}
+                onChange={(event) => setPortionInput(event.target.value)}
+                autoFocus
+              />
+              {!isValidPortionInput ? (
+                <p className="text-xs text-destructive">Enter a portion greater than zero.</p>
+              ) : null}
+            </div>
+            {portionDialogSelection && (portionDialogCaloriesPreview != null || portionDialogProteinPreview != null) ? (
+              <div className="space-y-2 rounded-md border border-border/40 bg-muted/50 p-3 text-sm">
+                <div>
+                  <p className="font-medium text-foreground">Estimated totals</p>
+                  <p className="text-xs text-muted-foreground">
+                    Per portion: {Math.round(portionDialogBaseCalories)} cal
+                    {portionDialogBaseProtein
+                      ? ` · ${formatTwoDecimalString(portionDialogBaseProtein)}g protein`
+                      : ""}
+                  </p>
+                </div>
+                <p className="text-sm text-foreground">
+                  {portionDialogCaloriesPreview != null ? `${portionDialogCaloriesPreview} cal` : null}
+                  {portionDialogCaloriesPreview != null && portionDialogProteinPreview != null ? " · " : null}
+                  {portionDialogProteinPreview != null
+                    ? `${formatTwoDecimalString(portionDialogProteinPreview)}g protein`
+                    : null}
+                </p>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPortionDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmPortion} disabled={!portionDialogSelection || !isValidPortionInput}>
+              Add to Plate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
