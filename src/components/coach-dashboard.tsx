@@ -889,9 +889,9 @@ export function CoachDashboard() {
               <CalendarIcon className="mr-2 h-4 w-4" /> Parse Schedule
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[90vh] overflow-hidden p-0">
-            <div className="flex h-full flex-col">
-              <DialogHeader className="space-y-1 border-b border-gray-100 px-6 py-4 sm:px-6 sm:py-6">
+          <DialogContent className="flex w-full max-w-3xl flex-col overflow-hidden p-0 max-h-[85vh] sm:max-w-3xl sm:max-h-[90vh]">
+            <div className="flex h-full flex-1 flex-col">
+              <DialogHeader className="shrink-0 space-y-1 border-b border-gray-100 px-6 py-4 sm:px-6 sm:py-6">
                 <DialogTitle>Parse Weekly Practice Schedule</DialogTitle>
                 <DialogDescription>
                   Paste the schedule and training plan to auto-assign sessions to tagged athletes.
@@ -1044,7 +1044,7 @@ export function CoachDashboard() {
                   </div>
                 )}
               </div>
-              <DialogFooter className="border-t border-gray-100 bg-gray-50/80 px-6 py-4 sm:flex-row sm:justify-end sm:px-6 sm:py-4">
+              <DialogFooter className="shrink-0 border-t border-gray-100 bg-gray-50/80 px-6 py-4 sm:flex-row sm:justify-end sm:px-6 sm:py-4">
                 <Button variant="outline" onClick={() => handleScheduleParserOpenChange(false)}>
                   Close
                 </Button>
