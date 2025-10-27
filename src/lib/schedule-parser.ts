@@ -190,6 +190,25 @@ const parsePracticeSchedule = (
   return sessions
 }
 
+const stripLeadingListMarker = (value: string) => {
+  let result = value
+
+  // Remove repeated bullet characters (e.g., -, –, •)
+  result = result.replace(/^(?:[-–—•·]\s*)+/, "")
+
+  const orderedMatch = result.match(/^\d+[.)]\s*/)
+  if (orderedMatch) {
+    return result.slice(orderedMatch[0].length)
+  }
+
+  const alphaMatch = result.match(/^[a-zA-Z][.)]\s*/)
+  if (alphaMatch) {
+    return result.slice(alphaMatch[0].length)
+  }
+
+  return result
+}
+
 const parseTrainingPlan = (lines: string[]) => {
   const notes: Record<string, string[]> = {}
   let currentDay: string | null = null
@@ -209,7 +228,7 @@ const parseTrainingPlan = (lines: string[]) => {
 
     if (!currentDay) continue
 
-    const cleaned = trimmed.replace(/^[-•\d.)\s]+/, "").trim()
+    const cleaned = stripLeadingListMarker(trimmed).trim()
     if (!cleaned) continue
 
     notes[currentDay].push(cleaned)
