@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import {
-  Sparkles,
   House,
   BookOpen,
   Dumbbell,
@@ -133,19 +132,11 @@ export function Navigation() {
         <div className="flex flex-col flex-grow">
           {/* Logo Section */}
           <div className="flex items-center px-8 py-8 border-b border-white/10">
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow animate-pulse-slow">
-                  <Sparkles className="h-7 w-7 text-white" />
-                </div>
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-[#0f4d92] rounded-full border-2 border-white animate-pulse"></div>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
-                <p className="text-sm text-gray-600 font-medium">
-                  {effectiveRole === "coach" ? "Coach Portal" : "Athlete Dashboard"}
-                </p>
-              </div>
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
+              <p className="text-sm text-gray-600 font-medium">
+                {effectiveRole === "coach" ? "Coach Portal" : "Athlete Dashboard"}
+              </p>
             </div>
           </div>
 
@@ -239,12 +230,7 @@ export function Navigation() {
       {/* Mobile Navigation */}
       <div className="lg:hidden">
         <div className="flex items-center justify-between px-6 py-4 glass-card border-b border-white/20">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
-              <Sparkles className="h-6 w-6 text-white" />
-            </div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
-          </div>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline" size="icon" className="glass-card border-white/20 hover:bg-white/50">
@@ -254,16 +240,11 @@ export function Navigation() {
             <SheetContent side="left" className="w-80 p-0 glass-card">
               <div className="flex flex-col h-full">
                 <div className="flex items-center px-6 py-8 border-b border-white/10">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 rounded-2xl gradient-primary flex items-center justify-center shadow-glow">
-                      <Sparkles className="h-7 w-7 text-white" />
-                    </div>
-                    <div>
-                      <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
-                      <p className="text-sm text-gray-600 font-medium">
-                        {effectiveRole === "coach" ? "Coach Portal" : "Athlete Dashboard"}
-                      </p>
-                    </div>
+                  <div className="space-y-1">
+                    <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Locker</h1>
+                    <p className="text-sm text-gray-600 font-medium">
+                      {effectiveRole === "coach" ? "Coach Portal" : "Athlete Dashboard"}
+                    </p>
                   </div>
                 </div>
                 <div className="flex-grow px-4 py-6">
