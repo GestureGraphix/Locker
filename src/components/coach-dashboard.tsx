@@ -42,7 +42,7 @@ type GeneratedScheduleSession = {
   key: string
   day: DayName
   group: string
-  tag: string
+  tags: string[]
   title: string
   type: "practice" | "lift"
   intensity: "low" | "medium" | "high"
@@ -76,6 +76,43 @@ const slugifyTag = (value: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
+
+const resolveScheduleTags = (group: string) => {
+  const normalized = group.toLowerCase()
+  const simplified = normalized.replace(/[^a-z0-9\s]/g, " ")
+  const compact = simplified.replace(/\s+/g, " ").trim()
+
+  const tagMatchers: { pattern: RegExp; tag: string }[] = [
+    { pattern: /\bhj\b|\bhigh\s*jump\b/, tag: "hj" },
+    { pattern: /\bpv\b|\bpole\s*vault\b/, tag: "pv" },
+    { pattern: /\bmultis?\b|\bmulti\b/, tag: "multi" },
+    { pattern: /\bmain\s*group\b/, tag: "main-group" },
+    { pattern: /\bmen\b/, tag: "men" },
+    { pattern: /\bwomen\b|\bgirls\b|\bfemale\b/, tag: "women" },
+    { pattern: /\b100m\s*h\b|\b100mh\b/, tag: "100mh" },
+    { pattern: /\b400m\s*h\b|\b400mh\b/, tag: "400mh" },
+    { pattern: /\blift(s)?\b|\blifting\b|\bweight\s*room\b/, tag: "lift" },
+  ]
+
+  const detected = new Set<string>()
+  for (const { pattern, tag } of tagMatchers) {
+    if (pattern.test(compact)) {
+      detected.add(tag)
+    }
+  }
+
+  if (detected.size > 0) {
+    return Array.from(detected)
+  }
+
+  const parts = compact
+    .replace(/\band\b/g, " ")
+    .split(/[\s/+,]+/)
+    .map((part) => slugifyTag(part))
+    .filter((part) => part.length > 0 && part !== "and")
+
+  return parts.length > 0 ? Array.from(new Set(parts)) : []
+}
 
 const toLocalDateTime = (date: Date) => {
   const year = date.getFullYear()
@@ -225,13 +262,14 @@ const parseScheduleTemplate = (
       const focus = dayPlan[0] ?? group
       const type = /lift/i.test(group) ? "lift" : "practice"
       const intensity = inferIntensity(notes)
-      const tag = slugifyTag(group)
+      const tags = resolveScheduleTags(group)
+      const effectiveTags = tags.length > 0 ? tags : [slugifyTag(group)].filter((tag) => tag.length > 0)
 
       sessions.push({
         key: `${day}-${group}-${time}`,
         day,
         group,
-        tag,
+        tags: effectiveTags,
         title: `${group} – ${day}`,
         type,
         intensity,
@@ -722,15 +760,17 @@ export function CoachDashboard() {
 
   const previewAssignments = useMemo(() => {
     return schedulePreview.map((session) => {
-      const normalizedTag = session.tag
-      const matchingAthletes = normalizedTag
-        ? athletes.filter((athlete) => athlete.tags.includes(normalizedTag))
+      const matchingAthletes = session.tags.length
+        ? athletes.filter((athlete) => session.tags.some((tag) => athlete.tags.includes(tag)))
         : []
       const recipients = matchingAthletes.length > 0 ? matchingAthletes : athletes
       return {
         session,
         assignedCount: recipients.length,
-        assignedLabel: matchingAthletes.length > 0 ? `Tag: ${normalizedTag}` : "All Athletes",
+        assignedLabel:
+          matchingAthletes.length > 0
+            ? `Tag${session.tags.length > 1 ? "s" : ""}: ${session.tags.join(", ")}`
+            : "All Athletes",
       }
     })
   }, [schedulePreview, athletes])
@@ -832,9 +872,8 @@ export function CoachDashboard() {
     }
 
     for (const session of schedulePreview) {
-      const normalizedTag = session.tag
-      const targetedAthletes = normalizedTag
-        ? athletes.filter((athlete) => athlete.tags.includes(normalizedTag))
+      const targetedAthletes = session.tags.length
+        ? athletes.filter((athlete) => session.tags.some((tag) => athlete.tags.includes(tag)))
         : []
       const recipients = targetedAthletes.length > 0 ? targetedAthletes : athletes
 
