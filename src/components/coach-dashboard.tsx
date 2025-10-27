@@ -890,14 +890,14 @@ export function CoachDashboard() {
             </Button>
           </DialogTrigger>
           <DialogContent className="flex w-full max-w-3xl flex-col overflow-hidden p-0 max-h-[85vh] sm:max-w-3xl sm:max-h-[90vh]">
-            <div className="flex h-full flex-1 flex-col">
+            <div className="flex h-full flex-1 min-h-0 flex-col overflow-hidden">
               <DialogHeader className="shrink-0 space-y-1 border-b border-gray-100 px-6 py-4 sm:px-6 sm:py-6">
                 <DialogTitle>Parse Weekly Practice Schedule</DialogTitle>
                 <DialogDescription>
                   Paste the schedule and training plan to auto-assign sessions to tagged athletes.
                 </DialogDescription>
               </DialogHeader>
-              <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4 sm:px-6 sm:py-6">
+              <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4 sm:px-6 sm:py-6 min-h-0">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="text-xs font-medium text-gray-600">Week Starting *</label>
