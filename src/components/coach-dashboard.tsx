@@ -889,172 +889,174 @@ export function CoachDashboard() {
               <CalendarIcon className="mr-2 h-4 w-4" /> Parse Schedule
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Parse Weekly Practice Schedule</DialogTitle>
-              <DialogDescription>
-                Paste the schedule and training plan to auto-assign sessions to tagged athletes.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[90vh] overflow-hidden p-0">
+            <div className="flex h-full flex-col">
+              <DialogHeader className="space-y-1 border-b border-gray-100 px-6 py-4 sm:px-6 sm:py-6">
+                <DialogTitle>Parse Weekly Practice Schedule</DialogTitle>
+                <DialogDescription>
+                  Paste the schedule and training plan to auto-assign sessions to tagged athletes.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4 sm:px-6 sm:py-6">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Week Starting *</label>
+                    <Input
+                      type="date"
+                      value={scheduleWeekStart}
+                      onChange={(event) => setScheduleWeekStart(event.target.value)}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Sessions will be scheduled using this week (default duration 60 minutes).
+                    </p>
+                  </div>
+                </div>
                 <div>
-                  <label className="text-xs font-medium text-gray-600">Week Starting *</label>
-                  <Input
-                    type="date"
-                    value={scheduleWeekStart}
-                    onChange={(event) => setScheduleWeekStart(event.target.value)}
+                  <label className="text-xs font-medium text-gray-600">Practice &amp; Training Plan Text *</label>
+                  <textarea
+                    value={scheduleText}
+                    onChange={(event) => setScheduleText(event.target.value)}
+                    rows={12}
+                    className="w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c7dbf3]"
+                    placeholder="Paste the coach schedule that lists each day and group (e.g., HJ and Multis 3:15)."
                   />
                   <p className="mt-1 text-xs text-gray-500">
-                    Sessions will be scheduled using this week (default duration 60 minutes).
+                    Group names like HJ, PV, Multis, or Main Group will be matched to athlete tags automatically.
                   </p>
                 </div>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600">Practice &amp; Training Plan Text *</label>
-                <textarea
-                  value={scheduleText}
-                  onChange={(event) => setScheduleText(event.target.value)}
-                  rows={12}
-                  className="w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c7dbf3]"
-                  placeholder="Paste the coach schedule that lists each day and group (e.g., HJ and Multis 3:15)."
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Group names like HJ, PV, Multis, or Main Group will be matched to athlete tags automatically.
-                </p>
-              </div>
-              <div className="flex justify-end">
-                <Button variant="outline" onClick={handleParseSchedule}>
-                  Parse Text
-                </Button>
-              </div>
-              {parseError && (
-                <p className="text-xs font-medium text-red-600 sm:text-sm">{parseError}</p>
-              )}
-              {parseWarnings.length > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 sm:text-sm">
-                  <div className="mb-1 flex items-center gap-2 font-semibold">
-                    <AlertTriangle className="h-4 w-4" /> Parsing notes
-                  </div>
-                  <ul className="list-disc space-y-1 pl-5">
-                    {parseWarnings.map((warning, index) => (
-                      <li key={`${warning}-${index}`}>{warning}</li>
-                    ))}
-                  </ul>
+                <div className="flex justify-end">
+                  <Button variant="outline" onClick={handleParseSchedule}>
+                    Parse Text
+                  </Button>
                 </div>
-              )}
-              {sortedParsedSessions.length > 0 && (
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600 sm:text-sm">
-                      Detected Sessions
-                    </h4>
-                    <div className="rounded-2xl border border-white/60 bg-white/80 p-2 shadow-sm sm:p-3">
-                      <div className="max-h-[20rem] overflow-y-auto pr-1 sm:max-h-[26rem]">
-                        <Table>
-                          <TableHeader className="sticky top-0 z-10 bg-white">
-                            <TableRow>
-                              <TableHead className="text-xs uppercase text-gray-500">Day</TableHead>
-                              <TableHead className="text-xs uppercase text-gray-500">Start</TableHead>
-                              <TableHead className="text-xs uppercase text-gray-500">Tags</TableHead>
-                              <TableHead className="text-xs uppercase text-gray-500">Title</TableHead>
-                              <TableHead className="text-xs uppercase text-gray-500">Notes</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {sortedParsedSessions.map((session, index) => {
-                              const startDate = new Date(session.startAt)
-                              const time = startDate.toLocaleTimeString("en-US", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })
-                            const dateLabel = startDate.toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                            })
-                            return (
-                              <TableRow key={`${session.startAt}-${index}`}>
-                                <TableCell className="text-xs font-medium text-gray-700 sm:text-sm">
-                                  {session.day}
-                                  <span className="ml-1 text-[0.65rem] text-gray-500 sm:text-xs">{dateLabel}</span>
-                                </TableCell>
-                                <TableCell className="text-xs text-gray-600 sm:text-sm">{time}</TableCell>
-                                <TableCell className="flex flex-wrap gap-1">
-                                  {session.tags.map((tag) => (
-                                    <Badge
-                                      key={`${session.startAt}-${tag}`}
-                                      className="border-[#c7d7ee] bg-[#edf2fa] px-2 py-1 text-[0.7rem] text-[#123a70] sm:text-xs"
-                                    >
-                                      {formatTagLabel(tag)}
-                                      <span className="ml-1 text-[0.65rem] text-gray-500">
-                                        {parsedTagMatches[tag] ?? 0}
-                                      </span>
-                                    </Badge>
-                                  ))}
-                                </TableCell>
-                                <TableCell className="text-xs font-medium text-gray-700 sm:text-sm">
-                                  <span className="block max-w-[12rem] truncate sm:max-w-[16rem]">
-                                    {session.title}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="text-xs text-gray-600 sm:text-sm">
-                                  <span
-                                    className="block max-w-[14rem] sm:max-w-[18rem]"
-                                    style={{
-                                      display: "-webkit-box",
-                                      WebkitLineClamp: 3,
-                                      WebkitBoxOrient: "vertical",
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                      whiteSpace: "pre-line",
-                                    }}
-                                  >
-                                    {session.notes ?? "—"}
-                                  </span>
-                                </TableCell>
+                {parseError && (
+                  <p className="text-xs font-medium text-red-600 sm:text-sm">{parseError}</p>
+                )}
+                {parseWarnings.length > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 sm:text-sm">
+                    <div className="mb-1 flex items-center gap-2 font-semibold">
+                      <AlertTriangle className="h-4 w-4" /> Parsing notes
+                    </div>
+                    <ul className="list-disc space-y-1 pl-5">
+                      {parseWarnings.map((warning, index) => (
+                        <li key={`${warning}-${index}`}>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {sortedParsedSessions.length > 0 && (
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600 sm:text-sm">
+                        Detected Sessions
+                      </h4>
+                      <div className="rounded-2xl border border-white/60 bg-white/80 p-2 shadow-sm sm:p-3">
+                        <div className="max-h-[20rem] overflow-y-auto pr-1 sm:max-h-[26rem]">
+                          <Table>
+                            <TableHeader className="sticky top-0 z-10 bg-white">
+                              <TableRow>
+                                <TableHead className="text-xs uppercase text-gray-500">Day</TableHead>
+                                <TableHead className="text-xs uppercase text-gray-500">Start</TableHead>
+                                <TableHead className="text-xs uppercase text-gray-500">Tags</TableHead>
+                                <TableHead className="text-xs uppercase text-gray-500">Title</TableHead>
+                                <TableHead className="text-xs uppercase text-gray-500">Notes</TableHead>
                               </TableRow>
-                            )
-                            })}
-                          </TableBody>
-                        </Table>
+                            </TableHeader>
+                            <TableBody>
+                              {sortedParsedSessions.map((session, index) => {
+                                const startDate = new Date(session.startAt)
+                                const time = startDate.toLocaleTimeString("en-US", {
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })
+                                const dateLabel = startDate.toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                })
+                                return (
+                                  <TableRow key={`${session.startAt}-${index}`}>
+                                    <TableCell className="text-xs font-medium text-gray-700 sm:text-sm">
+                                      {session.day}
+                                      <span className="ml-1 text-[0.65rem] text-gray-500 sm:text-xs">{dateLabel}</span>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-gray-600 sm:text-sm">{time}</TableCell>
+                                    <TableCell className="flex flex-wrap gap-1">
+                                      {session.tags.map((tag) => (
+                                        <Badge
+                                          key={`${session.startAt}-${tag}`}
+                                          className="border-[#c7d7ee] bg-[#edf2fa] px-2 py-1 text-[0.7rem] text-[#123a70] sm:text-xs"
+                                        >
+                                          {formatTagLabel(tag)}
+                                          <span className="ml-1 text-[0.65rem] text-gray-500">
+                                            {parsedTagMatches[tag] ?? 0}
+                                          </span>
+                                        </Badge>
+                                      ))}
+                                    </TableCell>
+                                    <TableCell className="text-xs font-medium text-gray-700 sm:text-sm">
+                                      <span className="block max-w-[12rem] truncate sm:max-w-[16rem]">
+                                        {session.title}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-gray-600 sm:text-sm">
+                                      <span
+                                        className="block max-w-[14rem] sm:max-w-[18rem]"
+                                        style={{
+                                          display: "-webkit-box",
+                                          WebkitLineClamp: 3,
+                                          WebkitBoxOrient: "vertical",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                          whiteSpace: "pre-line",
+                                        }}
+                                      >
+                                        {session.notes ?? "—"}
+                                      </span>
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600 sm:text-sm">
+                        Tag Coverage
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(parsedTagMatches).map(([tag, count]) => (
+                          <Badge
+                            key={tag}
+                            className="border-[#b3c7e6] bg-[#d9e3f5] px-2 py-1 text-[0.7rem] text-[#0f4d92] sm:text-xs"
+                          >
+                            {formatTagLabel(tag)} • {count} athlete{count === 1 ? "" : "s"}
+                          </Badge>
+                        ))}
+                        {Object.keys(parsedTagMatches).length === 0 && (
+                          <p className="text-xs text-gray-500 sm:text-sm">
+                            No tags detected yet. Parse the schedule text to preview coverage.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600 sm:text-sm">
-                      Tag Coverage
-                    </h4>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(parsedTagMatches).map(([tag, count]) => (
-                        <Badge
-                          key={tag}
-                          className="border-[#b3c7e6] bg-[#d9e3f5] px-2 py-1 text-[0.7rem] text-[#0f4d92] sm:text-xs"
-                        >
-                          {formatTagLabel(tag)} • {count} athlete{count === 1 ? "" : "s"}
-                        </Badge>
-                      ))}
-                      {Object.keys(parsedTagMatches).length === 0 && (
-                        <p className="text-xs text-gray-500 sm:text-sm">
-                          No tags detected yet. Parse the schedule text to preview coverage.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
+              <DialogFooter className="border-t border-gray-100 bg-gray-50/80 px-6 py-4 sm:flex-row sm:justify-end sm:px-6 sm:py-4">
+                <Button variant="outline" onClick={() => handleScheduleParserOpenChange(false)}>
+                  Close
+                </Button>
+                <Button
+                  onClick={handleApplyParsedSchedule}
+                  className="gradient-primary text-white"
+                  disabled={parsedSessions.length === 0}
+                >
+                  Assign Parsed Sessions
+                </Button>
+              </DialogFooter>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => handleScheduleParserOpenChange(false)}>
-                Close
-              </Button>
-              <Button
-                onClick={handleApplyParsedSchedule}
-                className="gradient-primary text-white"
-                disabled={parsedSessions.length === 0}
-              >
-                Assign Parsed Sessions
-              </Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
