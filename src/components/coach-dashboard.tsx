@@ -992,10 +992,24 @@ export function CoachDashboard() {
                                   ))}
                                 </TableCell>
                                 <TableCell className="text-xs font-medium text-gray-700 sm:text-sm">
-                                  {session.title}
+                                  <span className="block max-w-[12rem] truncate sm:max-w-[16rem]">
+                                    {session.title}
+                                  </span>
                                 </TableCell>
-                                <TableCell className="whitespace-pre-line text-xs text-gray-600 sm:text-sm">
-                                  {session.notes ?? "—"}
+                                <TableCell className="text-xs text-gray-600 sm:text-sm">
+                                  <span
+                                    className="block max-w-[14rem] sm:max-w-[18rem]"
+                                    style={{
+                                      display: "-webkit-box",
+                                      WebkitLineClamp: 3,
+                                      WebkitBoxOrient: "vertical",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "pre-line",
+                                    }}
+                                  >
+                                    {session.notes ?? "—"}
+                                  </span>
                                 </TableCell>
                               </TableRow>
                             )
