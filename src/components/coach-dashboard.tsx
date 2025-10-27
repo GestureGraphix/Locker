@@ -140,11 +140,22 @@ const getDefaultWeekStartDate = () => {
   return toDateInputValue(monday)
 }
 
-const formatTagLabel = (value: string) =>
-  value
+const SPECIAL_TAG_LABELS: Record<string, string> = {
+  "100mh": "100mH",
+  "400mh": "400mH",
+}
+
+const formatTagLabel = (value: string) => {
+  const lower = value.toLowerCase()
+  if (SPECIAL_TAG_LABELS[lower]) {
+    return SPECIAL_TAG_LABELS[lower]
+  }
+
+  return value
     .split(" ")
     .map((part) => (part ? part[0]?.toUpperCase() + part.slice(1) : ""))
     .join(" ")
+}
 
 function CoachAthleteCard({
   athleteId,

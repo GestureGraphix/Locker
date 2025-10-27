@@ -36,6 +36,25 @@ const normalizeTitle = (value: string) =>
     .trim()
     .replace(/\s+/g, " ")
 
+const SPECIAL_TAG_NORMALIZERS: Record<string, string> = {
+  "100mh": "100mh",
+  "400mh": "400mh",
+}
+
+const normalizeTagValue = (value: string) => {
+  const trimmed = value.trim()
+  if (!trimmed) return trimmed
+
+  const lowered = trimmed.toLowerCase()
+  const compact = lowered.replace(/\s+/g, "")
+
+  if (SPECIAL_TAG_NORMALIZERS[compact]) {
+    return SPECIAL_TAG_NORMALIZERS[compact]
+  }
+
+  return lowered
+}
+
 const splitTags = (title: string) => {
   const normalized = normalizeTitle(title)
   if (!normalized) return []
@@ -166,7 +185,9 @@ const parsePracticeSchedule = (
       startDate.setHours(timeInfo.hours, timeInfo.minutes, 0, 0)
       const endDate = addMinutes(startDate, duration)
 
-      const tags = splitTags(rawTitle).map((tag) => tag.toLowerCase())
+      const tags = splitTags(rawTitle)
+        .map(normalizeTagValue)
+        .filter(Boolean)
       if (!tags.length) {
         warnings.push(`No tags found for segment "${segment}" on ${day}.`)
         continue
@@ -211,6 +232,10 @@ const parseTrainingPlan = (lines: string[]) => {
 
     const cleaned = trimmed.replace(/^[-•\d.)\s]+/, "").trim()
     if (!cleaned) continue
+
+    if (/\bhurdles?\b/i.test(cleaned)) {
+      continue
+    }
 
     notes[currentDay].push(cleaned)
   }
