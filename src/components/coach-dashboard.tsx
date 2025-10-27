@@ -71,11 +71,7 @@ const formatDateForInput = (date: Date) => {
   return `${year}-${month}-${day}`
 }
 
-const slugifyTag = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
+const targetedScheduleTags = new Set(["main group", "main-group", "multi", "multis", "pv", "hj"])
 
 const resolveScheduleTags = (group: string) => {
   const normalized = group.toLowerCase()
@@ -85,8 +81,8 @@ const resolveScheduleTags = (group: string) => {
   const tagMatchers: { pattern: RegExp; tags: string[] }[] = [
     { pattern: /\bhj\b|\bhigh\s*jump\b/, tags: ["hj"] },
     { pattern: /\bpv\b|\bpole\s*vault\b/, tags: ["pv"] },
-    { pattern: /\bmultis?\b|\bmulti\b/, tags: ["multis", "multi"] },
-    { pattern: /\bmain\s*group\b/, tags: ["main-group"] },
+    { pattern: /\bmultis?\b|\bmulti\b/, tags: ["multi"] },
+    { pattern: /\bmain\s*group\b/, tags: ["main group"] },
     { pattern: /\bmen\b/, tags: ["men"] },
     { pattern: /\bwomen\b|\bgirls\b|\bfemale\b/, tags: ["women"] },
     { pattern: /\b100m\s*h\b|\b100mh\b/, tags: ["100mh"] },
@@ -107,13 +103,7 @@ const resolveScheduleTags = (group: string) => {
     return Array.from(detected)
   }
 
-  const parts = compact
-    .replace(/\band\b/g, " ")
-    .split(/[\s/+,]+/)
-    .map((part) => slugifyTag(part))
-    .filter((part) => part.length > 0 && part !== "and")
-
-  return parts.length > 0 ? Array.from(new Set(parts)) : []
+  return []
 }
 
 const toLocalDateTime = (date: Date) => {
@@ -264,14 +254,17 @@ const parseScheduleTemplate = (
       const focus = dayPlan[0] ?? group
       const type = /lift/i.test(group) ? "lift" : "practice"
       const intensity = inferIntensity(notes)
-      const tags = resolveScheduleTags(group)
-      const effectiveTags = tags.length > 0 ? tags : [slugifyTag(group)].filter((tag) => tag.length > 0)
+      const resolvedTags = resolveScheduleTags(group)
+      const tags = resolvedTags.filter((tag) => targetedScheduleTags.has(tag))
+      if (tags.length === 0) {
+        continue
+      }
 
       sessions.push({
         key: `${day}-${group}-${time}`,
         day,
         group,
-        tags: effectiveTags,
+        tags,
         title: `${group} – ${day}`,
         type,
         intensity,
