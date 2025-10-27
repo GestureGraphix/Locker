@@ -23,8 +23,10 @@ import {
   UserPlus,
   Target,
   Users,
+  AlertTriangle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { parseCoachSchedule, type ParsedScheduleSession } from "@/lib/schedule-parser"
 
 type AssignExerciseForm = {
   title: string
@@ -125,6 +127,24 @@ const typeBadge = (type: string) => {
       )
   }
 }
+
+const toDateInputValue = (date: Date) => date.toISOString().split("T")[0]
+
+const getDefaultWeekStartDate = () => {
+  const now = new Date()
+  const day = now.getDay()
+  const monday = new Date(now)
+  const diff = day === 0 ? -6 : 1 - day
+  monday.setHours(0, 0, 0, 0)
+  monday.setDate(monday.getDate() + diff)
+  return toDateInputValue(monday)
+}
+
+const formatTagLabel = (value: string) =>
+  value
+    .split(" ")
+    .map((part) => (part ? part[0]?.toUpperCase() + part.slice(1) : ""))
+    .join(" ")
 
 function CoachAthleteCard({
   athleteId,
@@ -425,6 +445,12 @@ export function CoachDashboard() {
   const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false)
   const [bulkAssignForm, setBulkAssignForm] = useState(initialBulkForm)
   const [bulkAssignError, setBulkAssignError] = useState<string | null>(null)
+  const [isScheduleParserOpen, setIsScheduleParserOpen] = useState(false)
+  const [scheduleText, setScheduleText] = useState("")
+  const [scheduleWeekStart, setScheduleWeekStart] = useState(getDefaultWeekStartDate)
+  const [parsedSessions, setParsedSessions] = useState<ParsedScheduleSession[]>([])
+  const [parseWarnings, setParseWarnings] = useState<string[]>([])
+  const [parseError, setParseError] = useState<string | null>(null)
 
   const coachDisplayName = currentUser?.name ?? "Coaching Staff"
 
@@ -463,6 +489,28 @@ export function CoachDashboard() {
     if (!normalizedTag) return 0
     return athletes.filter((athlete) => athlete.tags.includes(normalizedTag)).length
   }, [athletes, bulkAssignForm.tag])
+
+  const sortedParsedSessions = useMemo(
+    () =>
+      [...parsedSessions].sort(
+        (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+      ),
+    [parsedSessions]
+  )
+
+  const parsedTagMatches = useMemo(() => {
+    const uniqueTags = new Set<string>()
+    parsedSessions.forEach((session) => {
+      session.tags.forEach((tag) => uniqueTags.add(tag))
+    })
+
+    const counts: Record<string, number> = {}
+    uniqueTags.forEach((tag) => {
+      counts[tag] = athletes.filter((athlete) => athlete.tags.includes(tag)).length
+    })
+
+    return counts
+  }, [athletes, parsedSessions])
 
   const handleAddAthlete = () => {
     if (!addAthleteForm.email.trim()) {
@@ -529,6 +577,79 @@ export function CoachDashboard() {
     setBulkAssignForm(initialBulkForm)
     setBulkAssignError(null)
     setIsBulkAssignOpen(false)
+  }
+
+  const resetScheduleParser = () => {
+    setScheduleText("")
+    setParsedSessions([])
+    setParseWarnings([])
+    setParseError(null)
+    setScheduleWeekStart(getDefaultWeekStartDate())
+  }
+
+  const handleScheduleParserOpenChange = (open: boolean) => {
+    setIsScheduleParserOpen(open)
+    if (!open) {
+      resetScheduleParser()
+    }
+  }
+
+  const handleParseSchedule = () => {
+    if (!scheduleWeekStart) {
+      setParseError("Select a week start date before parsing.")
+      setParsedSessions([])
+      setParseWarnings([])
+      return
+    }
+
+    if (!scheduleText.trim()) {
+      setParseError("Paste a practice schedule before parsing.")
+      setParsedSessions([])
+      setParseWarnings([])
+      return
+    }
+
+    const result = parseCoachSchedule(scheduleText, {
+      weekStartDate: scheduleWeekStart,
+    })
+
+    setParsedSessions(result.sessions)
+    setParseWarnings(result.warnings)
+    setParseError(
+      result.sessions.length === 0
+        ? "No sessions were detected in the provided schedule."
+        : null
+    )
+  }
+
+  const handleApplyParsedSchedule = () => {
+    if (!parsedSessions.length) {
+      setParseError("Parse the schedule before assigning sessions.")
+      return
+    }
+
+    parsedSessions.forEach((session) => {
+      session.tags.forEach((tag) => {
+        assignSessionToTag(
+          tag,
+          {
+            title: session.title,
+            type: session.type,
+            startAt: session.startAt,
+            endAt: session.endAt,
+            intensity: session.intensity,
+            notes: session.notes,
+          },
+          {
+            focus: session.notes?.split("\n")[0] ?? session.title,
+            assignedBy: coachDisplayName,
+          }
+        )
+      })
+    })
+
+    setIsScheduleParserOpen(false)
+    resetScheduleParser()
   }
 
   return (
@@ -757,6 +878,165 @@ export function CoachDashboard() {
               </Button>
               <Button onClick={handleBulkAssign} className="gradient-secondary text-white">
                 Assign to Group
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isScheduleParserOpen} onOpenChange={handleScheduleParserOpenChange}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="shadow-sm">
+              <CalendarIcon className="mr-2 h-4 w-4" /> Parse Schedule
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Parse Weekly Practice Schedule</DialogTitle>
+              <DialogDescription>
+                Paste the schedule and training plan to auto-assign sessions to tagged athletes.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Week Starting *</label>
+                  <Input
+                    type="date"
+                    value={scheduleWeekStart}
+                    onChange={(event) => setScheduleWeekStart(event.target.value)}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Sessions will be scheduled using this week (default duration 60 minutes).
+                  </p>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Practice &amp; Training Plan Text *</label>
+                <textarea
+                  value={scheduleText}
+                  onChange={(event) => setScheduleText(event.target.value)}
+                  rows={12}
+                  className="w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c7dbf3]"
+                  placeholder="Paste the coach schedule that lists each day and group (e.g., HJ and Multis 3:15)."
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Group names like HJ, PV, Multis, or Main Group will be matched to athlete tags automatically.
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={handleParseSchedule}>
+                  Parse Text
+                </Button>
+              </div>
+              {parseError && (
+                <p className="text-xs font-medium text-red-600 sm:text-sm">{parseError}</p>
+              )}
+              {parseWarnings.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 sm:text-sm">
+                  <div className="mb-1 flex items-center gap-2 font-semibold">
+                    <AlertTriangle className="h-4 w-4" /> Parsing notes
+                  </div>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {parseWarnings.map((warning, index) => (
+                      <li key={`${warning}-${index}`}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {sortedParsedSessions.length > 0 && (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600 sm:text-sm">
+                      Detected Sessions
+                    </h4>
+                    <div className="rounded-2xl border border-white/60 bg-white/80 p-2 shadow-sm sm:p-3">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs uppercase text-gray-500">Day</TableHead>
+                            <TableHead className="text-xs uppercase text-gray-500">Start</TableHead>
+                            <TableHead className="text-xs uppercase text-gray-500">Tags</TableHead>
+                            <TableHead className="text-xs uppercase text-gray-500">Title</TableHead>
+                            <TableHead className="text-xs uppercase text-gray-500">Notes</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {sortedParsedSessions.map((session, index) => {
+                            const startDate = new Date(session.startAt)
+                            const time = startDate.toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })
+                            const dateLabel = startDate.toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })
+                            return (
+                              <TableRow key={`${session.startAt}-${index}`}>
+                                <TableCell className="text-xs font-medium text-gray-700 sm:text-sm">
+                                  {session.day}
+                                  <span className="ml-1 text-[0.65rem] text-gray-500 sm:text-xs">{dateLabel}</span>
+                                </TableCell>
+                                <TableCell className="text-xs text-gray-600 sm:text-sm">{time}</TableCell>
+                                <TableCell className="flex flex-wrap gap-1">
+                                  {session.tags.map((tag) => (
+                                    <Badge
+                                      key={`${session.startAt}-${tag}`}
+                                      className="border-[#c7d7ee] bg-[#edf2fa] px-2 py-1 text-[0.7rem] text-[#123a70] sm:text-xs"
+                                    >
+                                      {formatTagLabel(tag)}
+                                      <span className="ml-1 text-[0.65rem] text-gray-500">
+                                        {parsedTagMatches[tag] ?? 0}
+                                      </span>
+                                    </Badge>
+                                  ))}
+                                </TableCell>
+                                <TableCell className="text-xs font-medium text-gray-700 sm:text-sm">
+                                  {session.title}
+                                </TableCell>
+                                <TableCell className="whitespace-pre-line text-xs text-gray-600 sm:text-sm">
+                                  {session.notes ?? "—"}
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600 sm:text-sm">
+                      Tag Coverage
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(parsedTagMatches).map(([tag, count]) => (
+                        <Badge
+                          key={tag}
+                          className="border-[#b3c7e6] bg-[#d9e3f5] px-2 py-1 text-[0.7rem] text-[#0f4d92] sm:text-xs"
+                        >
+                          {formatTagLabel(tag)} • {count} athlete{count === 1 ? "" : "s"}
+                        </Badge>
+                      ))}
+                      {Object.keys(parsedTagMatches).length === 0 && (
+                        <p className="text-xs text-gray-500 sm:text-sm">
+                          No tags detected yet. Parse the schedule text to preview coverage.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => handleScheduleParserOpenChange(false)}>
+                Close
+              </Button>
+              <Button
+                onClick={handleApplyParsedSchedule}
+                className="gradient-primary text-white"
+                disabled={parsedSessions.length === 0}
+              >
+                Assign Parsed Sessions
               </Button>
             </DialogFooter>
           </DialogContent>
