@@ -950,23 +950,24 @@ export function CoachDashboard() {
                       Detected Sessions
                     </h4>
                     <div className="rounded-2xl border border-white/60 bg-white/80 p-2 shadow-sm sm:p-3">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-xs uppercase text-gray-500">Day</TableHead>
-                            <TableHead className="text-xs uppercase text-gray-500">Start</TableHead>
-                            <TableHead className="text-xs uppercase text-gray-500">Tags</TableHead>
-                            <TableHead className="text-xs uppercase text-gray-500">Title</TableHead>
-                            <TableHead className="text-xs uppercase text-gray-500">Notes</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {sortedParsedSessions.map((session, index) => {
-                            const startDate = new Date(session.startAt)
-                            const time = startDate.toLocaleTimeString("en-US", {
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })
+                      <div className="max-h-[20rem] overflow-y-auto pr-1 sm:max-h-[26rem]">
+                        <Table>
+                          <TableHeader className="sticky top-0 z-10 bg-white">
+                            <TableRow>
+                              <TableHead className="text-xs uppercase text-gray-500">Day</TableHead>
+                              <TableHead className="text-xs uppercase text-gray-500">Start</TableHead>
+                              <TableHead className="text-xs uppercase text-gray-500">Tags</TableHead>
+                              <TableHead className="text-xs uppercase text-gray-500">Title</TableHead>
+                              <TableHead className="text-xs uppercase text-gray-500">Notes</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sortedParsedSessions.map((session, index) => {
+                              const startDate = new Date(session.startAt)
+                              const time = startDate.toLocaleTimeString("en-US", {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })
                             const dateLabel = startDate.toLocaleDateString("en-US", {
                               month: "short",
                               day: "numeric",
@@ -1013,9 +1014,10 @@ export function CoachDashboard() {
                                 </TableCell>
                               </TableRow>
                             )
-                          })}
-                        </TableBody>
-                      </Table>
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </div>
                   </div>
                   <div>
