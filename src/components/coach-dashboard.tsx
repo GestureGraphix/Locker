@@ -82,22 +82,24 @@ const resolveScheduleTags = (group: string) => {
   const simplified = normalized.replace(/[^a-z0-9\s]/g, " ")
   const compact = simplified.replace(/\s+/g, " ").trim()
 
-  const tagMatchers: { pattern: RegExp; tag: string }[] = [
-    { pattern: /\bhj\b|\bhigh\s*jump\b/, tag: "hj" },
-    { pattern: /\bpv\b|\bpole\s*vault\b/, tag: "pv" },
-    { pattern: /\bmultis?\b|\bmulti\b/, tag: "multi" },
-    { pattern: /\bmain\s*group\b/, tag: "main-group" },
-    { pattern: /\bmen\b/, tag: "men" },
-    { pattern: /\bwomen\b|\bgirls\b|\bfemale\b/, tag: "women" },
-    { pattern: /\b100m\s*h\b|\b100mh\b/, tag: "100mh" },
-    { pattern: /\b400m\s*h\b|\b400mh\b/, tag: "400mh" },
-    { pattern: /\blift(s)?\b|\blifting\b|\bweight\s*room\b/, tag: "lift" },
+  const tagMatchers: { pattern: RegExp; tags: string[] }[] = [
+    { pattern: /\bhj\b|\bhigh\s*jump\b/, tags: ["hj"] },
+    { pattern: /\bpv\b|\bpole\s*vault\b/, tags: ["pv"] },
+    { pattern: /\bmultis?\b|\bmulti\b/, tags: ["multis", "multi"] },
+    { pattern: /\bmain\s*group\b/, tags: ["main-group"] },
+    { pattern: /\bmen\b/, tags: ["men"] },
+    { pattern: /\bwomen\b|\bgirls\b|\bfemale\b/, tags: ["women"] },
+    { pattern: /\b100m\s*h\b|\b100mh\b/, tags: ["100mh"] },
+    { pattern: /\b400m\s*h\b|\b400mh\b/, tags: ["400mh"] },
+    { pattern: /\blift(s)?\b|\blifting\b|\bweight\s*room\b/, tags: ["lift"] },
   ]
 
   const detected = new Set<string>()
-  for (const { pattern, tag } of tagMatchers) {
+  for (const { pattern, tags } of tagMatchers) {
     if (pattern.test(compact)) {
-      detected.add(tag)
+      for (const tag of tags) {
+        detected.add(tag)
+      }
     }
   }
 
