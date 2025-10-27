@@ -71,7 +71,19 @@ const formatDateForInput = (date: Date) => {
   return `${year}-${month}-${day}`
 }
 
-const targetedScheduleTags = new Set(["main group", "main-group", "multi", "multis", "pv", "hj"])
+const targetedScheduleTags = new Set([
+  "main group",
+  "main-group",
+  "multi",
+  "multis",
+  "pv",
+  "hj",
+  "men",
+  "women",
+  "lift",
+  "100mh",
+  "400mh",
+])
 
 const resolveScheduleTags = (group: string) => {
   const normalized = group.toLowerCase()
