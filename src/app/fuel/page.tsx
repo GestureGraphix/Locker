@@ -1361,7 +1361,7 @@ export default function Fuel() {
                         <TableCell>{formatMealDate(meal.dateTime)}</TableCell>
                         <TableCell>{meal.calories}</TableCell>
                         <TableCell>{formatTwoDecimalString(meal.proteinG)}g</TableCell>
-                        <TableCell className="max-w-xs truncate">{meal.notes}</TableCell>
+                        <TableCell className="max-w-xs truncate whitespace-nowrap">{meal.notes}</TableCell>
                         <TableCell>
                           <Badge variant={meal.completed ? "default" : "secondary"}>
                             {meal.completed ? "Completed" : "Planned"}
