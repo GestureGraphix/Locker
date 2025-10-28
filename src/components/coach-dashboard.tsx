@@ -18,6 +18,7 @@ import {
   ListChecks,
   Mail,
   Plus,
+  Pencil,
   Share2,
   Tag,
   UserPlus,
@@ -50,7 +51,7 @@ const initialForm: AssignExerciseForm = {
   notes: "",
 }
 
-type AddAthleteFormState = {
+type AthleteProfileFormState = {
   name: string
   email: string
   sport: string
@@ -59,7 +60,7 @@ type AddAthleteFormState = {
   tags: string
 }
 
-const initialAthleteForm: AddAthleteFormState = {
+const initialAthleteForm: AthleteProfileFormState = {
   name: "",
   email: "",
   sport: "",
@@ -182,9 +183,12 @@ function CoachAthleteCard({
   workouts: ReturnType<typeof useRole>["athletes"][number]["workouts"]
   assignedByName: string
 }) {
-  const { scheduleSession } = useRole()
+  const { scheduleSession, updateAthleteProfile } = useRole()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<AssignExerciseForm>(initialForm)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState<AthleteProfileFormState>(initialAthleteForm)
+  const [editError, setEditError] = useState<string | null>(null)
 
   const upcomingSessions = useMemo(
     () =>
@@ -197,6 +201,45 @@ function CoachAthleteCard({
   const nextSession = upcomingSessions[0]
   const calendarHighlights = calendar.slice(0, 3)
   const activeWorkouts = workouts.slice(0, 3)
+
+  const handleEditOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setEditForm({
+        name,
+        email,
+        sport,
+        level,
+        team,
+        tags: tags.join(", "),
+      })
+    }
+    setEditError(null)
+    setIsEditOpen(nextOpen)
+  }
+
+  const handleSaveProfile = () => {
+    const trimmedEmail = editForm.email.trim()
+    if (!trimmedEmail) {
+      setEditError("Email is required to update an athlete.")
+      return
+    }
+
+    const normalizedTags = editForm.tags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0)
+
+    updateAthleteProfile(athleteId, {
+      name: editForm.name.trim(),
+      email: trimmedEmail,
+      sport: editForm.sport.trim(),
+      level: editForm.level.trim(),
+      team: editForm.team.trim(),
+      tags: normalizedTags,
+    })
+
+    handleEditOpenChange(false)
+  }
 
   const handleAssign = () => {
     if (!form.title || !form.date || !form.startTime || !form.endTime) {
@@ -228,6 +271,93 @@ function CoachAthleteCard({
 
   return (
     <Card className="glass-card border-0 shadow-lg">
+      <Dialog open={isEditOpen} onOpenChange={handleEditOpenChange}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Athlete Profile</DialogTitle>
+            <DialogDescription>Update contact details, competitive level, and roster tags.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2 sm:space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-gray-600">Email Address *</label>
+                <Input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, email: event.target.value }))
+                  }
+                  placeholder="athlete@locker.app"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Full Name</label>
+                <Input
+                  value={editForm.name}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, name: event.target.value }))
+                  }
+                  placeholder="Jamie Thompson"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Sport</label>
+                <Input
+                  value={editForm.sport}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, sport: event.target.value }))
+                  }
+                  placeholder="Track & Field"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Team / Group</label>
+                <Input
+                  value={editForm.team}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, team: event.target.value }))
+                  }
+                  placeholder="Sprints"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Competitive Level</label>
+                <Input
+                  value={editForm.level}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, level: event.target.value }))
+                  }
+                  placeholder="Elite"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-gray-600">Tags</label>
+                <Input
+                  value={editForm.tags}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({ ...prev, tags: event.target.value }))
+                  }
+                  placeholder="track, sprinter"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Separate tags with commas to group athletes by discipline or status.
+                </p>
+              </div>
+            </div>
+            {editError && (
+              <p className="text-xs font-medium text-red-600 sm:text-sm">{editError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => handleEditOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveProfile} className="gradient-primary text-white">
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle className="text-lg font-semibold text-gray-900 sm:text-xl">{name}</CardTitle>
@@ -237,9 +367,19 @@ function CoachAthleteCard({
             <span className="font-medium text-gray-600">{email}</span>
           </div>
         </div>
-        <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] border-0 px-2 py-1 text-xs font-medium text-white sm:text-sm">
-          {level}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#1c6dd0] border-0 px-2 py-1 text-xs font-medium text-white sm:text-sm">
+            {level || "Level TBD"}
+          </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shadow-sm"
+            onClick={() => handleEditOpenChange(true)}
+          >
+            <Pencil className="h-3.5 w-3.5" /> Edit Profile
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3 sm:space-y-4">
         <div className="rounded-2xl border border-white/60 bg-white/80 p-3 shadow-sm sm:p-4">
@@ -267,17 +407,14 @@ function CoachAthleteCard({
         {tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 text-[0.7rem] text-gray-500 sm:gap-2 sm:text-xs">
             <Tag className="h-3 w-3 text-[#0f4d92]" />
-            {tags.map((tagValue) => {
-              const label = tagValue.charAt(0).toUpperCase() + tagValue.slice(1)
-              return (
-                <Badge
-                  key={tagValue}
-                  className="border-[#c7d7ee] bg-[#edf2fa] px-2 py-1 text-[0.7rem] capitalize text-[#123a70] sm:text-xs"
-                >
-                  {label}
-                </Badge>
-              )
-            })}
+            {tags.map((tagValue) => (
+              <Badge
+                key={tagValue}
+                className="border-[#c7d7ee] bg-[#edf2fa] px-2 py-1 text-[0.7rem] capitalize text-[#123a70] sm:text-xs"
+              >
+                {formatTagLabel(tagValue)}
+              </Badge>
+            ))}
           </div>
         )}
 
@@ -451,7 +588,7 @@ function CoachAthleteCard({
 export function CoachDashboard() {
   const { athletes, addAthlete, assignSessionToTag, currentUser } = useRole()
   const [isAddAthleteOpen, setIsAddAthleteOpen] = useState(false)
-  const [addAthleteForm, setAddAthleteForm] = useState(initialAthleteForm)
+  const [addAthleteForm, setAddAthleteForm] = useState<AthleteProfileFormState>(initialAthleteForm)
   const [addAthleteError, setAddAthleteError] = useState<string | null>(null)
   const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false)
   const [bulkAssignForm, setBulkAssignForm] = useState(initialBulkForm)
