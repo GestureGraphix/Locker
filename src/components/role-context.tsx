@@ -592,6 +592,10 @@ type RoleContextValue = {
   ) => void
   updateMobilityLogs: (athleteId: number, updater: (logs: MobilityLog[]) => MobilityLog[]) => void
   updateCheckInLogs: (athleteId: number, updater: (logs: CheckInLog[]) => CheckInLog[]) => void
+  updateWorkouts: (
+    athleteId: number,
+    updater: (workouts: WorkoutPlan[]) => WorkoutPlan[]
+  ) => void
   updateAcademics: (
     athleteId: number,
     updater: (state: {
@@ -1486,6 +1490,34 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }
   }, [syncWorkoutsToServer])
 
+  const updateWorkouts = useCallback(
+    (athleteId: number, updater: (workouts: WorkoutPlan[]) => WorkoutPlan[]) => {
+      let nextWorkouts: WorkoutPlan[] | null = null
+      setAthletes((prev) =>
+        prev.map((athlete) => {
+          if (athlete.id !== athleteId) return athlete
+
+          const updatedWorkouts = sortByDate(
+            updater(athlete.workouts ?? []),
+            (item) => item.dueDate
+          )
+
+          nextWorkouts = updatedWorkouts
+
+          return {
+            ...athlete,
+            workouts: updatedWorkouts,
+          }
+        })
+      )
+
+      if (nextWorkouts) {
+        void syncWorkoutsToServer(athleteId, nextWorkouts)
+      }
+    },
+    [syncWorkoutsToServer]
+  )
+
   const addAthlete = useCallback(
     (input: AddAthleteInput) => {
       const email = input.email.trim().toLowerCase()
@@ -2312,6 +2344,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       toggleSessionCompletion,
       addAthlete,
       assignSessionToTag,
+      updateWorkouts,
       updateHydrationLogs,
       updateMealLogs,
       updateMobilityExercises,
@@ -2336,6 +2369,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       toggleSessionCompletion,
       addAthlete,
       assignSessionToTag,
+      updateWorkouts,
       updateHydrationLogs,
       updateMealLogs,
       updateMobilityExercises,
