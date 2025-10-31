@@ -31,7 +31,8 @@ import {
   RefreshCcw,
   Search,
   UtensilsCrossed,
-  X
+  X,
+  Pencil
 } from "lucide-react"
 
 /* ======================== Types ======================== */
@@ -258,6 +259,7 @@ export default function Fuel() {
   const [activeTab, setActiveTab] = useState("meals")
   const [isAddHydrationOpen, setIsAddHydrationOpen] = useState(false)
   const [isAddMealOpen, setIsAddMealOpen] = useState(false)
+  const [editingMealId, setEditingMealId] = useState<number | null>(null)
   const [todayDate, setTodayDate] = useState<string>(() => getTodayDateString())
   const [newHydration, setNewHydration] = useState({ ounces: "", source: "cup" })
   const [plateItems, setPlateItems] = useState<PlateItem[]>([])
@@ -278,6 +280,7 @@ export default function Fuel() {
     isFromMenu: false,
     portionEditable: true
   })
+  const isEditingMeal = editingMealId != null
   const mealTypeOptions = useMemo(() => {
     const baseOptions = MEAL_TYPE_OPTIONS
     if (!newMeal.mealType) return baseOptions
@@ -713,6 +716,7 @@ export default function Fuel() {
     if (!isAddMealOpen) {
       resetMealForm()
       setPendingPlateItemIds([])
+      setEditingMealId(null)
     }
   }, [isAddMealOpen, resetMealForm, setPendingPlateItemIds])
 
@@ -764,7 +768,27 @@ export default function Fuel() {
     )
   }
 
-  const handleAddMeal = () => {
+  const handleEditMeal = (meal: MealLog) => {
+    const facts = Array.isArray(meal.nutritionFacts) ? meal.nutritionFacts : []
+    setEditingMealId(meal.id)
+    setNewMeal({
+      mealType: meal.mealType,
+      calories: meal.calories != null ? meal.calories.toString() : "",
+      proteinG: meal.proteinG != null ? meal.proteinG.toString() : "",
+      notes: meal.notes ?? "",
+      dateTime: meal.dateTime ?? new Date().toISOString(),
+      nutritionFacts: facts.map((fact) => ({ ...fact })),
+      portion: "1",
+      baseCalories: undefined,
+      baseProteinG: undefined,
+      isFromMenu: false,
+      portionEditable: true
+    })
+    setPendingPlateItemIds([])
+    setIsAddMealOpen(true)
+  }
+
+  const handleSaveMeal = () => {
     if (!primaryAthlete) return
     const portionValue = Number.parseFloat(newMeal.portion)
     const portion = Number.isFinite(portionValue) && portionValue > 0 ? portionValue : 1
@@ -775,25 +799,45 @@ export default function Fuel() {
     const baseProtein = newMeal.baseProteinG ?? (newMeal.proteinG ? Number.parseFloat(newMeal.proteinG) : undefined) ?? 0
     const totalCalories = Math.round(baseCalories * portion)
     const totalProtein = roundToTwo(baseProtein * portion)
+    const clonedFacts = (newMeal.nutritionFacts ?? []).map((f) => ({ ...f }))
 
-    updateMealLogs(primaryAthlete.id, (prev) => [
-      ...prev,
-      {
-        id: getNextMealId(prev),
-        mealType: newMeal.mealType,
-        calories: totalCalories,
-        proteinG: Number.isNaN(totalProtein) ? 0 : totalProtein,
-        notes: newMeal.notes,
-        dateTime: newMeal.dateTime,
-        nutritionFacts: (newMeal.nutritionFacts ?? []).map((f) => ({ ...f })),
-        completed: true
+    if (isEditingMeal && editingMealId != null) {
+      updateMealLogs(primaryAthlete.id, (prev) =>
+        prev.map((m) =>
+          m.id === editingMealId
+            ? {
+                ...m,
+                mealType: newMeal.mealType,
+                calories: totalCalories,
+                proteinG: Number.isNaN(totalProtein) ? 0 : totalProtein,
+                notes: newMeal.notes,
+                dateTime: newMeal.dateTime,
+                nutritionFacts: clonedFacts
+              }
+            : m
+        )
+      )
+    } else {
+      updateMealLogs(primaryAthlete.id, (prev) => [
+        ...prev,
+        {
+          id: getNextMealId(prev),
+          mealType: newMeal.mealType,
+          calories: totalCalories,
+          proteinG: Number.isNaN(totalProtein) ? 0 : totalProtein,
+          notes: newMeal.notes,
+          dateTime: newMeal.dateTime,
+          nutritionFacts: clonedFacts,
+          completed: true
+        }
+      ])
+      if (pendingPlateItemIds.length > 0) {
+        setPlateItems((prev) => prev.filter((item) => !pendingPlateItemIds.includes(item.id)))
       }
-    ])
-    if (pendingPlateItemIds.length > 0) {
-      setPlateItems((prev) => prev.filter((item) => !pendingPlateItemIds.includes(item.id)))
     }
     setPendingPlateItemIds([])
     resetMealForm()
+    setEditingMealId(null)
     setIsAddMealOpen(false)
   }
 
@@ -1025,7 +1069,7 @@ export default function Fuel() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Log Meal</DialogTitle>
+                <DialogTitle>{isEditingMeal ? "Edit Meal" : "Log Meal"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
@@ -1146,8 +1190,8 @@ export default function Fuel() {
                   </div>
                 )}
 
-                <Button onClick={handleAddMeal} className="w-full">
-                  Log Meal
+                <Button onClick={handleSaveMeal} className="w-full">
+                  {isEditingMeal ? "Save Changes" : "Log Meal"}
                 </Button>
               </div>
             </DialogContent>
@@ -1320,10 +1364,14 @@ export default function Fuel() {
                           ) : null}
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <Badge className={getMealTypeColor(meal.mealType)}>{meal.mealType}</Badge>
                         <Button variant="outline" size="sm" onClick={() => toggleMealComplete(meal.id)}>
                           {meal.completed ? "Undo" : "Complete"}
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleEditMeal(meal)}>
+                          <Pencil className="h-4 w-4" />
+                          <span className="sr-only">Edit meal</span>
                         </Button>
                       </div>
                     </div>
@@ -1347,6 +1395,7 @@ export default function Fuel() {
                       <TableHead>Protein</TableHead>
                       <TableHead>Notes</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1366,6 +1415,12 @@ export default function Fuel() {
                           <Badge variant={meal.completed ? "default" : "secondary"}>
                             {meal.completed ? "Completed" : "Planned"}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditMeal(meal)}>
+                            <Pencil className="h-4 w-4" />
+                            <span className="sr-only">Edit meal</span>
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
