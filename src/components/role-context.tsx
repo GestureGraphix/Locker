@@ -42,6 +42,7 @@ type ScheduleSessionInput = {
 type ScheduleOptions = {
   focus?: string
   assignedBy?: string
+  sessionId?: number
 }
 
 type AddAthleteInput = {
@@ -581,6 +582,12 @@ type RoleContextValue = {
   activeAthleteId: number | null
   setActiveAthleteId: (id: number | null) => void
   scheduleSession: (athleteId: number, session: ScheduleSessionInput, options?: ScheduleOptions) => void
+  updateSession: (
+    athleteId: number,
+    sessionId: number,
+    session: ScheduleSessionInput,
+    options?: ScheduleOptions
+  ) => void
   toggleSessionCompletion: (athleteId: number, sessionId: number) => void
   addAthlete: (input: AddAthleteInput) => void
   assignSessionToTag: (tag: string, session: ScheduleSessionInput, options?: ScheduleOptions) => void
@@ -1338,9 +1345,36 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         return athlete
       }
 
-      const id = Date.now() + Math.floor(Math.random() * 1000)
-      const focus = options?.focus ?? session.notes ?? session.title
-      const assignedBy = options?.assignedBy ?? (role === "coach" ? "Coach" : "Self")
+      const existingSessionId = options?.sessionId
+      const existingSession = existingSessionId
+        ? athlete.sessions.find((item) => item.id === existingSessionId)
+        : null
+      const id = existingSessionId ?? Date.now() + Math.floor(Math.random() * 1000)
+
+      const normalizedNotes =
+        typeof session.notes === "string" && session.notes.trim().length > 0
+          ? session.notes.trim()
+          : undefined
+
+      const normalizedFocusOption =
+        typeof options?.focus === "string" && options.focus.trim().length > 0
+          ? options.focus.trim()
+          : undefined
+
+      const focus =
+        normalizedFocusOption ??
+        normalizedNotes ??
+        existingSession?.focus ??
+        session.title
+
+      const assignedBy =
+        (typeof options?.assignedBy === "string" && options.assignedBy.trim().length > 0
+          ? options.assignedBy.trim()
+          : undefined) ??
+        existingSession?.assignedBy ??
+        (role === "coach" ? "Coach" : "Self")
+
+      const completed = existingSession?.completed ?? false
 
       const newSession: Session = {
         id,
@@ -1349,13 +1383,16 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         startAt: startAtISO,
         endAt: endAtISO,
         intensity: session.intensity,
-        notes: session.notes,
-        completed: false,
+        notes: normalizedNotes,
+        completed,
         assignedBy,
         focus,
       }
 
-      const updatedSessions = sortByDate([...athlete.sessions, newSession], (item) => item.startAt ?? "")
+      const updatedSessions = sortByDate(
+        [...athlete.sessions.filter((item) => item.id !== id), newSession],
+        (item) => item.startAt ?? ""
+      )
 
       const event: CalendarEvent = {
         id,
@@ -1366,14 +1403,17 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         focus,
       }
 
-      const updatedCalendar = sortByDate([...athlete.calendar, event], (item) => item.date ?? "")
+      const updatedCalendar = sortByDate(
+        [...athlete.calendar.filter((item) => item.id !== id), event],
+        (item) => item.date ?? ""
+      )
 
       const workout: WorkoutPlan = {
         id,
         title: session.title,
         focus,
         dueDate: event.date,
-        status: "Scheduled",
+        status: completed ? "Completed" : "Scheduled",
         intensity: session.intensity,
         assignedBy,
       }
@@ -1439,6 +1479,33 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
           if (athlete.id !== athleteId) return athlete
 
           const updated = applySessionToAthlete(athlete, session, options)
+          updatedWorkouts = updated.workouts ?? []
+          return updated
+        })
+      )
+      if (updatedWorkouts) {
+        void syncWorkoutsToServer(athleteId, updatedWorkouts)
+      }
+    },
+    [applySessionToAthlete, syncWorkoutsToServer]
+  )
+
+  const updateSession = useCallback(
+    (
+      athleteId: number,
+      sessionId: number,
+      session: ScheduleSessionInput,
+      options?: ScheduleOptions
+    ) => {
+      let updatedWorkouts: WorkoutPlan[] | null = null
+      setAthletes((prev) =>
+        prev.map((athlete): Athlete => {
+          if (athlete.id !== athleteId) return athlete
+
+          const updated = applySessionToAthlete(athlete, session, {
+            ...options,
+            sessionId,
+          })
           updatedWorkouts = updated.workouts ?? []
           return updated
         })
@@ -2309,6 +2376,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       activeAthleteId,
       setActiveAthleteId,
       scheduleSession,
+      updateSession,
       toggleSessionCompletion,
       addAthlete,
       assignSessionToTag,
@@ -2333,6 +2401,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       primaryAthlete,
       activeAthleteId,
       scheduleSession,
+      updateSession,
       toggleSessionCompletion,
       addAthlete,
       assignSessionToTag,
