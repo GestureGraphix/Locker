@@ -129,7 +129,29 @@ const typeBadge = (type: string) => {
   }
 }
 
-const toDateInputValue = (date: Date) => date.toISOString().split("T")[0]
+const toDateInputValue = (value: string) => {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value.split("T")[0] ?? ""
+  }
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return offsetDate.toISOString().slice(0, 10)
+}
+
+const toTimeInputValue = (value: string) => {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    const parts = value.split("T")
+    if (parts.length > 1) {
+      return parts[1]?.slice(0, 5) ?? ""
+    }
+    return ""
+  }
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return offsetDate.toISOString().slice(11, 16)
+}
 
 const getDefaultWeekStartDate = () => {
   const now = new Date()
@@ -138,7 +160,7 @@ const getDefaultWeekStartDate = () => {
   const diff = day === 0 ? -6 : 1 - day
   monday.setHours(0, 0, 0, 0)
   monday.setDate(monday.getDate() + diff)
-  return toDateInputValue(monday)
+  return toDateInputValue(monday.toISOString())
 }
 
 const SPECIAL_TAG_LABELS: Record<string, string> = {
@@ -170,6 +192,7 @@ function CoachAthleteCard({
   calendar,
   workouts,
   assignedByName,
+  onEditSession,
 }: {
   athleteId: number
   name: string
@@ -182,6 +205,7 @@ function CoachAthleteCard({
   calendar: ReturnType<typeof useRole>["athletes"][number]["calendar"]
   workouts: ReturnType<typeof useRole>["athletes"][number]["workouts"]
   assignedByName: string
+  onEditSession: (sessionId: number) => void
 }) {
   const { scheduleSession, updateAthleteProfile } = useRole()
   const [open, setOpen] = useState(false)
@@ -395,11 +419,23 @@ function CoachAthleteCard({
                 <p className="text-xs text-gray-500 sm:text-sm">No upcoming session scheduled</p>
               )}
             </div>
-            <div className="text-left sm:text-right">
-              <p className="text-[0.7rem] text-gray-500 sm:text-xs">Intensity</p>
-              <p className="text-sm font-semibold capitalize sm:text-base">
-                {nextSession ? nextSession.intensity : "TBD"}
-              </p>
+            <div className="flex flex-col items-start gap-2 text-left sm:items-end sm:text-right">
+              <div>
+                <p className="text-[0.7rem] text-gray-500 sm:text-xs">Intensity</p>
+                <p className="text-sm font-semibold capitalize sm:text-base">
+                  {nextSession ? nextSession.intensity : "TBD"}
+                </p>
+              </div>
+              {nextSession && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="sm:w-auto"
+                  onClick={() => onEditSession(nextSession.id)}
+                >
+                  <Pencil className="mr-2 h-3.5 w-3.5" /> Edit Session
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -434,7 +470,17 @@ function CoachAthleteCard({
                     {formatDate(event.date)} • {event.timeRange}
                   </p>
                 </div>
-                {typeBadge(event.type)}
+                <div className="flex items-center gap-2">
+                  {typeBadge(event.type)}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onEditSession(event.id)}
+                    aria-label="Edit session"
+                  >
+                    <Pencil className="h-4 w-4 text-[#0f4d92]" />
+                  </Button>
+                </div>
               </div>
             ))}
             {calendarHighlights.length === 0 && (
@@ -586,7 +632,7 @@ function CoachAthleteCard({
 }
 
 export function CoachDashboard() {
-  const { athletes, addAthlete, assignSessionToTag, currentUser } = useRole()
+  const { athletes, addAthlete, assignSessionToTag, currentUser, updateSession } = useRole()
   const [isAddAthleteOpen, setIsAddAthleteOpen] = useState(false)
   const [addAthleteForm, setAddAthleteForm] = useState<AthleteProfileFormState>(initialAthleteForm)
   const [addAthleteError, setAddAthleteError] = useState<string | null>(null)
@@ -599,8 +645,82 @@ export function CoachDashboard() {
   const [parsedSessions, setParsedSessions] = useState<ParsedScheduleSession[]>([])
   const [parseWarnings, setParseWarnings] = useState<string[]>([])
   const [parseError, setParseError] = useState<string | null>(null)
+  const [isSessionEditOpen, setIsSessionEditOpen] = useState(false)
+  const [sessionEditState, setSessionEditState] = useState<{ athleteId: number; sessionId: number } | null>(null)
+  const [sessionEditForm, setSessionEditForm] = useState<AssignExerciseForm>(() => ({ ...initialForm }))
+  const [sessionEditError, setSessionEditError] = useState<string | null>(null)
 
   const coachDisplayName = currentUser?.name ?? "Coaching Staff"
+
+  const openSessionEdit = (sessionId: number) => {
+    for (const athlete of athletes) {
+      const session = athlete.sessions.find((item) => item.id === sessionId)
+      if (session) {
+        setSessionEditState({ athleteId: athlete.id, sessionId: session.id })
+        setSessionEditForm({
+          title: session.title,
+          type: session.type,
+          focus: session.focus ?? "",
+          date: toDateInputValue(session.startAt),
+          startTime: toTimeInputValue(session.startAt),
+          endTime: toTimeInputValue(session.endAt),
+          intensity: session.intensity,
+          notes: session.notes ?? "",
+        })
+        setSessionEditError(null)
+        setIsSessionEditOpen(true)
+        return
+      }
+    }
+  }
+
+  const handleSessionEditOpenChange = (open: boolean) => {
+    setIsSessionEditOpen(open)
+    if (!open) {
+      setSessionEditState(null)
+      setSessionEditForm(() => ({ ...initialForm }))
+      setSessionEditError(null)
+    }
+  }
+
+  const handleUpdateSessionDetails = () => {
+    if (!sessionEditState) {
+      setSessionEditError("Select a session to update.")
+      return
+    }
+
+    if (
+      !sessionEditForm.title.trim() ||
+      !sessionEditForm.date ||
+      !sessionEditForm.startTime ||
+      !sessionEditForm.endTime
+    ) {
+      setSessionEditError("Title, date, start time, and end time are required.")
+      return
+    }
+
+    const startAt = `${sessionEditForm.date}T${sessionEditForm.startTime}`
+    const endAt = `${sessionEditForm.date}T${sessionEditForm.endTime}`
+
+    updateSession(
+      sessionEditState.athleteId,
+      sessionEditState.sessionId,
+      {
+        title: sessionEditForm.title,
+        type: sessionEditForm.type,
+        startAt,
+        endAt,
+        intensity: sessionEditForm.intensity,
+        notes: sessionEditForm.notes,
+      },
+      {
+        focus: sessionEditForm.focus.trim() || sessionEditForm.title,
+        assignedBy: coachDisplayName,
+      }
+    )
+
+    handleSessionEditOpenChange(false)
+  }
 
   const allSessions = useMemo(() => athletes.flatMap((athlete) => athlete.sessions), [athletes])
   const totalSessions = allSessions.length
@@ -1209,6 +1329,123 @@ export function CoachDashboard() {
         </Dialog>
       </div>
 
+      <Dialog open={isSessionEditOpen} onOpenChange={handleSessionEditOpenChange}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Training Session</DialogTitle>
+            <DialogDescription>
+              Update the schedule, intensity, or focus for this workout. Changes will be reflected for the selected athlete
+              immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2 sm:space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-gray-600">Title *</label>
+                <Input
+                  value={sessionEditForm.title}
+                  onChange={(event) =>
+                    setSessionEditForm((prev) => ({ ...prev, title: event.target.value }))
+                  }
+                  placeholder="Acceleration Drills"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Session Type</label>
+                <select
+                  className="w-full rounded-md border border-gray-200 p-2 text-sm"
+                  value={sessionEditForm.type}
+                  onChange={(event) =>
+                    setSessionEditForm((prev) => ({ ...prev, type: event.target.value }))
+                  }
+                >
+                  <option value="practice">Practice</option>
+                  <option value="lift">Strength</option>
+                  <option value="rehab">Recovery</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Focus</label>
+                <Input
+                  value={sessionEditForm.focus}
+                  onChange={(event) =>
+                    setSessionEditForm((prev) => ({ ...prev, focus: event.target.value }))
+                  }
+                  placeholder="Speed mechanics"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Date *</label>
+                <Input
+                  type="date"
+                  value={sessionEditForm.date}
+                  onChange={(event) =>
+                    setSessionEditForm((prev) => ({ ...prev, date: event.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Intensity</label>
+                <select
+                  className="w-full rounded-md border border-gray-200 p-2 text-sm"
+                  value={sessionEditForm.intensity}
+                  onChange={(event) =>
+                    setSessionEditForm((prev) => ({ ...prev, intensity: event.target.value }))
+                  }
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Start Time *</label>
+                <Input
+                  type="time"
+                  value={sessionEditForm.startTime}
+                  onChange={(event) =>
+                    setSessionEditForm((prev) => ({ ...prev, startTime: event.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">End Time *</label>
+                <Input
+                  type="time"
+                  value={sessionEditForm.endTime}
+                  onChange={(event) =>
+                    setSessionEditForm((prev) => ({ ...prev, endTime: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-gray-600">Coaching Notes</label>
+                <textarea
+                  value={sessionEditForm.notes}
+                  onChange={(event) =>
+                    setSessionEditForm((prev) => ({ ...prev, notes: event.target.value }))
+                  }
+                  placeholder="Key coaching points, equipment needs, etc."
+                  rows={3}
+                  className="min-h-[5rem] w-full rounded-md border border-gray-200 bg-white p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c7dbf3] sm:min-h-[6.5rem]"
+                />
+              </div>
+            </div>
+            {sessionEditError && (
+              <p className="text-xs font-medium text-red-600 sm:text-sm">{sessionEditError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => handleSessionEditOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateSessionDetails} className="gradient-primary text-white">
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="glass-card border-0 shadow-lg">
           <CardContent className="p-4 sm:p-6">
@@ -1273,17 +1510,18 @@ export function CoachDashboard() {
                   <TableHead className="text-xs font-medium text-gray-500 sm:text-sm">Athlete</TableHead>
                   <TableHead className="text-xs font-medium text-gray-500 sm:text-sm">Start</TableHead>
                   <TableHead className="text-xs font-medium text-gray-500 sm:text-sm">Intensity</TableHead>
-              </TableRow>
+                  <TableHead className="text-right text-xs font-medium text-gray-500 sm:text-sm">Actions</TableHead>
+                </TableRow>
               </TableHeader>
               <TableBody>
                 {upcomingSessions.map((session) => {
-                const athlete = athletes.find((item) => item.sessions.some((s) => s.id === session.id))
+                  const athlete = athletes.find((item) => item.sessions.some((s) => s.id === session.id))
                 return (
-                  <TableRow key={session.id} className="border-transparent hover:bg-white/60">
-                    <TableCell className="text-xs sm:text-sm">
-                      <div className="flex items-center gap-2">
-                        {session.type === "lift" ? (
-                          <Dumbbell className="h-4 w-4 text-[#0f4d92]" />
+                    <TableRow key={session.id} className="border-transparent hover:bg-white/60">
+                      <TableCell className="text-xs sm:text-sm">
+                        <div className="flex items-center gap-2">
+                          {session.type === "lift" ? (
+                            <Dumbbell className="h-4 w-4 text-[#0f4d92]" />
                         ) : session.type === "rehab" ? (
                           <Activity className="h-4 w-4 text-[#1c6dd0]" />
                         ) : (
@@ -1301,13 +1539,22 @@ export function CoachDashboard() {
                       <Badge className="border border-[#c7d7ee] bg-[#e8f0fb] px-2 py-1 text-[0.7rem] capitalize text-[#0f2f5b] sm:text-xs">
                         {session.intensity}
                       </Badge>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openSessionEdit(session.id)}
+                        >
+                          <Pencil className="mr-2 h-4 w-4" /> Edit
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               {upcomingSessions.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-xs text-gray-500 sm:text-sm">
+                  <TableCell colSpan={5} className="text-center text-xs text-gray-500 sm:text-sm">
                     No upcoming sessions scheduled.
                   </TableCell>
                 </TableRow>
@@ -1337,6 +1584,7 @@ export function CoachDashboard() {
               calendar={athlete.calendar}
               workouts={athlete.workouts}
               assignedByName={coachDisplayName}
+              onEditSession={openSessionEdit}
             />
           ))}
         </div>

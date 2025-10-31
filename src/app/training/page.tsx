@@ -22,7 +22,8 @@ import {
   Award,
   Timer,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Pencil
 } from "lucide-react"
 
 const mockPRs = [
@@ -61,28 +62,43 @@ const formatDuration = (startAt: string, endAt: string) => {
 
 const formatTime = (dateString: string) => {
   const date = new Date(dateString)
-  return date.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
     minute: '2-digit',
-    hour12: true 
+    hour12: true
   })
 }
 
+const toDateTimeLocalInput = (value: string) => {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return offsetDate.toISOString().slice(0, 16)
+}
+
+const emptySessionForm = {
+  type: "practice",
+  title: "",
+  startAt: "",
+  endAt: "",
+  intensity: "medium",
+  notes: "",
+}
+
 export default function Training() {
-  const { role, primaryAthlete, scheduleSession, toggleSessionCompletion, currentUser } = useRole()
+  const { role, primaryAthlete, scheduleSession, toggleSessionCompletion, currentUser, updateSession } = useRole()
   const sessions = primaryAthlete?.sessions ?? []
   const [prs, setPRs] = useState(currentUser ? [] : mockPRs)
   const [isAddSessionOpen, setIsAddSessionOpen] = useState(false)
   const [isAddPROpen, setIsAddPROpen] = useState(false)
   const [isAnalyzerOpen, setIsAnalyzerOpen] = useState(false)
-  const [newSession, setNewSession] = useState({
-    type: "practice",
-    title: "",
-    startAt: "",
-    endAt: "",
-    intensity: "medium",
-    notes: ""
-  })
+  const [newSession, setNewSession] = useState(() => ({ ...emptySessionForm }))
+  const [isEditSessionOpen, setIsEditSessionOpen] = useState(false)
+  const [editingSessionId, setEditingSessionId] = useState<number | null>(null)
+  const [editingSession, setEditingSession] = useState(() => ({ ...emptySessionForm }))
   const [newPR, setNewPR] = useState({
     exercise: "",
     loadKg: "",
@@ -110,16 +126,29 @@ export default function Training() {
         intensity: newSession.intensity,
         notes: newSession.notes,
       })
-      setNewSession({
-        type: "practice",
-        title: "",
-        startAt: "",
-        endAt: "",
-        intensity: "medium",
-        notes: "",
-      })
+      setNewSession(() => ({ ...emptySessionForm }))
       setIsAddSessionOpen(false)
     }
+  }
+
+  const handleUpdateSession = () => {
+    if (!primaryAthlete || editingSessionId == null) return
+    if (!editingSession.title || !editingSession.startAt || !editingSession.endAt) {
+      return
+    }
+
+    updateSession(primaryAthlete.id, editingSessionId, {
+      type: editingSession.type,
+      title: editingSession.title,
+      startAt: editingSession.startAt,
+      endAt: editingSession.endAt,
+      intensity: editingSession.intensity,
+      notes: editingSession.notes,
+    })
+
+    setIsEditSessionOpen(false)
+    setEditingSessionId(null)
+    setEditingSession(() => ({ ...emptySessionForm }))
   }
 
   const handleAddPR = () => {
@@ -145,6 +174,31 @@ export default function Training() {
   const toggleSessionComplete = (id: number) => {
     if (!primaryAthlete) return
     toggleSessionCompletion(primaryAthlete.id, id)
+  }
+
+  const openEditSession = (sessionId: number) => {
+    if (!primaryAthlete) return
+    const session = primaryAthlete.sessions.find(item => item.id === sessionId)
+    if (!session) return
+
+    setEditingSessionId(session.id)
+    setEditingSession({
+      type: session.type,
+      title: session.title,
+      startAt: toDateTimeLocalInput(session.startAt),
+      endAt: toDateTimeLocalInput(session.endAt),
+      intensity: session.intensity,
+      notes: session.notes ?? "",
+    })
+    setIsEditSessionOpen(true)
+  }
+
+  const handleCloseEditDialog = (open: boolean) => {
+    setIsEditSessionOpen(open)
+    if (!open) {
+      setEditingSessionId(null)
+      setEditingSession(() => ({ ...emptySessionForm }))
+    }
   }
 
   const upcomingSessions = useMemo(() => {
@@ -250,6 +304,76 @@ export default function Training() {
                 </div>
                 <Button onClick={handleAddSession} className="w-full">
                   Add Session
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={isEditSessionOpen} onOpenChange={handleCloseEditDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Training Session</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Type</label>
+                  <select
+                    className="w-full p-2 border rounded-md"
+                    value={editingSession.type}
+                    onChange={(e) => setEditingSession(prev => ({ ...prev, type: e.target.value }))}
+                  >
+                    <option value="practice">Practice</option>
+                    <option value="lift">Strength Training</option>
+                    <option value="rehab">Recovery/Rehab</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Title</label>
+                  <Input
+                    value={editingSession.title}
+                    onChange={(e) => setEditingSession(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="Enter session title"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Start Time</label>
+                    <Input
+                      type="datetime-local"
+                      value={editingSession.startAt}
+                      onChange={(e) => setEditingSession(prev => ({ ...prev, startAt: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">End Time</label>
+                    <Input
+                      type="datetime-local"
+                      value={editingSession.endAt}
+                      onChange={(e) => setEditingSession(prev => ({ ...prev, endAt: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Intensity</label>
+                  <select
+                    className="w-full p-2 border rounded-md"
+                    value={editingSession.intensity}
+                    onChange={(e) => setEditingSession(prev => ({ ...prev, intensity: e.target.value }))}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Notes (optional)</label>
+                  <Input
+                    value={editingSession.notes}
+                    onChange={(e) => setEditingSession(prev => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Session notes"
+                  />
+                </div>
+                <Button onClick={handleUpdateSession} className="w-full">
+                  Save Changes
                 </Button>
               </div>
             </DialogContent>
@@ -418,14 +542,24 @@ export default function Training() {
                         <Badge className={getIntensityColor(session.intensity)}>
                           {session.intensity}
                         </Badge>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full sm:w-auto"
-                          onClick={() => toggleSessionComplete(session.id)}
-                        >
-                          Complete
-                        </Button>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full sm:w-auto"
+                            onClick={() => toggleSessionComplete(session.id)}
+                          >
+                            Complete
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full sm:w-auto"
+                            onClick={() => openEditSession(session.id)}
+                          >
+                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -449,6 +583,7 @@ export default function Training() {
                         <TableHead>Duration</TableHead>
                         <TableHead>Intensity</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -472,6 +607,15 @@ export default function Training() {
                           <Badge className="bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white border-0">
                             Completed
                           </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditSession(session.id)}
+                          >
+                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
