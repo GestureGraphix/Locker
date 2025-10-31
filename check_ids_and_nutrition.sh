@@ -1,33 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/scripts/nutrislice-utils.sh"
+
+# Usage: ./check_ids_and_nutrition.sh [school-slug]
+# Example: ./check_ids_and_nutrition.sh branford-college
+
 # ---------- CONFIG (env overrides welcome) ----------
 SCHOOL_SLUG="${SCHOOL_SLUG:-jonathan-edwards-college}"
+if (($# > 0)); then
+  SCHOOL_SLUG="$1"
+fi
+
 MENU_TYPE="${MENU_TYPE:-dinner}"          # breakfast|lunch|dinner
 DATE="${DATE:-2025-10-09}"                # YYYY-MM-DD
-LOCATION_ID="${LOCATION_ID:-57753}"
 
-BASE="https://yaledining.api.nutrislice.com"
-ORIGIN="https://yaledining.nutrislice.com"
+declare -A LOCATION_OVERRIDES=(
+  ["jonathan-edwards-college"]="57753"
+)
+
+LOCATION_ID="${LOCATION_ID:-}"
+if [[ -z "$LOCATION_ID" ]]; then
+  if ! LOCATION_ID="$(nutrislice_resolve_location_id "$SCHOOL_SLUG" "${LOCATION_OVERRIDES[$SCHOOL_SLUG]:-}")"; then
+    LOCATION_ID=""
+  fi
+fi
+
+if [[ -z "$LOCATION_ID" ]]; then
+  echo "ERROR: Unable to determine location id for ${SCHOOL_SLUG}" >&2
+  echo "Provide LOCATION_ID manually or ensure the locations directory is reachable." >&2
+  exit 1
+fi
+
+echo "Using location-id ${LOCATION_ID} for ${SCHOOL_SLUG}" >&2
 
 YEAR="${DATE:0:4}"
 MONTH="${DATE:5:2}"
 DAY="${DATE:8:2}"
 
-WEEKS_URL="${BASE}/menu/api/weeks/school/${SCHOOL_SLUG}/menu-type/${MENU_TYPE}/${YEAR}/${MONTH}/${DAY}/?format=json"
-
-# ---------- helpers ----------
-curl_json () {
-  curl -s "$1" \
-    -H 'Accept: application/json' \
-    -H "Origin: ${ORIGIN}" \
-    -H "Referer: ${ORIGIN}/" \
-    -H 'X-Requested-With: XMLHttpRequest' \
-    --compressed
-}
+API_BASE="${NUTRISLICE_API_BASE}"
+WEEKS_URL="${API_BASE}/weeks/school/${SCHOOL_SLUG}/menu-type/${MENU_TYPE}/${YEAR}/${MONTH}/${DAY}/?format=json"
 
 # ---------- 1) Fetch the weeks payload ----------
-weekly_resp="$(curl_json "$WEEKS_URL" || true)"
+weekly_resp="$(nutrislice_curl_json "$WEEKS_URL" || true)"
 
 if ! jq -e . >/dev/null 2>&1 <<<"$weekly_resp"; then
   echo "ERROR: weeks endpoint not JSON for $DATE/$MENU_TYPE" >&2
@@ -74,8 +91,8 @@ echo "date,meal,id,name,calories,protein_g,source,serving_size"
 
 # ---------- 3) For each ID, hit order-settings ----------
 for id in "${!NAME_MAP[@]}"; do
-  ITEM_URL="${BASE}/menu/api/menu-items/${id}/order-settings/?location-id=${LOCATION_ID}&menu-date=${DATE}"
-  resp="$(curl_json "$ITEM_URL" || true)"
+  ITEM_URL="${API_BASE}/menu-items/${id}/order-settings/?location-id=${LOCATION_ID}&menu-date=${DATE}"
+  resp="$(nutrislice_curl_json "$ITEM_URL" || true)"
 
   if ! jq -e . >/dev/null 2>&1 <<<"$resp"; then
     printf '%s,%s,%s,"%s",,,no_json,\n' "$DATE" "$MENU_TYPE" "$id" "${NAME_MAP[$id]}"

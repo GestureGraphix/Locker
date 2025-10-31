@@ -1,24 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# === CONFIG ===
-SCHOOL_SLUG="jonathan-edwards-college"
-MENU_TYPE="dinner"
-DATE="2025-10-09"
-LOCATION_ID="57753"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/scripts/nutrislice-utils.sh"
 
-BASE="https://yaledining.api.nutrislice.com"
-ORIGIN="https://yaledining.nutrislice.com"
+# Usage: ./get_all_nutrition.sh [school-slug]
+# Example: ./get_all_nutrition.sh branford-college
+
+SCHOOL_SLUG="${SCHOOL_SLUG:-jonathan-edwards-college}"
+if (($# > 0)); then
+  SCHOOL_SLUG="$1"
+fi
+
+MENU_TYPE="${MENU_TYPE:-dinner}"
+DATE="${DATE:-2025-10-09}"
+
+declare -A LOCATION_OVERRIDES=(
+  ["jonathan-edwards-college"]="57753"
+)
+
+LOCATION_ID="${LOCATION_ID:-}"
+if [[ -z "$LOCATION_ID" ]]; then
+  if ! LOCATION_ID="$(nutrislice_resolve_location_id "$SCHOOL_SLUG" "${LOCATION_OVERRIDES[$SCHOOL_SLUG]:-}")"; then
+    LOCATION_ID=""
+  fi
+fi
+
+if [[ -z "$LOCATION_ID" ]]; then
+  echo "ERROR: Unable to determine location id for ${SCHOOL_SLUG}" >&2
+  echo "Provide LOCATION_ID manually or ensure the locations directory is reachable." >&2
+  exit 1
+fi
+
+echo "Using location-id ${LOCATION_ID} for ${SCHOOL_SLUG}" >&2
 
 YEAR="${DATE:0:4}"
 MONTH="${DATE:5:2}"
 DAY="${DATE:8:2}"
 
-weekly_url="${BASE}/menu/api/weeks/school/${SCHOOL_SLUG}/menu-type/${MENU_TYPE}/${YEAR}/${MONTH}/${DAY}/?format=json"
+API_BASE="${NUTRISLICE_API_BASE}"
+weekly_url="${API_BASE}/weeks/school/${SCHOOL_SLUG}/menu-type/${MENU_TYPE}/${YEAR}/${MONTH}/${DAY}/?format=json"
 
-weekly_resp="$(curl -s "$weekly_url" -H 'Accept: application/json' \
-  -H "Origin: ${ORIGIN}" -H "Referer: ${ORIGIN}/" \
-  -H 'X-Requested-With: XMLHttpRequest' --compressed || true)"
+weekly_resp="$(nutrislice_curl_json "$weekly_url" || true)"
 
 if ! jq -e . >/dev/null 2>&1 <<<"$weekly_resp"; then
   echo "ERROR: Weekly endpoint did not return JSON" >&2
@@ -47,14 +71,9 @@ ids=$(printf "%s\n" "${!NAME_MAP[@]}" | sort -u)
 echo "id,name,serving_size,calories,protein_g,sodium_mg,fat_g,carbs_g,source"
 
 for id in $ids; do
-  item_url="${BASE}/menu/api/menu-items/${id}/order-settings/?location-id=${LOCATION_ID}&menu-date=${DATE}"
+  item_url="${API_BASE}/menu-items/${id}/order-settings/?location-id=${LOCATION_ID}&menu-date=${DATE}"
 
-  resp="$(curl -s "$item_url" \
-    -H 'Accept: application/json' \
-    -H "Origin: ${ORIGIN}" \
-    -H "Referer: ${ORIGIN}/" \
-    -H 'X-Requested-With: XMLHttpRequest' \
-    --compressed || true)"
+  resp="$(nutrislice_curl_json "$item_url" || true)"
 
   if ! jq -e . >/dev/null 2>&1 <<<"$resp"; then
     echo "\"$id\",\"${NAME_MAP[$id]}\",\"${SERVE_MAP[$id]}\",,,,,bad_response"
