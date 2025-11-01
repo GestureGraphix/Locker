@@ -23,7 +23,8 @@ import {
   Timer,
   ChevronDown,
   ChevronUp,
-  Pencil
+  Pencil,
+  Trash
 } from "lucide-react"
 
 const mockPRs = [
@@ -89,7 +90,7 @@ const emptySessionForm = {
 }
 
 export default function Training() {
-  const { role, primaryAthlete, scheduleSession, toggleSessionCompletion, currentUser, updateSession } = useRole()
+  const { role, primaryAthlete, scheduleSession, toggleSessionCompletion, currentUser, updateSession, deleteSession } = useRole()
   const sessions = primaryAthlete?.sessions ?? []
   const [prs, setPRs] = useState(currentUser ? [] : mockPRs)
   const [isAddSessionOpen, setIsAddSessionOpen] = useState(false)
@@ -146,6 +147,15 @@ export default function Training() {
       notes: editingSession.notes,
     })
 
+    setIsEditSessionOpen(false)
+    setEditingSessionId(null)
+    setEditingSession(() => ({ ...emptySessionForm }))
+  }
+
+  const handleDeleteSession = () => {
+    if (!primaryAthlete || editingSessionId == null) return
+
+    deleteSession(primaryAthlete.id, editingSessionId)
     setIsEditSessionOpen(false)
     setEditingSessionId(null)
     setEditingSession(() => ({ ...emptySessionForm }))
@@ -372,9 +382,19 @@ export default function Training() {
                     placeholder="Session notes"
                   />
                 </div>
-                <Button onClick={handleUpdateSession} className="w-full">
-                  Save Changes
-                </Button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button onClick={handleUpdateSession} className="w-full sm:flex-1">
+                    Save Changes
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleDeleteSession}
+                    className="w-full sm:w-auto"
+                  >
+                    <Trash className="mr-2 h-4 w-4" /> Delete Session
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
