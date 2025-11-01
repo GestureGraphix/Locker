@@ -588,6 +588,7 @@ type RoleContextValue = {
     session: ScheduleSessionInput,
     options?: ScheduleOptions
   ) => void
+  deleteSession: (athleteId: number, sessionId: number) => void
   toggleSessionCompletion: (athleteId: number, sessionId: number) => void
   addAthlete: (input: AddAthleteInput) => void
   assignSessionToTag: (tag: string, session: ScheduleSessionInput, options?: ScheduleOptions) => void
@@ -1517,6 +1518,34 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     [applySessionToAthlete, syncWorkoutsToServer]
   )
 
+  const deleteSession = useCallback(
+    (athleteId: number, sessionId: number) => {
+      let updatedWorkouts: WorkoutPlan[] | null = null
+      setAthletes((prev) =>
+        prev.map((athlete): Athlete => {
+          if (athlete.id !== athleteId) return athlete
+
+          const nextSessions = athlete.sessions.filter((session) => session.id !== sessionId)
+          const nextCalendar = athlete.calendar.filter((event) => event.id !== sessionId)
+          const nextWorkouts = athlete.workouts.filter((workout) => workout.id !== sessionId)
+          updatedWorkouts = nextWorkouts
+
+          return {
+            ...athlete,
+            sessions: nextSessions,
+            calendar: nextCalendar,
+            workouts: nextWorkouts,
+          }
+        })
+      )
+
+      if (updatedWorkouts) {
+        void syncWorkoutsToServer(athleteId, updatedWorkouts)
+      }
+    },
+    [syncWorkoutsToServer]
+  )
+
   const toggleSessionCompletion = useCallback((athleteId: number, sessionId: number) => {
     let updatedWorkouts: WorkoutPlan[] | null = null
     setAthletes((prev) =>
@@ -2377,6 +2406,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       setActiveAthleteId,
       scheduleSession,
       updateSession,
+      deleteSession,
       toggleSessionCompletion,
       addAthlete,
       assignSessionToTag,
@@ -2402,6 +2432,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       activeAthleteId,
       scheduleSession,
       updateSession,
+      deleteSession,
       toggleSessionCompletion,
       addAthlete,
       assignSessionToTag,
