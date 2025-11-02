@@ -33,7 +33,7 @@ type ScheduleSessionInput = {
   type: string
   title: string
   startAt: string
-  endAt: string
+  endAt?: string
   intensity: string
   notes?: string
 }
@@ -122,15 +122,25 @@ const RoleContext = createContext<RoleContextValue | undefined>(undefined)
 const STORAGE_KEY = "locker-app-state-v1"
 const SERVER_STATE_ENDPOINT = "/api/state"
 
-const formatTimeRange = (startIso: string, endIso: string) => {
+const formatTimeRange = (startIso: string, endIso?: string | null) => {
+  if (!startIso) return ""
   const start = new Date(startIso)
-  const end = new Date(endIso)
+  if (Number.isNaN(start.getTime())) return ""
   const format = (date: Date) =>
     date.toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
     })
+
+  if (!endIso) {
+    return format(start)
+  }
+
+  const end = new Date(endIso)
+  if (Number.isNaN(end.getTime())) {
+    return format(start)
+  }
 
   return `${format(start)} - ${format(end)}`
 }
@@ -376,8 +386,8 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       options?: ScheduleOptions
     ): Athlete => {
       const startAtISO = toISO(session.startAt)
-      const endAtISO = toISO(session.endAt)
-      if (!startAtISO || !endAtISO) {
+      const endAtISO = session.endAt ? toISO(session.endAt) : ""
+      if (!startAtISO) {
         return athlete
       }
 
@@ -385,17 +395,22 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
       const focus = options?.focus ?? session.notes ?? session.title
       const assignedBy = options?.assignedBy ?? (role === "coach" ? "Coach" : "Self")
 
+      const normalizedEndAt = endAtISO || undefined
+
       const newSession: Session = {
         id,
         type: session.type,
         title: session.title,
         startAt: startAtISO,
-        endAt: endAtISO,
         intensity: session.intensity,
         notes: session.notes,
         completed: false,
         assignedBy,
         focus,
+      }
+
+      if (normalizedEndAt) {
+        newSession.endAt = normalizedEndAt
       }
 
       const updatedSessions = sortByDate([...athlete.sessions, newSession], (item) => item.startAt ?? "")
@@ -404,7 +419,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         id,
         title: session.title,
         date: startAtISO.includes("T") ? startAtISO.split("T")[0] : startAtISO,
-        timeRange: formatTimeRange(startAtISO, endAtISO),
+        timeRange: formatTimeRange(startAtISO, normalizedEndAt),
         type: session.type,
         focus,
       }

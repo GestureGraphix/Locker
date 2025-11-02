@@ -222,7 +222,8 @@ const normalizeSessions = (sessions: unknown): Session[] => {
     const record = session as Record<string, unknown>
     if (!isFiniteNumber(record.id)) continue
     if (!isString(record.type) || !isString(record.title)) continue
-    if (!isString(record.startAt) || !isString(record.endAt) || !isString(record.intensity)) continue
+    if (!isString(record.startAt) || !isString(record.intensity)) continue
+    const hasEndAt = isString(record.endAt)
     const notes = isString(record.notes) ? record.notes : undefined
     const assignedBy = isString(record.assignedBy) ? record.assignedBy : undefined
     const focus = isString(record.focus) ? record.focus : undefined
@@ -232,12 +233,12 @@ const normalizeSessions = (sessions: unknown): Session[] => {
       type: record.type,
       title: record.title,
       startAt: record.startAt,
-      endAt: record.endAt,
       intensity: record.intensity,
       notes,
       completed,
       assignedBy,
       focus,
+      ...(hasEndAt ? { endAt: record.endAt as string } : {}),
     })
   }
   return normalized

@@ -52,9 +52,11 @@ const getTypeIcon = (type: string) => {
   }
 }
 
-const formatDuration = (startAt: string, endAt: string) => {
+const formatDuration = (startAt: string, endAt?: string) => {
+  if (!startAt || !endAt) return ""
   const start = new Date(startAt)
   const end = new Date(endAt)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return ""
   const diffMs = end.getTime() - start.getTime()
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
   const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
@@ -84,7 +86,6 @@ const emptySessionForm = {
   type: "practice",
   title: "",
   startAt: "",
-  endAt: "",
   intensity: "medium",
   notes: "",
 }
@@ -118,12 +119,11 @@ export default function Training() {
 
   const handleAddSession = () => {
     if (!primaryAthlete) return
-    if (newSession.title && newSession.startAt && newSession.endAt) {
+    if (newSession.title && newSession.startAt) {
       scheduleSession(primaryAthlete.id, {
         type: newSession.type,
         title: newSession.title,
         startAt: newSession.startAt,
-        endAt: newSession.endAt,
         intensity: newSession.intensity,
         notes: newSession.notes,
       })
@@ -134,7 +134,7 @@ export default function Training() {
 
   const handleUpdateSession = () => {
     if (!primaryAthlete || editingSessionId == null) return
-    if (!editingSession.title || !editingSession.startAt || !editingSession.endAt) {
+    if (!editingSession.title || !editingSession.startAt) {
       return
     }
 
@@ -142,7 +142,6 @@ export default function Training() {
       type: editingSession.type,
       title: editingSession.title,
       startAt: editingSession.startAt,
-      endAt: editingSession.endAt,
       intensity: editingSession.intensity,
       notes: editingSession.notes,
     })
@@ -196,7 +195,6 @@ export default function Training() {
       type: session.type,
       title: session.title,
       startAt: toDateTimeLocalInput(session.startAt),
-      endAt: toDateTimeLocalInput(session.endAt),
       intensity: session.intensity,
       notes: session.notes ?? "",
     })
@@ -274,23 +272,13 @@ export default function Training() {
                     placeholder="Enter session title"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">Start Time</label>
-                    <Input 
-                      type="datetime-local"
-                      value={newSession.startAt}
-                      onChange={(e) => setNewSession(prev => ({ ...prev, startAt: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">End Time</label>
-                    <Input 
-                      type="datetime-local"
-                      value={newSession.endAt}
-                      onChange={(e) => setNewSession(prev => ({ ...prev, endAt: e.target.value }))}
-                    />
-                  </div>
+                <div>
+                  <label className="text-sm font-medium">Start Time</label>
+                  <Input
+                    type="datetime-local"
+                    value={newSession.startAt}
+                    onChange={(e) => setNewSession(prev => ({ ...prev, startAt: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Intensity</label>
@@ -344,23 +332,13 @@ export default function Training() {
                     placeholder="Enter session title"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">Start Time</label>
-                    <Input
-                      type="datetime-local"
-                      value={editingSession.startAt}
-                      onChange={(e) => setEditingSession(prev => ({ ...prev, startAt: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">End Time</label>
-                    <Input
-                      type="datetime-local"
-                      value={editingSession.endAt}
-                      onChange={(e) => setEditingSession(prev => ({ ...prev, endAt: e.target.value }))}
-                    />
-                  </div>
+                <div>
+                  <label className="text-sm font-medium">Start Time</label>
+                  <Input
+                    type="datetime-local"
+                    value={editingSession.startAt}
+                    onChange={(e) => setEditingSession(prev => ({ ...prev, startAt: e.target.value }))}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Intensity</label>
@@ -546,12 +524,16 @@ export default function Training() {
                             </span>
                             <span className="flex items-center gap-1">
                               <Clock className="h-4 w-4" />
-                              {formatTime(session.startAt)} - {formatTime(session.endAt)}
+                              {session.endAt
+                                ? `${formatTime(session.startAt)} - ${formatTime(session.endAt)}`
+                                : formatTime(session.startAt)}
                             </span>
-                            <span className="flex items-center gap-1">
-                              <Timer className="h-4 w-4" />
-                              {formatDuration(session.startAt, session.endAt)}
-                            </span>
+                            {session.endAt && (
+                              <span className="flex items-center gap-1">
+                                <Timer className="h-4 w-4" />
+                                {formatDuration(session.startAt, session.endAt)}
+                              </span>
+                            )}
                           </div>
                           {session.notes && (
                             <p className="text-sm text-muted-foreground mt-1">{session.notes}</p>
@@ -617,7 +599,9 @@ export default function Training() {
                         </TableCell>
                         <TableCell className="font-medium">{session.title}</TableCell>
                         <TableCell>{new Date(session.startAt).toLocaleDateString()}</TableCell>
-                        <TableCell>{formatDuration(session.startAt, session.endAt)}</TableCell>
+                        <TableCell>
+                          {session.endAt ? formatDuration(session.startAt, session.endAt) : "—"}
+                        </TableCell>
                         <TableCell>
                           <Badge className={getIntensityColor(session.intensity)}>
                             {session.intensity}

@@ -82,17 +82,23 @@ const isSameDay = (value: string, reference: Date) => {
   )
 }
 
-const formatSessionTimeRange = (startAt: string, endAt: string) => {
-  if (!startAt || !endAt) return ""
+const formatSessionTimeRange = (startAt: string, endAt?: string) => {
+  if (!startAt) return ""
   const start = new Date(startAt)
-  const end = new Date(endAt)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return ""
+  if (Number.isNaN(start.getTime())) return ""
   const format = (date: Date) =>
     date.toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
     })
+
+  if (!endAt) {
+    return format(start)
+  }
+
+  const end = new Date(endAt)
+  if (Number.isNaN(end.getTime())) return format(start)
 
   return `${format(start)} - ${format(end)}`
 }
