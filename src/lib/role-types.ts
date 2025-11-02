@@ -73,7 +73,7 @@ export type Session = {
   type: string
   title: string
   startAt: string
-  endAt: string
+  endAt?: string
   intensity: string
   notes?: string
   completed: boolean

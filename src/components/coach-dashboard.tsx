@@ -35,7 +35,6 @@ type AssignExerciseForm = {
   focus: string
   date: string
   startTime: string
-  endTime: string
   intensity: string
   notes: string
 }
@@ -46,7 +45,6 @@ const initialForm: AssignExerciseForm = {
   focus: "",
   date: "",
   startTime: "",
-  endTime: "",
   intensity: "medium",
   notes: "",
 }
@@ -266,12 +264,11 @@ function CoachAthleteCard({
   }
 
   const handleAssign = () => {
-    if (!form.title || !form.date || !form.startTime || !form.endTime) {
+    if (!form.title || !form.date || !form.startTime) {
       return
     }
 
     const startAt = `${form.date}T${form.startTime}`
-    const endAt = `${form.date}T${form.endTime}`
 
     scheduleSession(
       athleteId,
@@ -279,7 +276,6 @@ function CoachAthleteCard({
         title: form.title,
         type: form.type,
         startAt,
-        endAt,
         intensity: form.intensity,
         notes: form.notes,
       },
@@ -587,23 +583,13 @@ function CoachAthleteCard({
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="text-xs font-medium text-gray-600">Start Time</label>
-                  <Input
-                    type="time"
-                    value={form.startTime}
-                    onChange={(event) => setForm((prev) => ({ ...prev, startTime: event.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600">End Time</label>
-                  <Input
-                    type="time"
-                    value={form.endTime}
-                    onChange={(event) => setForm((prev) => ({ ...prev, endTime: event.target.value }))}
-                  />
-                </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Start Time</label>
+                <Input
+                  type="time"
+                  value={form.startTime}
+                  onChange={(event) => setForm((prev) => ({ ...prev, startTime: event.target.value }))}
+                />
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600">Coaching Notes</label>
@@ -663,7 +649,6 @@ export function CoachDashboard() {
           focus: session.focus ?? "",
           date: toDateInputValue(session.startAt),
           startTime: toTimeInputValue(session.startAt),
-          endTime: toTimeInputValue(session.endAt),
           intensity: session.intensity,
           notes: session.notes ?? "",
         })
@@ -692,15 +677,13 @@ export function CoachDashboard() {
     if (
       !sessionEditForm.title.trim() ||
       !sessionEditForm.date ||
-      !sessionEditForm.startTime ||
-      !sessionEditForm.endTime
+      !sessionEditForm.startTime
     ) {
-      setSessionEditError("Title, date, start time, and end time are required.")
+      setSessionEditError("Title, date, and start time are required.")
       return
     }
 
     const startAt = `${sessionEditForm.date}T${sessionEditForm.startTime}`
-    const endAt = `${sessionEditForm.date}T${sessionEditForm.endTime}`
 
     updateSession(
       sessionEditState.athleteId,
@@ -709,7 +692,6 @@ export function CoachDashboard() {
         title: sessionEditForm.title,
         type: sessionEditForm.type,
         startAt,
-        endAt,
         intensity: sessionEditForm.intensity,
         notes: sessionEditForm.notes,
       },
@@ -811,8 +793,8 @@ export function CoachDashboard() {
       return
     }
 
-    if (!bulkAssignForm.title || !bulkAssignForm.date || !bulkAssignForm.startTime || !bulkAssignForm.endTime) {
-      setBulkAssignError("Title, date, start time, and end time are required.")
+    if (!bulkAssignForm.title || !bulkAssignForm.date || !bulkAssignForm.startTime) {
+      setBulkAssignError("Title, date, and start time are required.")
       return
     }
 
@@ -824,7 +806,6 @@ export function CoachDashboard() {
     }
 
     const startAt = `${bulkAssignForm.date}T${bulkAssignForm.startTime}`
-    const endAt = `${bulkAssignForm.date}T${bulkAssignForm.endTime}`
 
     assignSessionToTag(
       bulkAssignForm.tag,
@@ -832,7 +813,6 @@ export function CoachDashboard() {
         title: bulkAssignForm.title,
         type: bulkAssignForm.type,
         startAt,
-        endAt,
         intensity: bulkAssignForm.intensity,
         notes: bulkAssignForm.notes,
       },
@@ -904,9 +884,9 @@ export function CoachDashboard() {
             title: session.title,
             type: session.type,
             startAt: session.startAt,
-            endAt: session.endAt,
             intensity: session.intensity,
             notes: session.notes,
+            ...(session.endAt ? { endAt: session.endAt } : {}),
           },
           {
             focus: session.notes?.split("\n")[0] ?? session.title,
@@ -1110,16 +1090,6 @@ export function CoachDashboard() {
                     value={bulkAssignForm.startTime}
                     onChange={(event) =>
                       setBulkAssignForm((prev) => ({ ...prev, startTime: event.target.value }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600">End Time *</label>
-                  <Input
-                    type="time"
-                    value={bulkAssignForm.endTime}
-                    onChange={(event) =>
-                      setBulkAssignForm((prev) => ({ ...prev, endTime: event.target.value }))
                     }
                   />
                 </div>
@@ -1405,16 +1375,6 @@ export function CoachDashboard() {
                   value={sessionEditForm.startTime}
                   onChange={(event) =>
                     setSessionEditForm((prev) => ({ ...prev, startTime: event.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600">End Time *</label>
-                <Input
-                  type="time"
-                  value={sessionEditForm.endTime}
-                  onChange={(event) =>
-                    setSessionEditForm((prev) => ({ ...prev, endTime: event.target.value }))
                   }
                 />
               </div>

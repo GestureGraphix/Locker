@@ -59,14 +59,18 @@ const formatTwoDecimalString = (value: number): string => {
 }
 
 const formatTimeRange = (start?: string, end?: string) => {
-  if (!start || !end) return ""
+  if (!start) return ""
   const startDate = new Date(start)
-  const endDate = new Date(end)
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return ""
+  if (Number.isNaN(startDate.getTime())) return ""
   const formatter = new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
     minute: "2-digit",
   })
+  if (!end) {
+    return formatter.format(startDate)
+  }
+  const endDate = new Date(end)
+  if (Number.isNaN(endDate.getTime())) return formatter.format(startDate)
   return `${formatter.format(startDate)} - ${formatter.format(endDate)}`
 }
 
