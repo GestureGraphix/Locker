@@ -32,7 +32,8 @@ import {
   Search,
   UtensilsCrossed,
   X,
-  Pencil
+  Pencil,
+  Trash2
 } from "lucide-react"
 
 /* ======================== Types ======================== */
@@ -848,6 +849,16 @@ export default function Fuel() {
     )
   }
 
+  const handleDeleteMeal = (id: number) => {
+    if (!primaryAthlete) return
+    updateMealLogs(primaryAthlete.id, (prev) => prev.filter((meal) => meal.id !== id))
+    if (editingMealId === id) {
+      resetMealForm()
+      setEditingMealId(null)
+      setIsAddMealOpen(false)
+    }
+  }
+
   /* -------- Derived totals -------- */
 
   const todaysHydrationLogs = hydrationLogs.filter((log) => log.date === todayDate)
@@ -1373,6 +1384,15 @@ export default function Fuel() {
                           <Pencil className="h-4 w-4" />
                           <span className="sr-only">Edit meal</span>
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteMeal(meal.id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="sr-only">Delete meal</span>
+                        </Button>
                       </div>
                     </div>
                   </CardContent>
@@ -1417,10 +1437,21 @@ export default function Fuel() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="icon" onClick={() => handleEditMeal(meal)}>
-                            <Pencil className="h-4 w-4" />
-                            <span className="sr-only">Edit meal</span>
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => handleEditMeal(meal)}>
+                              <Pencil className="h-4 w-4" />
+                              <span className="sr-only">Edit meal</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteMeal(meal.id)}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Delete meal</span>
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
