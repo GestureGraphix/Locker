@@ -78,6 +78,26 @@ const initialBulkForm: BulkAssignFormState = {
   tag: "",
 }
 
+type WorkoutFormState = {
+  title: string
+  focus: string
+  dueDate: string
+  intensity: string
+  status: "Scheduled" | "Completed"
+  assignedBy: string
+}
+
+const INTENSITY_OPTIONS = ["low", "medium", "high"] as const
+
+const initialWorkoutForm: WorkoutFormState = {
+  title: "",
+  focus: "",
+  dueDate: "",
+  intensity: "medium",
+  status: "Scheduled",
+  assignedBy: "",
+}
+
 const formatDate = (value: string) => {
   if (!value) return "TBD"
   const date = new Date(value)
@@ -207,12 +227,16 @@ function CoachAthleteCard({
   assignedByName: string
   onEditSession: (sessionId: number) => void
 }) {
-  const { scheduleSession, updateAthleteProfile } = useRole()
+  const { scheduleSession, updateAthleteProfile, updateWorkouts } = useRole()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<AssignExerciseForm>(initialForm)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [editForm, setEditForm] = useState<AthleteProfileFormState>(initialAthleteForm)
   const [editError, setEditError] = useState<string | null>(null)
+  const [isWorkoutEditOpen, setIsWorkoutEditOpen] = useState(false)
+  const [editingWorkoutId, setEditingWorkoutId] = useState<number | null>(null)
+  const [workoutEditForm, setWorkoutEditForm] = useState<WorkoutFormState>(initialWorkoutForm)
+  const [workoutEditError, setWorkoutEditError] = useState<string | null>(null)
 
   const upcomingSessions = useMemo(
     () =>
@@ -263,6 +287,68 @@ function CoachAthleteCard({
     })
 
     handleEditOpenChange(false)
+  }
+
+  const handleWorkoutEditOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setIsWorkoutEditOpen(false)
+      setEditingWorkoutId(null)
+      setWorkoutEditForm(initialWorkoutForm)
+      setWorkoutEditError(null)
+    } else {
+      setIsWorkoutEditOpen(true)
+    }
+  }
+
+  const handleEditWorkout = (
+    workout: ReturnType<typeof useRole>["athletes"][number]["workouts"][number]
+  ) => {
+    setEditingWorkoutId(workout.id)
+    setWorkoutEditForm({
+      title: workout.title,
+      focus: workout.focus,
+      dueDate: workout.dueDate,
+      intensity: workout.intensity,
+      status: workout.status,
+      assignedBy: workout.assignedBy ?? "",
+    })
+    setWorkoutEditError(null)
+    setIsWorkoutEditOpen(true)
+  }
+
+  const handleSaveWorkout = () => {
+    if (editingWorkoutId == null) return
+
+    const title = workoutEditForm.title.trim()
+    const focusValue = workoutEditForm.focus.trim()
+    const dueDateValue = workoutEditForm.dueDate.trim()
+
+    if (!title || !focusValue || !dueDateValue) {
+      setWorkoutEditError("Title, focus, and due date are required.")
+      return
+    }
+
+    const intensityValue = workoutEditForm.intensity.trim()
+    const assignedByValue = workoutEditForm.assignedBy.trim()
+
+    setWorkoutEditError(null)
+
+    updateWorkouts(athleteId, (existing) =>
+      existing.map((workout) => {
+        if (workout.id !== editingWorkoutId) return workout
+        return {
+          ...workout,
+          title,
+          focus: focusValue,
+          dueDate: dueDateValue,
+          intensity: intensityValue || workout.intensity,
+          status: workoutEditForm.status,
+          assignedBy: assignedByValue || undefined,
+        }
+      })
+    )
+
+    handleWorkoutEditOpenChange(false)
   }
 
   const handleAssign = () => {
@@ -505,16 +591,27 @@ function CoachAthleteCard({
                     Due {formatDate(workout.dueDate)} • {workout.focus}
                   </p>
                 </div>
-                <Badge
-                  className={cn(
-                    "border-0 px-2 py-1 text-[0.7rem] capitalize sm:text-xs",
-                    workout.status === "Completed"
-                      ? "bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white"
-                      : "bg-[#e2ebf9] text-[#0f2f5b]"
-                  )}
-                >
-                  {workout.status}
-                </Badge>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <Badge
+                    className={cn(
+                      "border-0 px-2 py-1 text-[0.7rem] capitalize sm:text-xs",
+                      workout.status === "Completed"
+                        ? "bg-gradient-to-r from-[#0f4d92] to-[#123d73] text-white"
+                        : "bg-[#e2ebf9] text-[#0f2f5b]"
+                    )}
+                  >
+                    {workout.status}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-[#0f4d92] hover:text-[#0f2f5b]"
+                    onClick={() => handleEditWorkout(workout)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span className="sr-only">Edit workout</span>
+                  </Button>
+                </div>
               </div>
             ))}
             {activeWorkouts.length === 0 && (
@@ -522,6 +619,118 @@ function CoachAthleteCard({
             )}
           </div>
         </div>
+
+        <Dialog open={isWorkoutEditOpen} onOpenChange={handleWorkoutEditOpenChange}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Edit Workout Assignment</DialogTitle>
+              <DialogDescription>
+                Adjust the focus, timeline, and ownership of this training block.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2 sm:space-y-4">
+              {workoutEditError && (
+                <p className="text-xs font-medium text-red-600 sm:text-sm">{workoutEditError}</p>
+              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Title</label>
+                  <Input
+                    value={workoutEditForm.title}
+                    onChange={(event) => {
+                      setWorkoutEditForm((prev) => ({ ...prev, title: event.target.value }))
+                      setWorkoutEditError(null)
+                    }}
+                    placeholder="Acceleration Drills"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Focus</label>
+                  <Input
+                    value={workoutEditForm.focus}
+                    onChange={(event) => {
+                      setWorkoutEditForm((prev) => ({ ...prev, focus: event.target.value }))
+                      setWorkoutEditError(null)
+                    }}
+                    placeholder="Speed mechanics"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Due Date</label>
+                  <Input
+                    type="date"
+                    value={workoutEditForm.dueDate}
+                    onChange={(event) => {
+                      setWorkoutEditForm((prev) => ({ ...prev, dueDate: event.target.value }))
+                      setWorkoutEditError(null)
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Status</label>
+                  <select
+                    className="w-full rounded-md border border-gray-200 p-2 text-sm"
+                    value={workoutEditForm.status}
+                    onChange={(event) =>
+                      setWorkoutEditForm((prev) => ({
+                        ...prev,
+                        status: event.target.value as WorkoutFormState["status"],
+                      }))
+                    }
+                  >
+                    <option value="Scheduled">Scheduled</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Intensity</label>
+                  <select
+                    className="w-full rounded-md border border-gray-200 p-2 text-sm capitalize"
+                    value={workoutEditForm.intensity}
+                    onChange={(event) =>
+                      setWorkoutEditForm((prev) => ({
+                        ...prev,
+                        intensity: event.target.value,
+                      }))
+                    }
+                  >
+                    {INTENSITY_OPTIONS.map((option) => (
+                      <option key={option} value={option} className="capitalize">
+                        {option}
+                      </option>
+                    ))}
+                    {!INTENSITY_OPTIONS.includes(
+                      workoutEditForm.intensity as (typeof INTENSITY_OPTIONS)[number]
+                    ) && workoutEditForm.intensity && (
+                      <option value={workoutEditForm.intensity}>{workoutEditForm.intensity}</option>
+                    )}
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-gray-600">Assigned By (optional)</label>
+                  <Input
+                    value={workoutEditForm.assignedBy}
+                    onChange={(event) =>
+                      setWorkoutEditForm((prev) => ({
+                        ...prev,
+                        assignedBy: event.target.value,
+                      }))
+                    }
+                    placeholder={assignedByName}
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => handleWorkoutEditOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveWorkout} className="gradient-primary text-white">
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
